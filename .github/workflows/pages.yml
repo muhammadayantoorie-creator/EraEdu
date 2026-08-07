@@ -32,7 +32,7 @@ jobs:
 
       - name: Install
         working-directory: ./frontend
-        run: npm install
+        run: npm ci
 
       - name: Build
         working-directory: ./frontend
@@ -41,7 +41,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
         run: |
           test -n "$VITE_API_URL"
-          npx vite build --base=/QuizShield/
+          npx vite build --base=/EraEdu/
           cp dist/index.html dist/404.html
 
       - name: Upload Pages artifact

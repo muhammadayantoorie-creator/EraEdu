@@ -9,9 +9,11 @@ const normalizeApiBaseUrl = (value?: string) => {
 // Create axios instance
 const api = axios.create({
   // In dev we proxy /api -> http://localhost:5000 via vite.config.ts.
-  // In prod, we strictly use the Vercel backend.
+  // In production VITE_API_URL should point to the deployed backend. Falling
+  // back to same-origin keeps previews deterministic instead of contacting a
+  // stale third-party deployment.
   baseURL: normalizeApiBaseUrl(import.meta.env.VITE_API_URL)
-    ?? (import.meta.env.PROD ? 'https://quiz-shield.vercel.app/api' : '/api'),
+    ?? '/api',
   headers: {
     'Content-Type': 'application/json',
   },
