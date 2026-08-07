@@ -11,10 +11,16 @@ Set the GitHub repository variable `VITE_API_URL` to your backend API URL, for e
 Set these environment variables in the backend host:
 
 - `SUPABASE_URL`
+- `SUPABASE_KEY` (the public/publishable key used for Supabase client initialization)
 - `SUPABASE_SERVICE_KEY`
 - `JWT_SECRET` (32+ characters)
 - `FRONTEND_URL` (the exact public frontend origin)
 - `NODE_ENV=production`
+- `ALLOWED_ORIGINS` (optional comma-separated exact origins; never use `*`)
+
+In production, the backend refuses to start if `FRONTEND_URL` is missing, points
+to localhost, or `SUPABASE_SERVICE_KEY` is missing. This prevents an accidental
+development configuration from being exposed publicly.
 
 Optional integrations: `GEMINI_API_KEY`, `RESEND_API_KEY`.
 

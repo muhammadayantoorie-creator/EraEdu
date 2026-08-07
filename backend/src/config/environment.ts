@@ -22,12 +22,26 @@ function requireEnv(name: string, minLength = 1): string {
   return val.trim();
 }
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+const isProduction = nodeEnv === 'production';
+const frontendRaw = process.env.FRONTEND_URL || (isProduction ? '' : 'http://localhost:3000');
+const frontendAppUrl = isProduction ? requireEnv('FRONTEND_URL', 8).replace(/\/$/, '') : frontendRaw.replace(/\/$/, '');
+
+if (isProduction && /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(frontendAppUrl.replace(/\/$/, ''))) {
+  throw new Error('FATAL: FRONTEND_URL must be a public HTTPS origin in production.');
+}
+
+const serviceKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
+if (isProduction && serviceKey.length < 20) {
+  throw new Error('FATAL: SUPABASE_SERVICE_KEY must be configured in production.');
+}
+
 export const config = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   port: process.env.PORT || 5000,
-  frontendAppUrl: (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  frontendAppUrl,
   frontendUrl: (() => {
-    const raw = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const raw = frontendAppUrl;
     try {
       return new URL(raw).origin;
     } catch {
@@ -36,7 +50,13 @@ export const config = {
   })(),
   supabaseUrl: requireEnv('SUPABASE_URL'),
   supabaseKey: requireEnv('SUPABASE_KEY'),
-  supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY || '',
+  // Never fall back to the public key for privileged server operations in
+  // production. A missing service key must fail startup instead.
+  supabaseServiceKey: serviceKey || process.env.SUPABASE_KEY || '',
+  additionalAllowedOrigins: (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/$/, ''))
+    .filter(Boolean),
   jwtSecret: (() => {
     const secret = process.env.JWT_SECRET;
     if (!secret || secret.length < 32) {

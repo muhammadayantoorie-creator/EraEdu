@@ -13,7 +13,9 @@ Use this checklist before publishing a release. Do not treat a successful fronte
 
 ## Environment and deployment
 
-- Set `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET` (32+ characters), `FRONTEND_URL`, and `NODE_ENV=production` in the backend host.
+- Set `SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET` (32+ characters), `FRONTEND_URL`, and `NODE_ENV=production` in the backend host.
+- Confirm the backend starts with a public HTTPS `FRONTEND_URL`; production startup rejects localhost URLs and a missing service key.
+- Use `ALLOWED_ORIGINS` only for additional exact trusted origins. Never use a wildcard origin.
 - Set `GEMINI_API_KEY` and `RESEND_API_KEY` only if those features are enabled.
 - Set `VITE_API_URL` in the frontend deployment environment to the single canonical backend URL, ending in `/api`.
 - Set `FRONTEND_URL` to the exact frontend origin. CORS now uses exact origin matching.

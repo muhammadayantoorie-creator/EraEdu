@@ -35,15 +35,18 @@ connectDatabase();
 // ---------------------------------------------------------------------------
 // CORS — strict exact-match only (no startsWith to prevent subdomain spoofing)
 // ---------------------------------------------------------------------------
-const allowedOrigins = new Set([
-  config.frontendUrl,
-  'https://muhammadayantoorie-creator.github.io',
+const localOrigins = config.nodeEnv === 'production' ? [] : [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'http://127.0.0.1:5173',
+];
+const allowedOrigins = new Set([
+  config.frontendUrl,
+  ...localOrigins,
+  ...config.additionalAllowedOrigins,
 ].filter(Boolean));
 
 app.use(cors({
