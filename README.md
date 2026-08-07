@@ -4,6 +4,10 @@
 
 ---
 
+<p align="center">
+  <img src="./docs/images/eraedu-product-overview.png" alt="EraEdu enterprise learning and secure assessment platform" width="100%" />
+</p>
+
 ## The problem that started it all
 
 Durig COVID classes were moved online. So did the exams. Within a week, everyone knew the trick: open a second tab, mute the mic, look busy. Teachers could see us on Zoom but couldn't see what we were actually doing. The "honor system" was doing a lot of heavy lifting it wasn't built for.
@@ -40,15 +44,14 @@ Step 5 is the only door. There is no bypass route.
 
 ---
 
-## Screens
+## Product experience
+
+EraEdu brings quiz creation, secure student assessments, violation monitoring,
+administrator oversight, analytics, and private student feedback into one
+role-based platform.
 
 <p align="center">
-  <a href="./Teacher-Dashboard.png"><img src="./Teacher-Dashboard.png" alt="Teacher Dashboard" width="300" /></a>
-  <a href="./Chatbot.png"><img src="./Chatbot.png" alt="AI Assistant" width="300" /></a>
-</p>
-<p align="center">
-  <a href="./Quiz.png"><img src="./Quiz.png" alt="Quiz Screen" width="300" /></a>
-  <a href="./Face-detection.png"><img src="./Face-detection.png" alt="Face Verification" width="300" /></a>
+  <img src="./docs/images/eraedu-assessment-lifecycle.png" alt="EraEdu secure assessment lifecycle: create, secure, monitor, and improve" width="100%" />
 </p>
 
 ---
