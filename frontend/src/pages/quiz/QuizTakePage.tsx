@@ -1,0 +1,596 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import api from '../../services/api';
+import toast from 'react-hot-toast';
+import { ClockIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import FaceDetectionCamera from '../../components/shared/FaceDetectionCamera';
+
+interface Question {
+  _id: string;
+  text: string;
+  options: string[];
+  difficulty: string;
+  timeLimit: number;
+  questionType?: 'multipleChoice' | 'shortAnswer';
+  answerText?: string;
+}
+
+interface QuizData {
+  attemptId: string;
+  quiz: {
+    _id: string;
+    title: string;
+    description: string;
+    timeLimit: number;
+    cameraMonitoring?: boolean;
+    violationLimit?: number;
+    questions: Question[];
+  };
+  code: string;
+}
+
+type ViolationType = 'TAB_SWITCH' | 'SYSTEM_FOCUS_LOST' | 'RESTRICTED_KEY' | 'FACE_AWAY' | 'NO_FACE';
+
+interface ViolationPayload {
+  violation_type: ViolationType;
+  alert_message: string;
+  event_timestamp: string;
+  duration_seconds?: number;
+  meta_data: {
+    ip: string;
+    user_agent: string;
+    key_name?: string;
+    focus_state?: string;
+  };
+}
+
+const QuizTakePage = () => {
+  const { attemptId } = useParams<{ attemptId: string }>();
+  const navigate = useNavigate();
+
+  const [quizData,             setQuizData]             = useState<QuizData | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedAnswers,      setSelectedAnswers]      = useState<Record<number, number | string>>({});
+  const [timeLeft,             setTimeLeft]             = useState<number>(0);
+  const [submitting,           setSubmitting]           = useState(false);
+  const [showWarning,          setShowWarning]          = useState(false);
+  const [warningMessage,       setWarningMessage]       = useState('');
+
+  // Anti-cheating state
+  const violations             = useRef<ViolationPayload[]>([]);
+  const tabHiddenStartRef      = useRef<number | null>(null);
+  // Prevents blur + visibilitychange from double-counting the same event
+  const violationCooldownRef   = useRef(false);
+
+  // -----------------------------------------------------------------------
+  // Prevent accidental navigation away from quiz
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!submitting) {
+        e.preventDefault();
+        e.returnValue = 'Your quiz is in progress. Leaving will not submit your answers.';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [submitting]);
+
+  // -----------------------------------------------------------------------
+  // Build a violation payload
+  // -----------------------------------------------------------------------
+  const createViolationPayload = useCallback((
+    violationType: ViolationType,
+    alertMessage: string,
+    options?: { durationSeconds?: number; keyName?: string; focusState?: string },
+  ): ViolationPayload => ({
+    violation_type: violationType,
+    alert_message: alertMessage,
+    event_timestamp: new Date().toISOString(),
+    ...(typeof options?.durationSeconds === 'number' ? { duration_seconds: options.durationSeconds } : {}),
+    meta_data: {
+      ip: 'N/A',
+      user_agent: navigator.userAgent,
+      ...(options?.keyName    ? { key_name:    options.keyName    } : {}),
+      ...(options?.focusState ? { focus_state: options.focusState } : {}),
+    },
+  }), []);
+
+  // -----------------------------------------------------------------------
+  // Report a violation to backend
+  // -----------------------------------------------------------------------
+  const reportViolation = useCallback(async (payload: ViolationPayload) => {
+    violations.current = [...violations.current, payload];
+    setWarningMessage(payload.alert_message);
+    setShowWarning(true);
+    setTimeout(() => setShowWarning(false), 2000);
+
+    // Map frontend enum to backend violation_type string
+    const backendViolationType =
+      payload.violation_type === 'TAB_SWITCH'       ? 'tab_change'        :
+      payload.violation_type === 'SYSTEM_FOCUS_LOST' ? 'focus_loss'        :
+      payload.violation_type === 'FACE_AWAY'         ? 'face_away'         :
+      payload.violation_type === 'NO_FACE'           ? 'no_face'           :
+      'keyboard_shortcut';
+
+    try {
+      const response = await api.post(`/quizzes/attempts/${attemptId}/report-violation`, {
+        violation_type: backendViolationType,
+        violationType:  backendViolationType,
+        alert_message:   payload.alert_message,
+        event_timestamp: payload.event_timestamp,
+        duration_seconds: payload.duration_seconds,
+        meta_data: payload.meta_data,
+        detectionMethod:
+          payload.violation_type === 'FACE_AWAY' || payload.violation_type === 'NO_FACE'
+            ? 'camera_face_detection'
+            : 'browser_event',
+        quizId: quizData?.quiz._id,
+      });
+
+      if (response.data?.data?.autoSubmitted) {
+        const limit = response.data.data.violationLimit;
+        sessionStorage.removeItem('currentQuiz');
+        toast.error(`Quiz automatically submitted after reaching the ${limit}-violation limit.`, { duration: 5000 });
+        navigate(`/quiz/results/${attemptId}`);
+      } else if (response.data?.data?.remainingViolations !== undefined) {
+        const remaining = response.data.data.remainingViolations;
+        toast.error(`${remaining} violation${remaining === 1 ? '' : 's'} remaining before automatic submission.`, { duration: 3000 });
+      }
+    } catch {
+      // Non-critical — violation not saved, but student stays in exam
+    }
+  }, [attemptId, navigate, quizData]);
+
+  // -----------------------------------------------------------------------
+  // Face detection callbacks
+  // -----------------------------------------------------------------------
+  const handleFaceViolation = useCallback((kind: 'face_away' | 'no_face') => {
+    reportViolation(createViolationPayload(
+      kind === 'face_away' ? 'FACE_AWAY' : 'NO_FACE',
+      kind === 'face_away' ? 'Face Away Violation' : 'No Face Detected Violation',
+    ));
+  }, [createViolationPayload, reportViolation]);
+
+  const handleFaceAutoSubmit = useCallback(async () => {
+    toast.error('Quiz auto-submitted: You looked away for more than 60 seconds.', { duration: 5000 });
+    const answers = quizData?.quiz.questions.map((q, index) => ({
+      questionId: q._id,
+      selectedAnswer: selectedAnswers[index] ?? (q.questionType === 'shortAnswer' || !q.options?.length ? '' : -1),
+    })) || [];
+    try {
+      await api.post(`/quizzes/${attemptId}/submit-all`, {
+        answers,
+        violations: violations.current.length > 0 ? violations.current : undefined,
+        autoSubmitReason: 'face_away_too_long',
+      });
+    } catch {
+      // Even if submit fails, navigate to results — attempt is flagged in-progress
+    }
+    sessionStorage.removeItem('currentQuiz');
+    navigate(`/quiz/results/${attemptId}`);
+  }, [attemptId, navigate, quizData, selectedAnswers]);
+
+  // -----------------------------------------------------------------------
+  // Browser anti-cheat event listeners
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    // Tab visibility — tracks how long tab was hidden
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        violationCooldownRef.current = true; // block blur handler
+        tabHiddenStartRef.current = Date.now();
+        return;
+      }
+      if (document.visibilityState === 'visible' && tabHiddenStartRef.current) {
+        const durationSeconds = Math.max(1, Math.round((Date.now() - tabHiddenStartRef.current) / 1000));
+        tabHiddenStartRef.current = null;
+        reportViolation(createViolationPayload(
+          'TAB_SWITCH',
+          'Tab Switch Violation',
+          { durationSeconds },
+        ));
+        setTimeout(() => { violationCooldownRef.current = false; }, 500);
+      }
+    };
+
+    // Window blur — fires when student switches to another app/window
+    // A 300 ms debounce avoids double-counting with visibilitychange
+    let blurTimer: ReturnType<typeof setTimeout>;
+    const handleBlur = () => {
+      if (violationCooldownRef.current) return;
+      blurTimer = setTimeout(() => {
+        if (document.visibilityState === 'visible' && !violationCooldownRef.current) {
+          reportViolation(createViolationPayload(
+            'SYSTEM_FOCUS_LOST',
+            'External System/File Access Violation',
+          ));
+        }
+      }, 300);
+    };
+    const handleFocus = () => clearTimeout(blurTimer);
+
+    // Restricted keys
+    const handleRestrictedKeys = (e: KeyboardEvent) => {
+      let keyName = '';
+      if (e.key === 'Meta' || e.key === 'OS') keyName = 'Windows/Meta key';
+      else if (e.altKey && e.key === 'Tab')    keyName = 'Alt+Tab';
+      else if (e.key === 'PrintScreen')         keyName = 'PrintScreen';
+      if (!keyName) return;
+      e.preventDefault();
+      reportViolation(createViolationPayload('RESTRICTED_KEY', 'Restricted Key Violation', { keyName }));
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('keydown', handleRestrictedKeys);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('keydown', handleRestrictedKeys);
+      clearTimeout(blurTimer);
+    };
+  }, [createViolationPayload, reportViolation]);
+
+  // Disable text selection during exam
+  useEffect(() => {
+    document.body.style.userSelect = 'none';
+    (document.body.style as any).webkitUserSelect = 'none';
+    return () => {
+      document.body.style.userSelect = '';
+      (document.body.style as any).webkitUserSelect = '';
+    };
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // Load quiz data — sessionStorage first, API fallback on refresh
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    const storedData = sessionStorage.getItem('currentQuiz');
+    if (storedData) {
+      try {
+        const data = JSON.parse(storedData) as QuizData;
+        setQuizData(data);
+        setTimeLeft(data.quiz.questions[0]?.timeLimit || 60);
+        return;
+      } catch {
+        sessionStorage.removeItem('currentQuiz');
+      }
+    }
+
+    // Session storage empty (refresh/crash) — try to recover from API
+    if (!attemptId) {
+      navigate('/dashboard/student/join-quiz');
+      return;
+    }
+
+    api.get(`/quizzes/attempt/${attemptId}/results`)
+      .then(res => {
+        const attempt = res.data?.data;
+        if (attempt?.status === 'in-progress' && attempt?.quiz?.questions?.length) {
+          const recovered: QuizData = {
+            attemptId: attemptId!,
+            quiz: attempt.quiz,
+            code: '',
+          };
+          setQuizData(recovered);
+          setTimeLeft(attempt.quiz.questions[0]?.timeLimit || 60);
+          toast.success('Quiz session recovered. Continue where you left off.');
+        } else {
+          toast.error('This quiz session has already ended.');
+          navigate(`/quiz/results/${attemptId}`);
+        }
+      })
+      .catch(() => {
+        toast.error('Could not load quiz. Please contact your teacher.');
+        navigate('/dashboard/student');
+      });
+  }, [attemptId, navigate]);
+
+  // Set timer when question changes
+  useEffect(() => {
+    if (quizData?.quiz.questions[currentQuestionIndex]) {
+      setTimeLeft((quizData.quiz.questions[currentQuestionIndex] as any).timeLimit || 60);
+    }
+  }, [currentQuestionIndex, quizData]);
+
+  // Timer countdown
+  useEffect(() => {
+    if (timeLeft <= 0 || !quizData) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleAutoNext();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft, quizData]);
+
+  const handleAutoNext = () => {
+    if (!quizData) return;
+    const activeQuestion = quizData.quiz.questions[currentQuestionIndex];
+    const isShortAnswer  = activeQuestion?.questionType === 'shortAnswer' || !activeQuestion?.options?.length;
+
+    if (currentQuestionIndex === quizData.quiz.questions.length - 1) {
+      toast.error('Time is up for the last question! Submitting quiz...', { duration: 3000 });
+      handleSubmitQuiz();
+    } else {
+      toast.error('Time is up! Moving to next question.', { duration: 2000 });
+      if (selectedAnswers[currentQuestionIndex] === undefined) {
+        setSelectedAnswers(prev => ({ ...prev, [currentQuestionIndex]: isShortAnswer ? '' : -1 }));
+      }
+      setCurrentQuestionIndex(prev => prev + 1);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const handleSelectAnswer = (questionIndex: number, optionIndex: number) => {
+    setSelectedAnswers(prev => ({ ...prev, [questionIndex]: optionIndex }));
+  };
+
+  const handleTextAnswer = (questionIndex: number, value: string) => {
+    setSelectedAnswers(prev => ({ ...prev, [questionIndex]: value }));
+  };
+
+  const isShortAnswerQuestion = (q: Question) =>
+    q.questionType === 'shortAnswer' || !q.options?.length;
+
+  const isShortAnswerFilled = (idx: number) =>
+    String(selectedAnswers[idx] ?? '').trim().length > 0;
+
+  const validateCurrentShortAnswer = () => {
+    if (!quizData) return true;
+    const q = quizData.quiz.questions[currentQuestionIndex];
+    if (isShortAnswerQuestion(q) && !isShortAnswerFilled(currentQuestionIndex)) {
+      toast.error('Please answer this question before continuing.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleNextQuestion = () => {
+    if (!validateCurrentShortAnswer()) return;
+    setCurrentQuestionIndex(prev => Math.min(totalQuestions - 1, prev + 1));
+  };
+
+  const handleJumpToQuestion = (targetIndex: number) => {
+    if (targetIndex > currentQuestionIndex && !validateCurrentShortAnswer()) return;
+    setCurrentQuestionIndex(targetIndex);
+  };
+
+  const handleSubmitQuiz = async () => {
+    if (!quizData) return;
+
+    const missingShortAnswer = quizData.quiz.questions.some((q, idx) =>
+      isShortAnswerQuestion(q) && String(selectedAnswers[idx] ?? '').trim().length === 0,
+    );
+
+    if (missingShortAnswer) {
+      toast.error('Please answer all short-answer questions before submitting.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const answers = quizData.quiz.questions.map((q, index) => ({
+        questionId: q._id,
+        selectedAnswer: selectedAnswers[index] ?? (isShortAnswerQuestion(q) ? '' : -1),
+      }));
+
+      await api.post(`/quizzes/${attemptId}/submit-all`, {
+        answers,
+        violations: violations.current.length > 0 ? violations.current : undefined,
+      });
+
+      sessionStorage.removeItem('currentQuiz');
+      toast.success('Quiz submitted successfully!');
+      navigate(`/quiz/teacher-results/${attemptId}`);
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.error?.message ||
+        'Failed to submit quiz. Please try again or contact your teacher.',
+      );
+      // Do NOT navigate — keep student on quiz so they can retry
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!quizData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto" />
+          <p className="mt-4 text-gray-600 text-sm">Loading quiz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentQuestion = quizData.quiz.questions[currentQuestionIndex];
+  const totalQuestions  = quizData.quiz.questions.length;
+  const answeredCount   = Object.keys(selectedAnswers).length;
+
+  return (
+    <div className="min-h-screen bg-gray-50 select-none">
+      {/* Face Detection Camera — only when the teacher enabled monitoring for this quiz */}
+      <FaceDetectionCamera
+        enabled={!!quizData && quizData.quiz.cameraMonitoring !== false}
+        onViolation={handleFaceViolation}
+        onAutoSubmit={handleFaceAutoSubmit}
+      />
+
+      {/* Violation Warning Banner */}
+      {showWarning && (
+        <div className="fixed top-0 left-0 right-0 bg-red-500 text-white py-3 px-4 z-50 flex items-center justify-center gap-2 animate-pulse">
+          <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
+          <span className="font-medium">{warningMessage}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-lg font-semibold text-gray-900">{quizData.quiz.title}</h1>
+              <p className="text-sm text-gray-500">
+                Question {currentQuestionIndex + 1} of {totalQuestions}
+              </p>
+            </div>
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+              timeLeft < 10 ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-indigo-100 text-indigo-700'
+            }`}>
+              <ClockIcon className="h-5 w-5" />
+              <span className="font-mono font-bold text-lg">{formatTime(timeLeft)}</span>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-4 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-indigo-600 transition-all duration-300"
+              style={{ width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Question Card */}
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="mb-6">
+            <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+              currentQuestion.difficulty === 'Easy'   ? 'bg-green-100 text-green-700'  :
+              currentQuestion.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700':
+                                                        'bg-red-100 text-red-700'
+            }`}>
+              {currentQuestion.difficulty}
+            </span>
+          </div>
+
+          <h2 className="text-xl font-medium text-gray-900 mb-6">
+            {currentQuestion.text}
+          </h2>
+
+          {isShortAnswerQuestion(currentQuestion) ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Your Answer</label>
+              <textarea
+                value={String(selectedAnswers[currentQuestionIndex] ?? '')}
+                onChange={e => handleTextAnswer(currentQuestionIndex, e.target.value)}
+                rows={4}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Type your answer here"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {currentQuestion.options.map((option, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleSelectAnswer(currentQuestionIndex, index)}
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                    selectedAnswers[currentQuestionIndex] === index
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      selectedAnswers[currentQuestionIndex] === index
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {String.fromCharCode(65 + index)}
+                    </span>
+                    <span className="text-gray-900">{option}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Proctoring notice */}
+        <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+          <ExclamationTriangleIcon className="h-4 w-4 inline mr-1" />
+          This quiz is monitored. All violations are recorded and shared with your teacher.
+        </div>
+
+        {/* Navigation */}
+        <div className="mt-6 flex items-center justify-between">
+          <button
+            onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+            disabled={currentQuestionIndex === 0}
+            className="px-4 py-2 text-gray-600 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+
+          {/* Question jump dots */}
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {quizData.quiz.questions.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => handleJumpToQuestion(index)}
+                className={`w-8 h-8 rounded-full text-sm font-medium transition-all ${
+                  index === currentQuestionIndex
+                    ? 'bg-indigo-600 text-white'
+                    : selectedAnswers[index] !== undefined
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {index + 1}
+              </button>
+            ))}
+          </div>
+
+          {currentQuestionIndex === totalQuestions - 1 ? (
+            <button
+              onClick={handleSubmitQuiz}
+              disabled={submitting}
+              className="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircleIcon className="h-5 w-5" />
+                  Submit ({answeredCount}/{totalQuestions})
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              onClick={handleNextQuestion}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700"
+            >
+              Next
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default QuizTakePage;

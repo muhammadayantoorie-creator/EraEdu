@@ -1,0 +1,68 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  backend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.x'
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Lint Code
+      run: npm run lint --if-present
+
+    - name: Run Tests
+      run: npm test -- --coverage --passWithNoTests
+      env:
+        NODE_ENV: test
+        JWT_SECRET: ${{ secrets.JWT_SECRET || 'test-secret-key-minimum-32-characters-long' }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || 'placeholder-key' }}
+
+    - name: Build
+      run: npm run build
+      env:
+        NODE_ENV: production
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.x'
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Lint
+      run: npm run lint
+      continue-on-error: true
+
+    - name: Build
+      run: npx vite build
+      env:
+        VITE_API_URL: ${{ vars.VITE_API_URL }}
+        NODE_OPTIONS: --max-old-space-size=4096
