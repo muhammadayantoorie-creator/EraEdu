@@ -159,11 +159,13 @@ app.get('/health', async (_req, res) => {
     checks.database = 'degraded';
   }
 
-  checks.ai = config.geminiApiKey ? 'ok' : 'degraded';
+  // Gemini is an optional enhancement. Its absence must never report the API
+  // as down or prevent core sign-in, quiz, and database functionality.
+  checks.ai = config.geminiApiKey ? 'ok' : 'not_configured';
 
-  const allOk = Object.values(checks).every(v => v === 'ok');
-  res.status(allOk ? 200 : 503).json({
-    status: allOk ? 'ok' : 'degraded',
+  const databaseOk = checks.database === 'ok';
+  res.status(databaseOk ? 200 : 503).json({
+    status: databaseOk ? 'ok' : 'degraded',
     checks,
     timestamp: new Date().toISOString(),
   });
