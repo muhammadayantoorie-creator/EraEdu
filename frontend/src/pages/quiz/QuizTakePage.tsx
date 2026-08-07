@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { ClockIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { ClockIcon, CheckCircleIcon, ExclamationTriangleIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 import FaceDetectionCamera from '../../components/shared/FaceDetectionCamera';
 
 interface Question {
@@ -29,7 +29,16 @@ interface QuizData {
   code: string;
 }
 
-type ViolationType = 'TAB_SWITCH' | 'SYSTEM_FOCUS_LOST' | 'RESTRICTED_KEY' | 'FACE_AWAY' | 'NO_FACE';
+type ViolationType =
+  | 'TAB_SWITCH'
+  | 'SYSTEM_FOCUS_LOST'
+  | 'RESTRICTED_KEY'
+  | 'FACE_AWAY'
+  | 'NO_FACE'
+  | 'WINDOW_RESIZE'
+  | 'FULLSCREEN_EXIT'
+  | 'PICTURE_IN_PICTURE'
+  | 'CLIPBOARD_ATTEMPT';
 
 interface ViolationPayload {
   violation_type: ViolationType;
@@ -41,6 +50,8 @@ interface ViolationPayload {
     user_agent: string;
     key_name?: string;
     focus_state?: string;
+    viewport?: string;
+    screen_extended?: boolean;
   };
 }
 
@@ -55,12 +66,24 @@ const QuizTakePage = () => {
   const [submitting,           setSubmitting]           = useState(false);
   const [showWarning,          setShowWarning]          = useState(false);
   const [warningMessage,       setWarningMessage]       = useState('');
+  const [secureModeReady,      setSecureModeReady]      = useState(
+    () => typeof document === 'undefined' || !document.documentElement.requestFullscreen || !!document.fullscreenElement,
+  );
 
   // Anti-cheating state
   const violations             = useRef<ViolationPayload[]>([]);
   const tabHiddenStartRef      = useRef<number | null>(null);
   // Prevents blur + visibilitychange from double-counting the same event
   const violationCooldownRef   = useRef(false);
+  const lastViolationAtRef     = useRef<Record<string, number>>({});
+  const focusLossEpisodeRef    = useRef(false);
+  const resizeEpisodeRef       = useRef(false);
+  const fullscreenEnteredRef   = useRef(!!document.fullscreenElement);
+  const viewportBaselineRef    = useRef({
+    width: window.innerWidth,
+    height: window.innerHeight,
+    area: window.innerWidth * window.innerHeight,
+  });
 
   // -----------------------------------------------------------------------
   // Prevent accidental navigation away from quiz
@@ -100,6 +123,11 @@ const QuizTakePage = () => {
   // Report a violation to backend
   // -----------------------------------------------------------------------
   const reportViolation = useCallback(async (payload: ViolationPayload) => {
+    const now = Date.now();
+    const lastReportedAt = lastViolationAtRef.current[payload.violation_type] || 0;
+    if (now - lastReportedAt < 1_200) return;
+    lastViolationAtRef.current[payload.violation_type] = now;
+
     violations.current = [...violations.current, payload];
     setWarningMessage(payload.alert_message);
     setShowWarning(true);
@@ -111,6 +139,10 @@ const QuizTakePage = () => {
       payload.violation_type === 'SYSTEM_FOCUS_LOST' ? 'focus_loss'        :
       payload.violation_type === 'FACE_AWAY'         ? 'face_away'         :
       payload.violation_type === 'NO_FACE'           ? 'no_face'           :
+      payload.violation_type === 'WINDOW_RESIZE'     ? 'window_resize'     :
+      payload.violation_type === 'FULLSCREEN_EXIT'   ? 'fullscreen_exit'   :
+      payload.violation_type === 'PICTURE_IN_PICTURE'? 'picture_in_picture':
+      payload.violation_type === 'CLIPBOARD_ATTEMPT' ? 'copy_attempt'      :
       'keyboard_shortcut';
 
     try {
@@ -141,6 +173,25 @@ const QuizTakePage = () => {
       // Non-critical — violation not saved, but student stays in exam
     }
   }, [attemptId, navigate, quizData]);
+
+  const enterSecureMode = useCallback(async () => {
+    if (!document.documentElement.requestFullscreen) {
+      setSecureModeReady(true);
+      return;
+    }
+    try {
+      await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      fullscreenEnteredRef.current = true;
+      viewportBaselineRef.current = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        area: window.innerWidth * window.innerHeight,
+      };
+      setSecureModeReady(true);
+    } catch {
+      toast.error('Secure fullscreen is required to continue this quiz.');
+    }
+  }, []);
 
   // -----------------------------------------------------------------------
   // Face detection callbacks
@@ -200,15 +251,20 @@ const QuizTakePage = () => {
     const handleBlur = () => {
       if (violationCooldownRef.current) return;
       blurTimer = setTimeout(() => {
-        if (document.visibilityState === 'visible' && !violationCooldownRef.current) {
+        if (document.visibilityState === 'visible' && !violationCooldownRef.current && !focusLossEpisodeRef.current) {
+          focusLossEpisodeRef.current = true;
           reportViolation(createViolationPayload(
             'SYSTEM_FOCUS_LOST',
-            'External System/File Access Violation',
+            'External window or overlay detected',
+            { focusState: 'window_blur' },
           ));
         }
       }, 300);
     };
-    const handleFocus = () => clearTimeout(blurTimer);
+    const handleFocus = () => {
+      clearTimeout(blurTimer);
+      focusLossEpisodeRef.current = false;
+    };
 
     // Restricted keys
     const handleRestrictedKeys = (e: KeyboardEvent) => {
@@ -216,24 +272,126 @@ const QuizTakePage = () => {
       if (e.key === 'Meta' || e.key === 'OS') keyName = 'Windows/Meta key';
       else if (e.altKey && e.key === 'Tab')    keyName = 'Alt+Tab';
       else if (e.key === 'PrintScreen')         keyName = 'PrintScreen';
+      else if (e.key === 'F12')                  keyName = 'F12 developer tools';
+      else if ((e.ctrlKey || e.metaKey) && ['l', 't', 'n', 'w', 'r', 'u'].includes(e.key.toLowerCase())) {
+        keyName = `${e.ctrlKey ? 'Ctrl' : 'Meta'}+${e.key.toUpperCase()}`;
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c', 'n'].includes(e.key.toLowerCase())) {
+        keyName = `${e.ctrlKey ? 'Ctrl' : 'Meta'}+Shift+${e.key.toUpperCase()}`;
+      }
       if (!keyName) return;
       e.preventDefault();
       reportViolation(createViolationPayload('RESTRICTED_KEY', 'Restricted Key Violation', { keyName }));
+    };
+
+    const handleClipboard = (event: ClipboardEvent) => {
+      event.preventDefault();
+      reportViolation(createViolationPayload('CLIPBOARD_ATTEMPT', 'Clipboard access blocked'));
+    };
+
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      reportViolation(createViolationPayload('RESTRICTED_KEY', 'Right-click menu blocked', { keyName: 'Context menu' }));
+    };
+
+    // Some operating-system overlays do not reliably emit blur. Polling
+    // document.hasFocus closes that gap while recording only one event per episode.
+    const focusHeartbeat = window.setInterval(() => {
+      if (!document.hidden && !document.hasFocus() && !focusLossEpisodeRef.current) {
+        focusLossEpisodeRef.current = true;
+        reportViolation(createViolationPayload(
+          'SYSTEM_FOCUS_LOST',
+          'System overlay or external window detected',
+          { focusState: 'focus_heartbeat' },
+        ));
+      } else if (document.hasFocus()) {
+        focusLossEpisodeRef.current = false;
+      }
+    }, 750);
+
+    const handleFullscreenChange = () => {
+      if (document.fullscreenElement) {
+        fullscreenEnteredRef.current = true;
+        setSecureModeReady(true);
+        viewportBaselineRef.current = {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          area: window.innerWidth * window.innerHeight,
+        };
+        return;
+      }
+      if (fullscreenEnteredRef.current && !submitting) {
+        setSecureModeReady(false);
+        reportViolation(createViolationPayload('FULLSCREEN_EXIT', 'Secure fullscreen exited'));
+      }
+    };
+
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        const baseline = viewportBaselineRef.current;
+        const currentArea = window.innerWidth * window.innerHeight;
+        const compactViewport =
+          window.innerWidth < baseline.width * 0.85 ||
+          window.innerHeight < baseline.height * 0.85 ||
+          currentArea < baseline.area * 0.75 ||
+          window.outerWidth < window.screen.availWidth * 0.82 ||
+          window.outerHeight < window.screen.availHeight * 0.82;
+
+        if (compactViewport && !resizeEpisodeRef.current) {
+          resizeEpisodeRef.current = true;
+          reportViolation(createViolationPayload(
+            'WINDOW_RESIZE',
+            'Suspicious small or side-by-side window detected',
+            { focusState: 'viewport_compromised' },
+          ));
+        } else if (!compactViewport) {
+          resizeEpisodeRef.current = false;
+        }
+      }, 600);
+    };
+
+    const handlePictureInPicture = () => {
+      reportViolation(createViolationPayload('PICTURE_IN_PICTURE', 'Picture-in-Picture overlay detected'));
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
     document.addEventListener('keydown', handleRestrictedKeys);
+    document.addEventListener('copy', handleClipboard);
+    document.addEventListener('cut', handleClipboard);
+    document.addEventListener('paste', handleClipboard);
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('enterpictureinpicture', handlePictureInPicture as EventListener);
+    window.addEventListener('resize', handleResize);
+
+    if ((window.screen as Screen & { isExtended?: boolean }).isExtended) {
+      reportViolation(createViolationPayload(
+        'WINDOW_RESIZE',
+        'Multiple-display environment detected',
+        { focusState: 'extended_display' },
+      ));
+    }
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('keydown', handleRestrictedKeys);
+      document.removeEventListener('copy', handleClipboard);
+      document.removeEventListener('cut', handleClipboard);
+      document.removeEventListener('paste', handleClipboard);
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('enterpictureinpicture', handlePictureInPicture as EventListener);
+      window.removeEventListener('resize', handleResize);
+      window.clearInterval(focusHeartbeat);
       clearTimeout(blurTimer);
+      clearTimeout(resizeTimer);
     };
-  }, [createViolationPayload, reportViolation]);
+  }, [createViolationPayload, reportViolation, submitting]);
 
   // Disable text selection during exam
   useEffect(() => {
@@ -299,7 +457,7 @@ const QuizTakePage = () => {
 
   // Timer countdown
   useEffect(() => {
-    if (timeLeft <= 0 || !quizData) return;
+    if (timeLeft <= 0 || !quizData || !secureModeReady) return;
 
     const timer = setInterval(() => {
       setTimeLeft(prev => {
@@ -313,7 +471,7 @@ const QuizTakePage = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, quizData]);
+  }, [timeLeft, quizData, secureModeReady]);
 
   const handleAutoNext = () => {
     if (!quizData) return;
@@ -427,6 +585,23 @@ const QuizTakePage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 select-none">
+      {!secureModeReady && document.documentElement.requestFullscreen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-xl">
+          <div role="dialog" aria-modal="true" aria-labelledby="secure-mode-title" className="w-full max-w-md rounded-3xl border border-white/15 bg-white p-8 text-center shadow-2xl">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+              <ShieldCheckIcon className="h-9 w-9" />
+            </div>
+            <h2 id="secure-mode-title" className="mt-5 text-2xl font-bold text-slate-950">Secure quiz mode required</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Continue in fullscreen. Exiting fullscreen, opening system overlays, shrinking the window, or using another app is recorded as a violation.
+            </p>
+            <button type="button" onClick={enterSecureMode} className="mt-6 w-full rounded-xl bg-emerald-600 px-5 py-3 font-semibold text-white shadow-lg transition hover:bg-emerald-700 focus:outline-none focus:ring-4 focus:ring-emerald-200">
+              Enter secure fullscreen
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Face Detection Camera — only when the teacher enabled monitoring for this quiz */}
       <FaceDetectionCamera
         enabled={!!quizData && quizData.quiz.cameraMonitoring !== false}

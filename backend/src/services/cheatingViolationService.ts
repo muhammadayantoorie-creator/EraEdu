@@ -8,6 +8,10 @@ export type ViolationType =
   | 'keyboard_shortcut'
   | 'face_away'
   | 'no_face'
+  | 'focus_loss'
+  | 'window_resize'
+  | 'fullscreen_exit'
+  | 'picture_in_picture'
   | 'TAB_SWITCH'
   | 'SYSTEM_FOCUS_LOST'
   | 'RESTRICTED_KEY'
@@ -201,7 +205,11 @@ export const cheatingViolationService = {
         copy_attempt: data?.filter(v => v.violation_type === 'copy_attempt').length || 0,
         screenshot_attempt: data?.filter(v => v.violation_type === 'screenshot_attempt').length || 0,
         keyboard_shortcut: data?.filter(v => v.violation_type === 'keyboard_shortcut').length || 0,
-        right_click: data?.filter(v => v.violation_type === 'right_click').length || 0
+        right_click: data?.filter(v => v.violation_type === 'right_click').length || 0,
+        focus_loss: data?.filter(v => v.violation_type === 'focus_loss').length || 0,
+        window_resize: data?.filter(v => v.violation_type === 'window_resize').length || 0,
+        fullscreen_exit: data?.filter(v => v.violation_type === 'fullscreen_exit').length || 0,
+        picture_in_picture: data?.filter(v => v.violation_type === 'picture_in_picture').length || 0
       },
       attempts: Object.values(attemptViolations)
     };

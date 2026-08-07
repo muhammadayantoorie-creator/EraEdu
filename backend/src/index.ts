@@ -188,7 +188,7 @@ app.use(errorHandler);
 // ---------------------------------------------------------------------------
 // Server startup (skipped in Vercel serverless)
 // ---------------------------------------------------------------------------
-if (process.env.VERCEL !== '1') {
+if (process.env.VERCEL !== '1' && config.nodeEnv !== 'test') {
   const PORT = config.port;
   const server = app.listen(Number(PORT), '0.0.0.0', () => {
     logger.info({ port: PORT, environment: config.nodeEnv }, 'Server started');
