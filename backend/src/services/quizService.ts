@@ -420,6 +420,25 @@ export const quizService = {
 
     let attempt = existing && existing.length > 0 ? existing[0] : null;
 
+    // Never revive an attempt whose server-side deadline has passed. The
+    // browser timer is only a convenience; the API remains authoritative.
+    if (attempt && quiz.time_limit && attempt.started_at) {
+      const deadline = new Date(attempt.started_at).getTime() + Number(quiz.time_limit) * 60_000;
+      if (Date.now() >= deadline) {
+        await supabase
+          .from('quiz_attempts')
+          .update({
+            status: 'completed',
+            completed_at: new Date(),
+            auto_submitted: true,
+            submission_reason: 'time_expired',
+          })
+          .eq('id', attempt.id)
+          .eq('status', 'in-progress');
+        attempt = null;
+      }
+    }
+
     if (!attempt) {
       const { data: created, error: attemptError } = await supabase
         .from('quiz_attempts')
@@ -694,13 +713,19 @@ export const quizService = {
     // Get quiz to calculate score
     const { data: quiz, error: quizError } = await supabase
       .from('teacher_quizzes')
-      .select('id, title, teacher_id, questions')
+      .select('id, title, teacher_id, questions, time_limit')
       .eq('id', attempt.quiz_id)
       .single();
 
     if (quizError || !quiz) {
       throw new Error('Quiz not found');
     }
+
+    const timeLimitMinutes = Number(quiz.time_limit || 0);
+    const deadline = attempt.started_at && timeLimitMinutes > 0
+      ? new Date(attempt.started_at).getTime() + timeLimitMinutes * 60_000
+      : null;
+    const timeExpired = deadline !== null && Date.now() >= deadline;
 
     // Calculate score
     let score = 0;
@@ -740,6 +765,11 @@ export const quizService = {
       score,
       answers,
     };
+
+    if (timeExpired) {
+      updateData.auto_submitted = true;
+      updateData.submission_reason = 'time_expired';
+    }
     
     if (violations && violations.length > 0) {
       updateData.violations = violations;
@@ -852,6 +882,39 @@ export const quizService = {
   },
 
   async submitAnswer(attemptId: string, questionId: string, answer: string) {
+    // Enforce the same server-side deadline for the per-question endpoint.
+    // This prevents clients from bypassing the timer by calling this route
+    // directly after the UI countdown has ended.
+    const { data: attempt } = await supabase
+      .from('quiz_attempts')
+      .select('quiz_id, started_at, status')
+      .eq('id', attemptId)
+      .single();
+    if (!attempt || attempt.status !== 'in-progress') {
+      throw new Error('Quiz attempt is no longer active');
+    }
+    const { data: quiz } = await supabase
+      .from('teacher_quizzes')
+      .select('time_limit')
+      .eq('id', attempt.quiz_id)
+      .single();
+    if (quiz?.time_limit && attempt.started_at) {
+      const deadline = new Date(attempt.started_at).getTime() + Number(quiz.time_limit) * 60_000;
+      if (Date.now() >= deadline) {
+        await supabase
+          .from('quiz_attempts')
+          .update({
+            status: 'completed',
+            completed_at: new Date(),
+            auto_submitted: true,
+            submission_reason: 'time_expired',
+          })
+          .eq('id', attemptId)
+          .eq('status', 'in-progress');
+        throw new Error('Quiz time has expired');
+      }
+    }
+
     // Fetch question to check answer
     const { data: question } = await supabase
       .from('questions')
