@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { supabase } from '../config/supabase';
+import { assertStudentEmailPolicy } from './authService';
 import { aiService } from './aiService';
 
 interface QuizQuestion {
@@ -366,6 +367,8 @@ export const quizService = {
 
   // Start a teacher quiz by access code
   async startQuizByCode(code: string, userId: string) {
+    await assertStudentEmailPolicy(userId);
+
     // Get quiz by code
     const { data: quiz, error } = await supabase
       .from('teacher_quizzes')
@@ -694,6 +697,8 @@ export const quizService = {
     answers: { questionId: string; selectedAnswer: number | string }[],
     violations?: { type: string; timestamp: string; details?: string }[]
   ) {
+    await assertStudentEmailPolicy(userId);
+
     // Get the attempt
     const { data: attempt, error: attemptError } = await supabase
       .from('quiz_attempts')

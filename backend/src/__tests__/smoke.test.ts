@@ -67,6 +67,19 @@ describe('Auth routes — unauthenticated behaviour', () => {
     // Always returns 200 or 500 (DB unreachable) — never 404 to prevent enumeration
     expect([200, 500]).toContain(res.status);
   });
+
+  it('POST /api/auth/register rejects non-university student email addresses', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Test Student',
+        email: 'student@example.com',
+        password: 'ValidPass1',
+        role: 'student',
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/nutech\.edu\.pk/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -25,6 +25,7 @@ Use this checklist before publishing a release. Do not treat a successful fronte
 ## Product verification
 
 - Register and sign in as a student and as a teacher.
+- Verify student registration and quiz access reject non-`@nutech.edu.pk` addresses, while teacher registration remains available under the approved policy.
 - Verify face enrollment, face login, password reset, and account suspension.
 - Create a quiz with camera monitoring and a violation limit; verify that the configured limit auto-submits an attempt.
 - Verify quiz review, final confirmation, and preparation stages before a teacher opens a quiz.

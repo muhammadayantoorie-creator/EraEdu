@@ -9,6 +9,7 @@ import * as faceapi from 'face-api.js';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg'];
 const MODEL_URL = `${import.meta.env.BASE_URL}models`;
+const STUDENT_EMAIL_DOMAIN = '@nutech.edu.pk';
 
 const RegisterPage = () => {
   const { register: registerUser, isLoading } = useAuthStore();
@@ -181,11 +182,16 @@ const RegisterPage = () => {
                   pattern: {
                     value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                     message: 'Invalid email address'
-                  }
+                  },
+                  validate: (value) => role !== 'student' || String(value).toLowerCase().trim().endsWith(STUDENT_EMAIL_DOMAIN)
+                    || 'Students must use a valid @nutech.edu.pk university email address'
                 })}
               />
               {errors.email && (
                 <p className="mt-1 text-sm text-red-600">{errors.email.message as string}</p>
+              )}
+              {role === 'student' && !errors.email && (
+                <p className="mt-1 text-xs text-gray-500">Student accounts require your @nutech.edu.pk university email.</p>
               )}
             </div>
           </div>

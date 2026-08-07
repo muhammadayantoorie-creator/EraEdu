@@ -19,6 +19,25 @@ const MAX_NAME_LEN = 80;
 const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 128;
 const MAX_BIO_LEN = 500;
+export const STUDENT_EMAIL_DOMAIN = '@nutech.edu.pk';
+
+const isStudentEmail = (email: string): boolean => {
+  const normalized = email.toLowerCase().trim();
+  const at = normalized.lastIndexOf('@');
+  return at > 0 && normalized.slice(at) === STUDENT_EMAIL_DOMAIN;
+};
+
+export const assertStudentEmailPolicy = async (userId: string): Promise<void> => {
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('email, role')
+    .eq('id', userId)
+    .single();
+  if (error || !user) throw createHttpError('User not found', 404);
+  if (String(user.role).toLowerCase() === 'student' && !isStudentEmail(user.email || '')) {
+    throw createHttpError('Student accounts must use a valid @nutech.edu.pk university email address', 403);
+  }
+};
 
 export const authService = {
   async register(userData: any) {
@@ -37,6 +56,9 @@ export const authService = {
     if (!ALLOWED_ROLES.includes(role)) throw createHttpError('Invalid role specified');
 
     const normalizedEmail = email.toLowerCase().trim();
+    if (role === 'student' && !isStudentEmail(normalizedEmail)) {
+      throw createHttpError('Student accounts must use a valid @nutech.edu.pk university email address');
+    }
 
     const { data: existingUsers, error: checkError } = await supabase
       .from('users')
@@ -132,6 +154,12 @@ export const authService = {
     if (!isMatch) throw new Error('Invalid credentials');
 
     const normalizedRole = (user.role || '').toLowerCase();
+
+    // Enforce the university-domain policy for existing records too, so an
+    // account created or edited outside this API cannot bypass the restriction.
+    if (normalizedRole === 'student' && !isStudentEmail(user.email || '')) {
+      throw createHttpError('Student accounts must use a valid @nutech.edu.pk university email address', 403);
+    }
 
     if (normalizedRole === 'teacher') {
       const token = jwt.sign({ id: user.id, role: user.role }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
@@ -354,14 +382,26 @@ export const authService = {
 
     const { data: user, error } = await supabase
       .from('users')
+      .select('id, email')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    if (newRole === 'student' && !isStudentEmail(user.email || '')) {
+      throw createHttpError('Only users with a valid @nutech.edu.pk email can use the student role', 403);
+    }
+
+    const { data: updatedUser, error: updateError } = await supabase
+      .from('users')
       .update({ role: newRole })
       .eq('id', userId)
       .select()
       .single();
 
-    if (error) throw new Error(error.message);
+    if (updateError) throw new Error(updateError.message);
 
-    const token = jwt.sign({ id: user.id, role: user.role }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
-    return { user: { ...user, _id: user.id }, token };
+    const token = jwt.sign({ id: updatedUser.id, role: updatedUser.role }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
+    return { user: { ...updatedUser, _id: updatedUser.id }, token };
   },
 };
