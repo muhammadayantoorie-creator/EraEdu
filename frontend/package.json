@@ -2,6 +2,7 @@
   "name": "eraedu-frontend",
   "private": true,
   "version": "0.0.0",
+  "author": "Muhammad Ayan",
   "homepage": "https://Waqar-743.github.io/QuizShield",
   "type": "module",
   "scripts": {

@@ -1,6 +1,6 @@
 # EraEdu
 
-> Our ICAT project by **Waqar** — built out of frustration, shipped as a real platform.
+> Created by **Muhammad Ayan** — built out of frustration, shipped as a real platform.
 
 ---
 
@@ -143,4 +143,4 @@ This started as a project I had to submit. Somewhere around the third refactor i
 
 The face-verification step especially. It sounds like overkill until you realize that without it, the whole system is just another honor policy with a nicer UI.
 
-— **Waqar**
+— **Muhammad Ayan**
