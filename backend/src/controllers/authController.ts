@@ -2,6 +2,16 @@ import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/authService';
 import { asyncHandler } from '../middleware/errorHandler';
 
+const sessionCookie = (res: Response, token: string) => {
+  res.cookie('eraedu_session', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+};
+
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.register(req.body);
   
@@ -13,6 +23,10 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.login(req.body);
+  if ('token' in result && result.token) {
+    sessionCookie(res, result.token);
+    delete (result as { token?: string }).token;
+  }
   
   res.status(200).json({
     success: true,
@@ -69,6 +83,8 @@ export const verifyFaceLogin = asyncHandler(async (req: Request, res: Response) 
   }
 
   const result = await authService.verifyFaceLogin(tempToken, faceEncoding);
+  sessionCookie(res, result.token);
+  delete (result as { token?: string }).token;
 
   res.status(200).json({
     success: true,
@@ -84,4 +100,14 @@ export const switchRole = asyncHandler(async (req: Request, res: Response) => {
     success: false,
     message: 'Self-service role changes are disabled. Contact an administrator.',
   });
+});
+
+export const logout = asyncHandler(async (_req: Request, res: Response) => {
+  res.clearCookie('eraedu_session', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
+  });
+  res.status(204).send();
 });

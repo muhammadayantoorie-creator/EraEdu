@@ -17,15 +17,12 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 // Add a request interceptor to attach the token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     return config;
   },
   (error) => {
@@ -37,10 +34,14 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Handle 401 Unauthorized (token expired or invalid)
+    // Redirect to login on 401 for protected API calls only
+    // — skip auth endpoints where 401 is expected (check-auth, login, register)
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = `${import.meta.env.BASE_URL}login`;
+      const url: string = error.config?.url ?? '';
+      const isAuthEndpoint = url.includes('/auth/me') || url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/verify-face-login');
+      if (!isAuthEndpoint) {
+        window.location.href = `${import.meta.env.BASE_URL}login`;
+      }
     }
     return Promise.reject(error);
   }

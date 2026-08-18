@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import pinoHttp from 'pino-http';
@@ -59,6 +60,7 @@ app.use(cors({
   },
   credentials: true,
 }));
+app.use(cookieParser());
 
 // ---------------------------------------------------------------------------
 // Body parsing

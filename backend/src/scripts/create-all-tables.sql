@@ -14,6 +14,10 @@ CREATE TABLE IF NOT EXISTS users (
   interests TEXT[] DEFAULT '{}',
   reset_password_token TEXT,
   reset_password_expires_at TIMESTAMP WITH TIME ZONE,
+  face_encoding TEXT,
+  profile_picture_url TEXT,
+  is_suspended BOOLEAN NOT NULL DEFAULT false,
+  suspended_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -26,6 +30,8 @@ CREATE TABLE IF NOT EXISTS courses (
   category VARCHAR(100),
   difficulty VARCHAR(50) DEFAULT 'Beginner',
   thumbnail TEXT,
+  course_code VARCHAR(10) UNIQUE,
+  max_students INTEGER,
   created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   is_published BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -100,11 +106,14 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
   difficulty VARCHAR(20),
   teacher_grade INTEGER,
   teacher_feedback TEXT,
-  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  completed_at TIMESTAMP WITH TIME ZONE,
   violation_count INTEGER DEFAULT 0,
   is_flagged BOOLEAN DEFAULT false,
-  accessed_via VARCHAR(20) DEFAULT 'enrolled'
+  auto_submitted BOOLEAN DEFAULT false,
+  submission_reason VARCHAR(100),
+  violations JSONB DEFAULT '[]'::jsonb,
+  accessed_via VARCHAR(20) DEFAULT 'enrolled',
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  completed_at TIMESTAMP WITH TIME ZONE
 );
 
 -- 8. Quiz Codes Table
@@ -150,11 +159,14 @@ CREATE TABLE IF NOT EXISTS teacher_quizzes (
   teacher_id VARCHAR(255) NOT NULL,
   title VARCHAR(255) NOT NULL,
   description TEXT,
+  course_id UUID REFERENCES courses(id) ON DELETE SET NULL,
   time_limit INTEGER DEFAULT 30,
   questions JSONB DEFAULT '[]'::jsonb,
   access_code VARCHAR(10) UNIQUE,
   scheduled_start TIMESTAMP WITH TIME ZONE,
   is_active BOOLEAN DEFAULT true,
+  camera_monitoring BOOLEAN NOT NULL DEFAULT true,
+  violation_limit INTEGER NOT NULL DEFAULT 3 CHECK (violation_limit BETWEEN 1 AND 100),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -172,6 +184,49 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 13. Quiz Codes Table
+CREATE TABLE IF NOT EXISTS quiz_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  quiz_id UUID REFERENCES teacher_quizzes(id) ON DELETE CASCADE,
+  course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
+  created_by UUID REFERENCES users(id) ON DELETE CASCADE,
+  code VARCHAR(8) UNIQUE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE,
+  is_active BOOLEAN DEFAULT true,
+  access_count INTEGER DEFAULT 0,
+  max_attempts INTEGER
+);
+
+-- 14. Cheating Violations Table
+CREATE TABLE IF NOT EXISTS cheating_violations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  quiz_attempt_id UUID REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+  student_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  quiz_id UUID,
+  teacher_id UUID REFERENCES users(id),
+  violation_type VARCHAR(50) NOT NULL,
+  detection_method VARCHAR(100),
+  severity VARCHAR(20) DEFAULT 'low',
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  details JSONB DEFAULT '{}'::jsonb
+);
+
+-- 15. Student Feedback Table
+CREATE TABLE IF NOT EXISTS student_feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  attempt_id UUID NOT NULL REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  quiz_id UUID NOT NULL REFERENCES teacher_quizzes(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  category VARCHAR(40) NOT NULL CHECK (category IN ('overall', 'content', 'usability', 'performance', 'security')),
+  liked TEXT,
+  improvements TEXT NOT NULL,
+  would_recommend BOOLEAN,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  UNIQUE(attempt_id, student_id)
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_courses_created_by ON courses(created_by);
 CREATE INDEX IF NOT EXISTS idx_topics_course_id ON topics(course_id);
@@ -179,9 +234,20 @@ CREATE INDEX IF NOT EXISTS idx_questions_topic_id ON questions(topic_id);
 CREATE INDEX IF NOT EXISTS idx_enrollments_user_id ON enrollments(user_id);
 CREATE INDEX IF NOT EXISTS idx_enrollments_course_id ON enrollments(course_id);
 CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_id ON quiz_attempts(user_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_quiz_id ON quiz_attempts(quiz_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_attempts_user_status ON quiz_attempts(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_teacher_quizzes_teacher_id ON teacher_quizzes(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_teacher_quizzes_course_id ON teacher_quizzes(course_id);
+CREATE INDEX IF NOT EXISTS idx_teacher_quizzes_access_code ON teacher_quizzes(access_code);
 CREATE INDEX IF NOT EXISTS idx_quiz_codes_code ON quiz_codes(code);
+CREATE INDEX IF NOT EXISTS idx_quiz_codes_quiz_id ON quiz_codes(quiz_id);
+CREATE INDEX IF NOT EXISTS idx_violations_quiz_attempt_id ON cheating_violations(quiz_attempt_id);
 CREATE INDEX IF NOT EXISTS idx_violations_student_id ON cheating_violations(student_id);
+CREATE INDEX IF NOT EXISTS idx_violations_teacher_id ON cheating_violations(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_violations_timestamp ON cheating_violations(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_users_reset_password_token ON users(reset_password_token);
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON student_feedback(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_feedback_quiz_id ON student_feedback(quiz_id);
 
 -- Disable RLS for now (for easier development)
 ALTER TABLE users DISABLE ROW LEVEL SECURITY;

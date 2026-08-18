@@ -28,31 +28,23 @@ const RegisterPage = () => {
   const extractFaceEncoding = async (imgElement: HTMLImageElement): Promise<number[] | null> => {
     setExtractingFace(true);
     try {
-      console.log('[Register] Loading face-api models from:', MODEL_URL);
-      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      console.log('[Register] tinyFaceDetector loaded');
+       await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
       await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      console.log('[Register] faceLandmark68Net loaded');
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-      console.log('[Register] faceRecognitionNet loaded');
 
-      console.log('[Register] Running face detection on image:', imgElement.width, 'x', imgElement.height);
       const detection = await faceapi
         .detectSingleFace(imgElement, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
 
       if (!detection) {
-        console.warn('[Register] No face detected in uploaded image');
         setPictureError('No face detected in the image. Please upload a clear photo of your face.');
         return null;
       }
 
       const descriptor = Array.from(detection.descriptor);
-      console.log('[Register] Face encoding extracted successfully, length:', descriptor.length, 'first 3 values:', descriptor.slice(0, 3));
       return descriptor;
     } catch (err) {
-      console.error('[Register] Face encoding extraction FAILED:', err);
       setPictureError('Failed to process face data. Please try a different image.');
       return null;
     } finally {
@@ -114,7 +106,6 @@ const RegisterPage = () => {
         });
       }
 
-      console.log('[Register] Submitting registration. role:', data.role, '| has profilePicture:', !!profilePictureBase64, '| has faceEncoding:', !!faceEncoding, '| encoding length:', faceEncoding?.length);
       await registerUser({
         ...data,
         profilePictureBase64,

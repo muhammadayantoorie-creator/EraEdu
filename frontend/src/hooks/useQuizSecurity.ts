@@ -41,8 +41,8 @@ export const useQuizSecurity = (options: UseQuizSecurityOptions) => {
         quizId,
         teacherId
       });
-      
-      const count = response.data?.data?.violationCount || violations.length + 1;
+
+      const count = response.data?.data?.violationCount || 1;
       const isAutoSubmitted = response.data?.data?.autoSubmitted || false;
 
       if (isAutoSubmitted) {
@@ -58,7 +58,7 @@ export const useQuizSecurity = (options: UseQuizSecurityOptions) => {
     } catch (error) {
       console.error('Failed to report violation:', error);
     }
-  }, [quizAttemptId, quizId, teacherId, violations.length, onViolation]);
+  }, [quizAttemptId, quizId, teacherId, onViolation]);
 
   // Prevent right-click
   useEffect(() => {
@@ -112,15 +112,9 @@ export const useQuizSecurity = (options: UseQuizSecurityOptions) => {
       }
       
       // PrintScreen detection
-      if (e.key === 'PrintScreen' || (e.shiftKey && e.key === 'PrintScreen')) {
+      if (e.key === 'PrintScreen') {
         e.preventDefault();
         reportViolation('screenshot_attempt');
-      }
-      
-      // Ctrl+Shift+I (DevTools)
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-        reportViolation('keyboard_shortcut');
       }
     };
 

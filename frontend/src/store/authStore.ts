@@ -25,13 +25,12 @@ interface AuthState {
   logout: () => void;
   checkAuth: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
-  switchRole: (role: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, _get) => ({
   user: null,
-  token: localStorage.getItem('token'),
-  isAuthenticated: !!localStorage.getItem('token'),
+  token: null,
+  isAuthenticated: false,
   isLoading: false,
   isAuthChecking: true, // Start as true to prevent flash
   error: null,
@@ -40,12 +39,10 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   login: async (credentials) => {
     set({ isLoading: true, error: null, faceVerificationPending: null });
     try {
-      const response = await api.post<any>('/auth/login', credentials);
+       const response = await api.post<any>('/auth/login', credentials);
       const responseData = response.data.data;
-      console.log('[AuthStore.login] Raw API response data:', JSON.stringify(responseData, null, 2));
 
       if (responseData.requiresFaceVerification) {
-        console.log('[AuthStore.login] Face verification REQUIRED — switching to camera step');
         set({
           isLoading: false,
           faceVerificationPending: {
@@ -56,11 +53,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         return;
       }
 
-      console.log('[AuthStore.login] No face verification needed — issuing token directly');
-      const user = responseData.user || responseData;
-      const token = responseData.token;
-      localStorage.setItem('token', token);
-      set({ user, token, isAuthenticated: true, isLoading: false, error: null });
+      set({ user: responseData.user || responseData, token: null, isAuthenticated: true, isLoading: false, error: null });
     } catch (error: any) {
       const message = error.response?.data?.message || error.response?.data?.error?.message || 'Login failed';
       set({ error: message, isLoading: false });
@@ -78,9 +71,8 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         tempToken: pending.tempToken,
         faceEncoding,
       });
-      const { user, token } = response.data.data;
-      localStorage.setItem('token', token);
-      set({ user, token, isAuthenticated: true, isLoading: false, faceVerificationPending: null, error: null });
+      const { user } = response.data.data;
+      set({ user, token: null, isAuthenticated: true, isLoading: false, faceVerificationPending: null, error: null });
     } catch (error: any) {
       const message = error.response?.data?.message || error.response?.data?.error?.message || 'Face verification failed';
       set({ error: message, isLoading: false });
@@ -143,23 +135,16 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   },
 
   logout: () => {
-    localStorage.removeItem('token');
+    void api.post('/auth/logout').catch(() => undefined);
     set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false });
   },
 
   checkAuth: async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      set({ isAuthenticated: false, user: null, isAuthChecking: false });
-      return;
-    }
-
     // Don't set isLoading, use separate isAuthChecking
     try {
       const response = await api.get<any>('/auth/me');
       set({ user: response.data.data, isAuthenticated: true, isAuthChecking: false });
     } catch (error) {
-      localStorage.removeItem('token');
       set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false });
     }
   },
@@ -176,17 +161,4 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     }
   },
 
-  switchRole: async (role) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await api.put<any>('/auth/switch-role', { role });
-      const { user, token } = response.data.data;
-      localStorage.setItem('token', token);
-      set({ user, token, isLoading: false });
-    } catch (error: any) {
-      const message = error.response?.data?.message || 'Failed to switch role';
-      set({ error: message, isLoading: false });
-      throw error;
-    }
-  },
 }));

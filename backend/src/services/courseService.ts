@@ -196,8 +196,6 @@ export const courseService = {
   },
 
   async createCourse(teacherId: string, courseData: any) {
-    console.log('Creating course with data:', { teacherId, courseData });
-    
     const courseCode = await this.generateUniqueCourseCode();
 
     const insertData: any = {
@@ -212,8 +210,6 @@ export const courseService = {
       const n = Number(courseData.maxStudents);
       if (Number.isFinite(n) && n > 0) insertData.max_students = Math.floor(n);
     }
-    
-    console.log('Insert data:', insertData);
 
     let insertResult = await supabase
       .from('courses')

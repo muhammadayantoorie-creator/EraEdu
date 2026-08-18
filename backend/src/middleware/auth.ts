@@ -18,12 +18,12 @@ declare global {
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
   let token;
 
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
+  token = req.cookies?.eraedu_session;
+  if (!token && req.headers.authorization?.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+  if (token) {
     try {
-      token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, config.jwtSecret) as any;
       req.user = { _id: decoded.id, role: decoded.role };
       return next();

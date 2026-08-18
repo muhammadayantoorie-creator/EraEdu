@@ -47,7 +47,7 @@ export const quizCodeService = {
       .from('quiz_codes')
       .insert([{
         quiz_id: quizId,
-        course_id: courseId || quizId,
+         course_id: courseId || null,
         created_by: teacherId,
         code,
         expires_at: expiresAt || null,

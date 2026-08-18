@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { register, login, forgotPassword, resetPassword, getCurrentUser, updateProfile, switchRole, verifyFaceLogin } from '../controllers/authController';
+import { register, login, forgotPassword, resetPassword, getCurrentUser, updateProfile, switchRole, verifyFaceLogin, logout } from '../controllers/authController';
 import { uploadProfilePicture, uploadRegistrationPicture } from '../controllers/profilePictureController';
 import { protect } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
@@ -47,6 +47,7 @@ router.post('/forgot-password', validateBody(forgotPasswordSchema), forgotPasswo
 router.post('/reset-password', validateBody(resetPasswordSchema), resetPassword);
 router.post('/validate-picture', upload.single('profilePicture'), uploadRegistrationPicture);
 router.post('/verify-face-login', validateBody(faceLoginSchema), verifyFaceLogin);
+router.post('/logout', logout);
 
 // Protected routes
 router.get('/me', protect, getCurrentUser);

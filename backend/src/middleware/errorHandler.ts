@@ -19,7 +19,7 @@ export const notFoundHandler = (req: Request, res: Response, next: NextFunction)
   next(error);
 };
 
-export const errorHandler = (err: any, req: Request, _res: Response, _next: NextFunction) => {
+export const errorHandler = (err: any, req: Request, res: Response, _next: NextFunction) => {
   // Always log the full error server-side
   console.error(`[Error] ${req.method} ${req.originalUrl}:`, err?.message || err);
   if (err?.stack && !isProd) console.error(err.stack);
@@ -55,7 +55,7 @@ export const errorHandler = (err: any, req: Request, _res: Response, _next: Next
     }
   }
 
-  _res.status(statusCode).json({
+  res.status(statusCode).json({
     success: false,
     message,
     error: { message },

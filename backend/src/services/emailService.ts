@@ -1,7 +1,17 @@
 import { Resend } from 'resend';
 import { config } from '../config/environment';
 
-const resend = new Resend(config.resendApiKey || 're_123456789'); // Provide dummy key to prevent crash if missing
+let resendClient: Resend | null = null;
+
+function getResend(): Resend {
+  if (!resendClient) {
+    if (!config.resendApiKey) {
+      throw new Error('Resend API key is not configured.');
+    }
+    resendClient = new Resend(config.resendApiKey);
+  }
+  return resendClient;
+}
 
 export const emailService = {
   async sendWelcomeEmail(email: string, name: string) {
@@ -10,7 +20,7 @@ export const emailService = {
         return null;
     }
     try {
-      const data = await resend.emails.send({
+      const data = await getResend().emails.send({
         from: 'Adaptive Learning <onboarding@resend.dev>', // Use 'onboarding@resend.dev' for testing if you don't have a domain
         to: [email],
         subject: 'Welcome to Adaptive Learning Platform!',
@@ -30,7 +40,6 @@ export const emailService = {
         `,
       });
 
-      console.log('Welcome email sent successfully:', data);
       return data;
     } catch (error) {
       console.error('Error sending welcome email:', error);
@@ -42,7 +51,7 @@ export const emailService = {
   async sendCourseEnrollmentEmail(email: string, name: string, courseTitle: string) {
     if (!config.resendApiKey) return null;
     try {
-      const data = await resend.emails.send({
+      const data = await getResend().emails.send({
         from: 'Adaptive Learning <onboarding@resend.dev>',
         to: [email],
         subject: `Enrolled in: ${courseTitle}`,
@@ -68,7 +77,7 @@ export const emailService = {
     }
 
     try {
-      const data = await resend.emails.send({
+      const data = await getResend().emails.send({
         from: 'EraEdu <onboarding@resend.dev>',
         to: [email],
         subject: 'Reset your EraEdu password',
@@ -90,7 +99,6 @@ export const emailService = {
         `,
       });
 
-      console.log('Password reset email sent successfully:', data);
       return data;
     } catch (error) {
       console.error('Error sending password reset email:', error);

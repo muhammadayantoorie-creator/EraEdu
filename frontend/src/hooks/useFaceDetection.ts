@@ -11,7 +11,7 @@
  *    cannot bypass proctoring by denying camera mid-exam.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as faceapi from 'face-api.js';
 
 /* ---------- configurable constants --------- */

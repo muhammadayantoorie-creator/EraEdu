@@ -41,14 +41,12 @@ export const aiService = {
   async generateQuestions(topicId: string, difficulty: string, count: number) {
     const { genAI } = getGenAI();
 
-    console.log(`[AI Service] Generating ${count} questions for topic: ${topicId}, difficulty: ${difficulty}`);
-
     try {
       return await callWithFallback(async (modelName) => {
         const model = genAI.getGenerativeModel({ model: modelName });
 
         const prompt = `Generate ${count} multiple-choice questions about "${topicId}" at a "${difficulty}" difficulty level. 
-      Format the output as a JSON array of objects with the following structure:
+       Format the output as a JSON array of objects with the following structure:
       [
         {
           "content": "Question text here",
@@ -61,29 +59,25 @@ export const aiService = {
       The correct_answer_index should be a 0-based integer matching the index in the options array.
       Do not include any markdown formatting or code blocks, just the raw JSON string.`;
 
-        console.log(`[AI Service] Calling Gemini API (model: ${modelName})...`);
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
-      
-        console.log('[AI Service] Raw response received:', text.substring(0, 200) + '...');
-      
+     
         // Clean up the text if it contains markdown code blocks
         let jsonString = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      
+     
         // Try to extract JSON array if wrapped in other content
         const jsonMatch = jsonString.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           jsonString = jsonMatch[0];
         }
-      
+     
         const questions = JSON.parse(jsonString);
-        console.log(`[AI Service] Successfully parsed ${questions.length} questions`);
-      
+   
         return questions;
       });
     } catch (error: any) {
-      console.error('[AI Service] Error generating questions:', error.message, error);
+      console.error('[AI Service] Error generating questions:', error.message);
       
       // Provide more specific error messages
       if (error.message?.includes('API key not valid') || error.message?.includes('API_KEY_INVALID')) {
@@ -117,8 +111,8 @@ export const aiService = {
         const response = await result.response;
         return response.text();
       });
-    } catch (error) {
-      console.error('[AI Service] Error generating explanation:', error);
+    } catch {
+      console.error('[AI Service] Error generating explanation');
       return "Unable to generate explanation at this time.";
     }
   },
@@ -131,8 +125,6 @@ export const aiService = {
       + 'viewing reports/analytics, and moving through student and teacher pages. '
       + 'Never provide help to cheat, bypass monitoring, or break rules. If asked, '
       + 'refuse briefly and offer allowed guidance. Keep responses concise and helpful.';
-
-    console.log('[AI Service] Calling Gemini API for chat assistant...');
 
     try {
       return await callWithFallback(async (modelName) => {
@@ -157,7 +149,6 @@ export const aiService = {
           ],
         });
 
-        console.log(`[AI Service] Calling Gemini chat (model: ${modelName})...`);
         const result = await chat.sendMessage(lastMessage.content);
         const response = await result.response;
         const text = response.text();
@@ -166,11 +157,10 @@ export const aiService = {
           throw new Error('Gemini returned an empty response.');
         }
 
-        console.log('[AI Service] Gemini chat response received, length:', text.length);
         return text.trim();
       });
     } catch (error: any) {
-      console.error('[AI Service] Gemini chat error:', error.message, error);
+      console.error('[AI Service] Gemini chat error:', error.message);
 
       if (error.message?.includes('API key not valid') || error.message?.includes('API_KEY_INVALID')) {
         throw new Error('Gemini API key is invalid. Please check your GEMINI_API_KEY.');
