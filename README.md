@@ -24,7 +24,7 @@ codes; and optional AI-powered question and study assistance.
 Browser (React + Vite)
         │
         ▼
-Express API (Node.js / Vercel serverless or Docker)
+Express API (Node.js / Vercel serverless)
         │
         ▼
 Supabase (Postgres, Auth, Storage)
@@ -38,15 +38,14 @@ Supabase (Postgres, Auth, Storage)
 | Backend | Node.js, Express, TypeScript, JWT, Zod |
 | Security | Helmet, express-rate-limit, CORS, bcryptjs |
 | Platform services | Supabase, Gemini (optional), Resend (optional) |
-| Deployment | Docker Compose or Vercel |
+| Deployment | Vercel |
 
 ## Repository layout
 
 ```
 frontend/       React application
 backend/        Express API and Vercel serverless entry point
-compose.yaml    Secure local Docker deployment
-DEPLOYMENT.md   Docker deployment instructions
+DEPLOYMENT.md   Deployment configuration instructions
 ```
 
 ## Local development
@@ -79,29 +78,14 @@ JWT_SECRET=use-a-unique-secret-of-at-least-32-characters
 
 Never commit environment files or server keys.
 
-## Docker deployment
-
-Docker Compose runs the frontend and backend with health checks and hardened
-container settings. The local deployment is exposed only on `127.0.0.1:8080`.
-
-```bash
-cp .env.docker.example .env.docker
-# Replace every placeholder in .env.docker with real values.
-docker compose up -d --build
-docker compose ps
-```
-
-Open `http://127.0.0.1:8080` after both services report `healthy`.
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for the complete Docker configuration and
-operational guidance.
-
 ## Vercel deployment
 
 Deploy the application as two Vercel projects from the same repository:
 
 1. **Frontend:** set the Vercel root directory to `frontend`.
 2. **Backend:** set the Vercel root directory to `backend`.
+   The frontend includes its Vercel configuration for SPA routes and security
+   headers; do not override its build or output settings.
 3. Deploy the frontend and copy its HTTPS URL.
 4. Add backend production variables: `NODE_ENV`, `SUPABASE_URL`,
    `SUPABASE_KEY`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `FRONTEND_URL`, and

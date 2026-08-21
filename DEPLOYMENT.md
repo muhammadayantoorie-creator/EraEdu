@@ -1,44 +1,23 @@
 # Deployment configuration
 
-## Docker (recommended)
+## Vercel
 
-The Compose stack runs the API privately and serves the frontend through Nginx
-on port `8080`. Nginx proxies browser requests from `/api` to the API container,
-so the frontend never contains a backend host or server secret.
+Deploy the frontend and backend as separate Vercel projects. Set the frontend
+project root to `frontend` and the backend project root to `backend`. The
+frontend `vercel.json` provides SPA route fallback and browser security headers.
 
-1. Copy `.env.docker.example` to `.env.docker` and replace every placeholder.
-   Set `FRONTEND_URL` to the exact public **HTTPS** origin; it must not be
-   `localhost` in production.
-2. Apply all database migrations in `backend/migrations/` before the first
-   start.
-3. Build and start the services:
+1. Apply all database migrations in `backend/migrations/` before the first
+   deployment.
+2. Deploy the frontend once and copy its generated HTTPS URL.
+3. Set the backend environment variables listed below, using that frontend URL
+   as `FRONTEND_URL`, then deploy the backend.
+4. Set `VITE_API_URL` in the frontend project to the backend's public HTTPS
+   URL and redeploy the frontend.
+5. Verify the deployed homepage, `/health`, sign-in, quiz start, and the admin
+   dashboard.
 
-   ```bash
-   docker compose up -d --build
-   docker compose ps
-   ```
-
-4. Place a TLS reverse proxy (Caddy, Nginx, or a cloud load balancer) in front
-   of `127.0.0.1:8080`, then point `FRONTEND_URL` at that HTTPS domain.
-
-The Compose file deliberately binds only to loopback by default. Set
-`ERAEDU_BIND_ADDRESS=0.0.0.0` only when a firewall or load balancer controls
-public access. Never expose port `5000`; it is only reachable by the frontend
-container.
-
-Useful operations:
-
-```bash
-docker compose logs -f
-docker compose pull
-docker compose up -d --build
-docker compose down
-```
-
-Verify `https://your-domain/`, `https://your-domain/health`, sign-in, quiz
-start, and the admin dashboard after each deployment.
-
-Set one canonical backend API URL before publishing. Do not leave historical host URLs in CI or frontend builds.
+Use one canonical backend API URL before publishing. Do not leave historical
+host URLs in CI or frontend builds.
 
 ## Frontend
 
