@@ -118,6 +118,17 @@
 }
 
 @layer utilities {
+  /* Landing page palette: keep every dark ink accent in the teal family. */
+  .landing-teal .text-ink-900,
+  .landing-teal .text-ink-950 { color: #064E3B !important; }
+  .landing-teal .bg-ink-900,
+  .landing-teal .bg-ink-950 { background-color: #047857 !important; }
+  .landing-teal [class*="bg-ink-900/"] { background-color: rgba(4, 120, 87, 0.08) !important; }
+  .landing-teal [class*="ring-ink-900"],
+  .landing-teal [class*="border-ink-900"] {
+    --tw-ring-color: rgba(4, 120, 87, 0.14) !important;
+    border-color: rgba(4, 120, 87, 0.12) !important;
+  }
   /* ───── Reveal-on-scroll ───── */
   .reveal {
     opacity: 0;

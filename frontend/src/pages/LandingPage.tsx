@@ -1002,7 +1002,7 @@ const LandingPage = () => {
   useReveal();
 
   return (
-    <div data-reveal-root className="min-h-[100dvh] bg-[#f4fbf8] text-ink-900 grain-fixed">
+    <div data-reveal-root className="landing-teal min-h-[100dvh] bg-[#f4fbf8] text-primary-950 grain-fixed">
       <NavIsland />
       <main>
         <Hero />
