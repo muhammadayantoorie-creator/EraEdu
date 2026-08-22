@@ -659,7 +659,7 @@ const HowItWorks = () => {
 const IntegritySpotlight = () => (
   <section
     id="integrity"
-    className="relative overflow-hidden bg-ink-950 py-32 text-white"
+    className="relative overflow-hidden bg-gradient-to-br from-primary-950 via-primary-900 to-teal-900 py-32 text-white"
   >
     <div
       aria-hidden
@@ -823,7 +823,7 @@ const Pricing = () => {
         <div className="mx-auto mt-16 grid max-w-6xl gap-5 lg:grid-cols-3 lg:items-stretch">
           {plans.map((plan, i) => (
             <article key={plan.name} className={`reveal reveal-delay-${i + 1} relative rounded-[2rem] p-1.5 ring-1 transition-transform duration-500 ease-spring hover:-translate-y-1 ${plan.featured ? 'bg-gradient-to-br from-primary-400 via-primary-500 to-accent-400 ring-primary-400/30 shadow-glow-emerald' : 'bg-ink-900/[0.04] ring-ink-900/5'}`}>
-              {plan.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-ink-900 px-3 py-1 text-[10px] font-semibold uppercase tracking-eyebrow text-white shadow-soft">Most popular</span>}
+              {plan.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary-800 px-3 py-1 text-[10px] font-semibold uppercase tracking-eyebrow text-white shadow-soft">Most popular</span>}
               <div className="flex h-full flex-col rounded-[calc(2rem-0.375rem)] bg-white p-7 sm:p-8">
                 <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-primary-700">{plan.name}</p>
                 <div className="mt-5 flex items-end gap-2"><span className="font-display text-5xl tracking-tightest text-ink-900">{plan.price}</span>{plan.suffix && <span className="mb-1 text-sm text-ink-500">{plan.suffix}</span>}</div>
@@ -910,8 +910,8 @@ const Testimonials = () => {
 const FinalCTA = () => (
   <section className="relative px-4 py-32">
     <div className="reveal mx-auto max-w-6xl">
-      <div className="bezel-dark">
-        <div className="bezel-core-dark relative overflow-hidden px-8 py-24 sm:px-16 text-center">
+      <div className="relative rounded-[2rem] bg-primary-700/30 p-1.5 ring-1 ring-primary-500/40 shadow-glow-emerald">
+        <div className="relative overflow-hidden rounded-[calc(2rem-0.375rem)] bg-gradient-to-br from-primary-950 via-primary-900 to-teal-900 px-8 py-24 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] sm:px-16">
           <div
             aria-hidden
             className="absolute inset-0 -z-10 bg-mesh-emerald opacity-80"
@@ -1027,11 +1027,10 @@ const LandingPage = () => {
   useReveal();
 
   return (
-    <div data-reveal-root className="min-h-[100dvh] bg-ink-50 text-ink-900 grain-fixed">
+    <div data-reveal-root className="min-h-[100dvh] bg-[#f4fbf8] text-ink-900 grain-fixed">
       <NavIsland />
       <main>
         <Hero />
-        <TrustStrip />
         <FeaturesBento />
         <HowItWorks />
         <IntegritySpotlight />
