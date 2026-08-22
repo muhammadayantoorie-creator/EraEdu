@@ -53,7 +53,10 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         return;
       }
 
-      set({ user: responseData.user || responseData, token: null, isAuthenticated: true, isLoading: false, error: null });
+      // A slow initial /auth/me check can still be in flight when a user signs
+      // in. Mark the new session as settled immediately so that stale check
+      // cannot send the user back to the sign-in screen.
+      set({ user: responseData.user || responseData, token: null, isAuthenticated: true, isLoading: false, isAuthChecking: false, error: null });
     } catch (error: any) {
       const message = error.response?.data?.message || error.response?.data?.error?.message || 'Login failed';
       set({ error: message, isLoading: false });
@@ -72,7 +75,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
         faceEncoding,
       });
       const { user } = response.data.data;
-      set({ user, token: null, isAuthenticated: true, isLoading: false, faceVerificationPending: null, error: null });
+      set({ user, token: null, isAuthenticated: true, isLoading: false, isAuthChecking: false, faceVerificationPending: null, error: null });
     } catch (error: any) {
       const message = error.response?.data?.message || error.response?.data?.error?.message || 'Face verification failed';
       set({ error: message, isLoading: false });
@@ -145,6 +148,12 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       const response = await api.get<any>('/auth/me');
       set({ user: response.data.data, isAuthenticated: true, isAuthChecking: false });
     } catch (error) {
+      // Do not let an older failed checkAuth request overwrite a session that
+      // was established by a successful login in the meantime.
+      if (_get().isAuthenticated) {
+        set({ isAuthChecking: false });
+        return;
+      }
       set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false });
     }
   },
