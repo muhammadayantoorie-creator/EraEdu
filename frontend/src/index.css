@@ -141,6 +141,47 @@
     --tw-ring-color: rgba(4, 120, 87, 0.14) !important;
     border-color: rgba(4, 120, 87, 0.12) !important;
   }
+
+  /* One calm visual system for learner, educator, and administrator workspaces.
+     Older teacher screens used indigo and gray utilities; scope their teal
+     replacements to the dashboard so destructive/error states stay distinct. */
+  .dashboard-teal .text-gray-900,
+  .dashboard-teal .text-gray-800,
+  .dashboard-teal .text-slate-900 { color: #064E3B !important; }
+  .dashboard-teal .text-gray-700,
+  .dashboard-teal .text-gray-600,
+  .dashboard-teal .text-slate-700 { color: #166534 !important; }
+  .dashboard-teal .text-gray-500,
+  .dashboard-teal .text-gray-400,
+  .dashboard-teal .text-slate-500 { color: #5B776C !important; }
+  .dashboard-teal [class*="text-indigo-"],
+  .dashboard-teal [class*="text-blue-"] { color: #047857 !important; }
+  .dashboard-teal [class*="bg-indigo-"],
+  .dashboard-teal [class*="bg-blue-"] { background-color: #ECFEF7 !important; }
+  .dashboard-teal [class*="bg-gray-"],
+  .dashboard-teal [class*="bg-slate-"] { background-color: #F3FBF7 !important; }
+  .dashboard-teal [class*="bg-indigo-50"],
+  .dashboard-teal [class*="bg-blue-50"] { background-color: #ECFEF7 !important; }
+  .dashboard-teal [class*="bg-indigo-100"],
+  .dashboard-teal [class*="bg-blue-100"] { background-color: #D0FBE9 !important; }
+  .dashboard-teal [class*="bg-indigo-200"],
+  .dashboard-teal [class*="bg-blue-200"] { background-color: #A4F4D3 !important; }
+  .dashboard-teal [class*="bg-indigo-500"],
+  .dashboard-teal [class*="bg-blue-500"] { background-color: #10B981 !important; }
+  .dashboard-teal [class*="bg-indigo-600"],
+  .dashboard-teal [class*="bg-blue-600"] { background-color: #059669 !important; }
+  .dashboard-teal [class*="bg-indigo-700"],
+  .dashboard-teal [class*="bg-blue-700"] { background-color: #047857 !important; }
+  .dashboard-teal [class*="border-gray-"],
+  .dashboard-teal [class*="border-slate-"] {
+    border-color: rgba(4, 120, 87, 0.14) !important;
+  }
+  .dashboard-teal [class*="ring-indigo-"],
+  .dashboard-teal [class*="ring-blue-"] { --tw-ring-color: rgba(16, 185, 129, 0.5) !important; }
+  .dashboard-teal [class*="focus:ring-indigo-"],
+  .dashboard-teal [class*="focus:ring-blue-"] { --tw-ring-color: #10B981 !important; }
+  .dashboard-teal [class*="focus:border-indigo-"],
+  .dashboard-teal [class*="focus:border-blue-"] { border-color: #10B981 !important; }
   /* ───── Reveal-on-scroll ───── */
   .reveal {
     opacity: 0;

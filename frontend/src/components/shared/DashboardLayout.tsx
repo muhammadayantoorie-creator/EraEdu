@@ -127,7 +127,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
   };
 
   return (
-    <div className="flex min-h-[100dvh] bg-ink-50 overflow-hidden relative">
+    <div className="dashboard-teal flex min-h-[100dvh] bg-ink-50 overflow-hidden relative">
       {/* Subtle ambient mesh */}
       <div
         aria-hidden
