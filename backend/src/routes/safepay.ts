@@ -45,7 +45,10 @@ router.post('/checkout', protect, authorize('teacher'), async (req, res) => {
     const client = getClient();
     const payment: any = await client.payments.session.setup({ merchant_api_key: config.safepayPublicKey, intent: 'CYBERSOURCE', mode: 'payment', entry_mode: 'raw', currency: 'PKR', amount: Math.round(config.safepayEducatorPricePkr * 100), metadata: { order_id: `educator-${req.user!._id}` }, include_fees: false } as any);
     const passport: any = await client.client.passport.create();
-    const url = client.checkout.createCheckoutUrl({ env, tracker: payment.data.tracker.token, tbt: passport.data, source: 'hosted', redirect_url: `${config.frontendAppUrl}/profile?payment=success`, cancel_url: `${config.frontendAppUrl}/#pricing` });
+    // The profile page polls Safepay with the tracker after checkout. Include
+    // it in the return URL so a completed payment can activate the educator
+    // subscription without relying solely on an asynchronous webhook.
+    const url = client.checkout.createCheckoutUrl({ env, tracker: payment.data.tracker.token, tbt: passport.data, source: 'hosted', redirect_url: `${config.frontendAppUrl}/profile?tracker=${encodeURIComponent(payment.data.tracker.token)}`, cancel_url: `${config.frontendAppUrl}/#pricing` });
     const { error: saveError } = await supabase.from('safepay_payments').insert({
       tracker_token: payment.data.tracker.token,
       user_id: req.user!._id,
