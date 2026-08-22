@@ -43,6 +43,30 @@ function isMissingColumnError(err: any, column: string): boolean {
 
 const MAX_TITLE_LEN = 200;
 const MAX_DESCRIPTION_LEN = 2000;
+
+// Every attempt receives a stable, server-derived variant. It changes the
+// order of questions and multiple-choice options for different students,
+// while remaining identical if a student refreshes or resumes the attempt.
+// We retain the original question id so submissions can still be graded
+// authoritatively by the server.
+function stableShuffle<T>(items: T[], seed: string): T[] {
+  const result = [...items];
+  let counter = 0;
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const digest = crypto.createHash('sha256').update(`${seed}:${counter++}`).digest();
+    const target = digest.readUInt32BE(0) % (index + 1);
+    [result[index], result[target]] = [result[target], result[index]];
+  }
+  return result;
+}
+
+function questionOrderForAttempt(questionCount: number, attemptId: string): number[] {
+  return stableShuffle(Array.from({ length: questionCount }, (_, index) => index), `${attemptId}:questions`);
+}
+
+function optionOrderForAttempt(optionCount: number, attemptId: string, questionIndex: number): number[] {
+  return stableShuffle(Array.from({ length: optionCount }, (_, index) => index), `${attemptId}:question:${questionIndex}:options`);
+}
 const MAX_QUESTIONS = 200;
 const MAX_QUESTION_TEXT_LEN = 2000;
 const MAX_OPTION_LEN = 500;
@@ -469,12 +493,18 @@ export const quizService = {
         timeLimit: quiz.time_limit,
         cameraMonitoring: quiz.camera_monitoring !== false,
         violationLimit: quiz.violation_limit ?? 3,
-        questions: quiz.questions?.map((q: any, index: number) => ({
-          _id: `${quiz.id}-q${index}`,
-          text: q.text,
-          options: q.options,
-          difficulty: q.difficulty,
-        })) || [],
+        questions: questionOrderForAttempt(quiz.questions?.length || 0, attempt.id).map((questionIndex) => {
+          const question = quiz.questions[questionIndex];
+          const optionOrder = optionOrderForAttempt(question.options?.length || 0, attempt.id, questionIndex);
+          return {
+            _id: `${quiz.id}-q${questionIndex}`,
+            text: question.text,
+            options: optionOrder.map((optionIndex) => question.options[optionIndex]),
+            difficulty: question.difficulty,
+            questionType: question.questionType,
+            timeLimit: question.timeLimit,
+          };
+        }),
       }
     };
   },
@@ -758,8 +788,17 @@ export const quizService = {
         if (submitted && expected && submitted === expected) {
           score++;
         }
-      } else if (answer.selectedAnswer === question.correctAnswer) {
-        score++;
+      } else {
+        // The browser submits the displayed option position. Convert it back
+        // to the canonical option position with the same server-derived
+        // variant used when this attempt was started.
+        const displayedOptionIndex = Number(answer.selectedAnswer);
+        const originalOptionIndex = optionOrderForAttempt(
+          question.options?.length || 0,
+          attempt.id,
+          questionIndex,
+        )[displayedOptionIndex];
+        if (originalOptionIndex === question.correctAnswer) score++;
       }
     });
 

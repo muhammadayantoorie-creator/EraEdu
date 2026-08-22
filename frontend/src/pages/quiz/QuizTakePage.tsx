@@ -38,7 +38,8 @@ type ViolationType =
   | 'WINDOW_RESIZE'
   | 'FULLSCREEN_EXIT'
   | 'PICTURE_IN_PICTURE'
-  | 'CLIPBOARD_ATTEMPT';
+  | 'CLIPBOARD_ATTEMPT'
+  | 'AUTOMATION_DETECTED';
 
 interface ViolationPayload {
   violation_type: ViolationType;
@@ -143,6 +144,7 @@ const QuizTakePage = () => {
       payload.violation_type === 'FULLSCREEN_EXIT'   ? 'fullscreen_exit'   :
       payload.violation_type === 'PICTURE_IN_PICTURE'? 'picture_in_picture':
       payload.violation_type === 'CLIPBOARD_ATTEMPT' ? 'copy_attempt'      :
+      payload.violation_type === 'AUTOMATION_DETECTED' ? 'automation_detected' :
       'keyboard_shortcut';
 
     try {
@@ -392,6 +394,20 @@ const QuizTakePage = () => {
       clearTimeout(resizeTimer);
     };
   }, [createViolationPayload, reportViolation, submitting]);
+
+  // Extensions cannot be reliably identified by a web page (and attempting
+  // to do so causes false positives). We do record clear browser automation
+  // signals, which a teacher can review alongside the other integrity events.
+  useEffect(() => {
+    const userAgent = navigator.userAgent;
+    if (navigator.webdriver || /HeadlessChrome|PhantomJS|selenium/i.test(userAgent)) {
+      reportViolation(createViolationPayload(
+        'AUTOMATION_DETECTED',
+        'Automated or modified browser environment detected',
+        { focusState: 'automation_signal' },
+      ));
+    }
+  }, [createViolationPayload, reportViolation]);
 
   // Disable text selection during exam
   useEffect(() => {

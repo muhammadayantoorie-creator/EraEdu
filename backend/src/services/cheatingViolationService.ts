@@ -12,6 +12,7 @@ export type ViolationType =
   | 'window_resize'
   | 'fullscreen_exit'
   | 'picture_in_picture'
+  | 'automation_detected'
   | 'TAB_SWITCH'
   | 'SYSTEM_FOCUS_LOST'
   | 'RESTRICTED_KEY'
@@ -218,7 +219,8 @@ export const cheatingViolationService = {
         focus_loss: data?.filter(v => v.violation_type === 'focus_loss').length || 0,
         window_resize: data?.filter(v => v.violation_type === 'window_resize').length || 0,
         fullscreen_exit: data?.filter(v => v.violation_type === 'fullscreen_exit').length || 0,
-        picture_in_picture: data?.filter(v => v.violation_type === 'picture_in_picture').length || 0
+        picture_in_picture: data?.filter(v => v.violation_type === 'picture_in_picture').length || 0,
+        automation_detected: data?.filter(v => v.violation_type === 'automation_detected').length || 0
       },
       attempts: Object.values(attemptViolations)
     };
