@@ -11,6 +11,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
   }
   body {
     @apply bg-ink-50 text-ink-900 font-sans antialiased;
@@ -23,9 +24,25 @@
   h1, h2, h3, h4 {
     @apply font-display tracking-tightest;
   }
+  :focus-visible {
+    outline: 3px solid #10B981;
+    outline-offset: 3px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
+  .skip-link {
+    @apply fixed left-4 top-4 z-[70] -translate-y-20 rounded-full bg-primary-700 px-4 py-2 text-sm font-semibold text-white shadow-lift transition-transform duration-200 focus:translate-y-0;
+  }
   /* ───── Bezel architecture (Doppelrand) ───── */
   .bezel {
     @apply relative rounded-[2rem] p-1.5 ring-1 ring-ink-900/5 bg-ink-900/[0.04];

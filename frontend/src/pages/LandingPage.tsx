@@ -72,7 +72,7 @@ const NavIsland = () => {
             <Brand to="/" />
           </div>
 
-          <nav className="hidden md:flex items-center gap-1 px-2">
+          <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-1 px-2">
             {links.map((l) => (
               <a
                 key={l.href}
@@ -110,6 +110,8 @@ const NavIsland = () => {
               type="button"
               onClick={() => setOpen((o) => !o)}
               aria-label="Menu"
+              aria-expanded={open}
+              aria-controls="mobile-navigation"
               className="
                 md:hidden relative ml-1 flex h-10 w-10 items-center justify-center
                 rounded-full bg-ink-900/[0.04] ring-1 ring-ink-900/5
@@ -132,6 +134,8 @@ const NavIsland = () => {
 
       {/* Mobile screen-filling glass overlay */}
       <div
+        id="mobile-navigation"
+        aria-label="Mobile navigation"
         className={`
           fixed inset-0 z-30 md:hidden
           transition-all duration-700 ease-spring
@@ -1003,8 +1007,9 @@ const LandingPage = () => {
 
   return (
     <div data-reveal-root className="landing-teal min-h-[100dvh] bg-[#f4fbf8] text-primary-950 grain-fixed">
+      <a href="#main-content" className="skip-link">Skip to content</a>
       <NavIsland />
-      <main>
+      <main id="main-content" tabIndex={-1}>
         <Hero />
         <TrustByDesign />
         <FeaturesBento />
