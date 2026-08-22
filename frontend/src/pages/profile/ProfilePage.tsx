@@ -1,12 +1,95 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { UserCircleIcon, PencilIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/solid';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
+import api from '../../services/api';
+
+type Organization = {
+  id: string;
+  name: string;
+  role: 'owner' | 'admin' | 'teacher';
+  seat_limit: number;
+};
+
+const OrganizationCard = () => {
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [name, setName] = useState('');
+  const [teacherEmail, setTeacherEmail] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const loadOrganizations = async () => {
+    try {
+      const response = await api.get('/organizations');
+      setOrganizations(response.data.data);
+    } catch {
+      toast.error('Unable to load organization details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void loadOrganizations(); }, []);
+
+  const createOrganization = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await api.post('/organizations', { name });
+      setName('');
+      toast.success('Organization created.');
+      await loadOrganizations();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error?.message || 'Unable to create organization.');
+    }
+  };
+
+  const ownerOrganization = organizations.find((organization) => organization.role === 'owner' || organization.role === 'admin');
+  const addTeacher = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!ownerOrganization) return;
+    try {
+      const response = await api.post(`/organizations/${ownerOrganization.id}/members`, { email: teacherEmail });
+      setTeacherEmail('');
+      toast.success(response.data.data.alreadyMember ? 'That teacher is already on your team.' : 'Teacher added to your organization.');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error?.message || 'Unable to add teacher.');
+    }
+  };
+
+  return (
+    <section className="mt-6 overflow-hidden rounded-lg bg-white shadow">
+      <div className="border-b border-gray-200 px-4 py-5 sm:px-6">
+        <h3 className="text-lg font-medium text-gray-900">Institution team</h3>
+        <p className="mt-1 text-sm text-gray-500">Create an institution workspace and add registered teachers.</p>
+      </div>
+      <div className="space-y-5 px-4 py-5 sm:px-6">
+        {loading ? <p className="text-sm text-gray-500">Loading organization…</p> : organizations.length === 0 ? (
+          <form onSubmit={createOrganization} className="flex flex-col gap-3 sm:flex-row">
+            <input value={name} onChange={(event) => setName(event.target.value)} required maxLength={255} placeholder="Institution or department name" className="input-field" />
+            <button type="submit" className="btn-primary shrink-0">Create team</button>
+          </form>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {organizations.map((organization) => <div key={organization.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm"><span className="font-medium text-gray-900">{organization.name}</span><span className="capitalize text-gray-500">{organization.role} · {organization.seat_limit} seats</span></div>)}
+            </div>
+            {ownerOrganization && (
+              <form onSubmit={addTeacher} className="flex flex-col gap-3 border-t border-gray-100 pt-5 sm:flex-row">
+                <input type="email" value={teacherEmail} onChange={(event) => setTeacherEmail(event.target.value)} required placeholder="Registered teacher email" className="input-field" />
+                <button type="submit" className="btn-primary shrink-0">Add teacher</button>
+              </form>
+            )}
+          </>
+        )}
+      </div>
+    </section>
+  );
+};
 
 const ProfilePage: React.FC = () => {
   const { user, logout, updateProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<'checking' | 'paid' | 'pending' | null>(null);
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
       name: user?.name || '',
@@ -33,8 +116,49 @@ const ProfilePage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const tracker = new URLSearchParams(window.location.search).get('tracker');
+    if (!tracker || user?.role !== 'teacher') return;
+
+    let cancelled = false;
+    let attempts = 0;
+    setPaymentStatus('checking');
+    const checkPayment = async () => {
+      try {
+        const response = await api.get(`/safepay/status/${encodeURIComponent(tracker)}`);
+        if (cancelled) return;
+        if (response.data.data.status === 'paid') {
+          setPaymentStatus('paid');
+          toast.success('Payment confirmed. Your Educator plan is active.');
+          window.history.replaceState({}, '', window.location.pathname);
+          return;
+        }
+      } catch {
+        if (!cancelled) setPaymentStatus('pending');
+        return;
+      }
+      attempts += 1;
+      if (attempts >= 5) {
+        if (!cancelled) setPaymentStatus('pending');
+        return;
+      }
+      window.setTimeout(checkPayment, 3000);
+    };
+    void checkPayment();
+    return () => { cancelled = true; };
+  }, [user?.role]);
+
   return (
     <div className="max-w-3xl mx-auto">
+      {paymentStatus && (
+        <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${paymentStatus === 'paid' ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
+          {paymentStatus === 'paid'
+            ? 'Payment confirmed — your Educator plan is active.'
+            : paymentStatus === 'checking'
+              ? 'Checking your Safepay payment…'
+              : 'Your payment is still being confirmed. Please refresh this page in a moment.'}
+        </div>
+      )}
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
           <div>
@@ -163,6 +287,7 @@ const ProfilePage: React.FC = () => {
           )}
         </div>
       </div>
+      {user?.role === 'teacher' && <OrganizationCard />}
     </div>
   );
 };

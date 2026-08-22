@@ -19,6 +19,8 @@ import questionRoutes from './routes/questions';
 import notificationRoutes from './routes/notifications';
 import adminRoutes from './routes/admin';
 import feedbackRoutes from './routes/feedback';
+import organizationRoutes from './routes/organizations';
+import safepayRoutes, { safepayWebhook } from './routes/safepay';
 
 const app = express();
 
@@ -67,6 +69,7 @@ app.use(cookieParser());
 // ---------------------------------------------------------------------------
 // 10mb is wide enough for face encodings + base64 profile pictures used during
 // registration. Tighten if those flows move to multipart uploads.
+app.post('/api/safepay/webhook', express.raw({ type: 'application/json', limit: '1mb' }), safepayWebhook);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
@@ -149,6 +152,8 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/organizations', organizationRoutes);
+app.use('/api/safepay', safepayRoutes);
 
 // ---------------------------------------------------------------------------
 // Health check — verifies DB reachability

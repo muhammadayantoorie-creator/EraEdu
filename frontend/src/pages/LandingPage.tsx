@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Brand } from '../components/shared';
 import { useReveal } from '../hooks/useReveal';
+import api from '../services/api';
+import toast from 'react-hot-toast';
 
 /* ──────────────────────────────────────────────────────────────────────────
    Vibe: Ethereal Glass · Layout: Asymmetrical Bento + Editorial Split
@@ -52,6 +54,7 @@ const NavIsland = () => {
     { href: '#features', label: 'Features' },
     { href: '#how', label: 'How it works' },
     { href: '#integrity', label: 'AI Integrity' },
+    { href: '#pricing', label: 'Pricing' },
     { href: '#trust', label: 'Trust' },
   ];
 
@@ -794,6 +797,50 @@ const Metrics = () => {
 };
 
 /* ───── TESTIMONIALS — Z-axis cascade on desktop ───── */
+const Pricing = () => {
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const plans = [
+    { name: 'Explore', price: 'Free', description: 'A confident way to see how EraEdu fits your assessment workflow.', features: ['5 free assessment trials', 'AI integrity monitoring', 'Core quiz analytics', 'No credit card required'], cta: 'Start 5 free trials', to: '/register' },
+    { name: 'Educator', price: 'Paid', description: 'For individual educators who need dependable assessment integrity.', features: ['Unlimited assessments', 'Face-presence proctoring', 'Detailed integrity reports', 'Priority support'], cta: 'Talk to us', to: '/contact', featured: true },
+    { name: 'Institution', price: 'Custom', description: 'A tailored rollout for departments and academic institutions.', features: ['Everything in Educator', 'Flexible seats and permissions', 'Institutional analytics', 'Dedicated onboarding'], cta: 'Talk to sales', to: '/contact' },
+  ];
+  const startCheckout = async () => {
+    setCheckoutLoading(true);
+    try { const response = await api.post('/safepay/checkout'); window.location.assign(response.data.data.url); }
+    catch (error: any) { toast.error(error.response?.data?.error?.message || 'Please sign in with a teacher account to continue.'); setCheckoutLoading(false); }
+  };
+
+  return (
+    <section id="pricing" className="relative overflow-hidden bg-white py-32">
+      <div aria-hidden className="absolute inset-x-0 top-0 h-80 bg-mesh-emerald opacity-60" />
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="reveal mx-auto max-w-3xl text-center">
+          <span className="eyebrow eyebrow-light">Simple pricing</span>
+          <h2 className="mt-4 font-display text-4xl tracking-tightest text-ink-900 text-balance md:text-6xl">Start with five free trials. Scale when you are ready.</h2>
+          <p className="mx-auto mt-5 max-w-2xl text-lg text-ink-500 text-pretty">Validate every feature with five complimentary assessment trials, then choose the plan that matches your classroom.</p>
+        </div>
+
+        <div className="mx-auto mt-16 grid max-w-6xl gap-5 lg:grid-cols-3 lg:items-stretch">
+          {plans.map((plan, i) => (
+            <article key={plan.name} className={`reveal reveal-delay-${i + 1} relative rounded-[2rem] p-1.5 ring-1 transition-transform duration-500 ease-spring hover:-translate-y-1 ${plan.featured ? 'bg-gradient-to-br from-primary-400 via-primary-500 to-accent-400 ring-primary-400/30 shadow-glow-emerald' : 'bg-ink-900/[0.04] ring-ink-900/5'}`}>
+              {plan.featured && <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-ink-900 px-3 py-1 text-[10px] font-semibold uppercase tracking-eyebrow text-white shadow-soft">Most popular</span>}
+              <div className="flex h-full flex-col rounded-[calc(2rem-0.375rem)] bg-white p-7 sm:p-8">
+                <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-primary-700">{plan.name}</p>
+                <div className="mt-5 flex items-end gap-2"><span className="font-display text-5xl tracking-tightest text-ink-900">{plan.price}</span>{plan.suffix && <span className="mb-1 text-sm text-ink-500">{plan.suffix}</span>}</div>
+                <p className="mt-4 min-h-[3rem] text-sm leading-relaxed text-ink-500">{plan.description}</p>
+                <div className="my-7 h-px bg-ink-900/8" />
+                <ul className="space-y-3.5">{plan.features.map((feature) => <li key={feature} className="flex items-start gap-3 text-sm text-ink-700"><span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary-700 ring-1 ring-primary-200"><Stroke d="M5 13l4 4L19 7" size={12} /></span>{feature}</li>)}</ul>
+                {plan.featured ? <button type="button" onClick={startCheckout} disabled={checkoutLoading} className="btn-island-primary mt-8 w-full justify-between disabled:opacity-60"><span>{checkoutLoading ? 'Opening Safepay…' : 'Pay with Safepay'}</span><span className="btn-icon bg-white/15"><Arrow /></span></button> : <Link to={plan.to} className="btn-island-ghost mt-8 w-full justify-between"><span>{plan.cta}</span><span className="btn-icon bg-ink-900/[0.06]"><Arrow /></span></Link>}
+              </div>
+            </article>
+          ))}
+        </div>
+        <p className="reveal mt-8 text-center text-sm text-ink-400">Start with five free assessment trials. Paid plans are available on request.</p>
+      </div>
+    </section>
+  );
+};
+
 const Testimonials = () => {
   const quotes = [
     {
@@ -925,6 +972,7 @@ const Footer = () => (
               ['Features', '#features'],
               ['Workflow', '#how'],
               ['AI Integrity', '#integrity'],
+              ['Pricing', '#pricing'],
               ['Trust', '#trust'],
             ],
           },
@@ -988,6 +1036,7 @@ const LandingPage = () => {
         <HowItWorks />
         <IntegritySpotlight />
         <Metrics />
+        <Pricing />
         <Testimonials />
         <FinalCTA />
       </main>

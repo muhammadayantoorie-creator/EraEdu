@@ -79,4 +79,9 @@ export const config = {
   })(),
   resendApiKey: process.env.RESEND_API_KEY || '',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
+  safepayEnvironment: process.env.SAFEPAY_ENV || 'sandbox',
+  safepaySecretKey: process.env.SAFEPAY_SECRET_KEY || '',
+  safepayPublicKey: process.env.SAFEPAY_PUBLIC_KEY || '',
+  safepayWebhookSecret: process.env.SAFEPAY_WEBHOOK_SECRET || '',
+  safepayEducatorPricePkr: Number(process.env.SAFEPAY_EDUCATOR_PRICE_PKR || 4999),
 };
