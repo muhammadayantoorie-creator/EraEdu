@@ -3,10 +3,11 @@ import { authService } from '../services/authService';
 import { asyncHandler } from '../middleware/errorHandler';
 
 const sessionCookie = (res: Response, token: string) => {
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
   res.cookie('eraedu_session', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
   });
@@ -103,10 +104,11 @@ export const switchRole = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const logout = asyncHandler(async (_req: Request, res: Response) => {
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
   res.clearCookie('eraedu_session', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
     path: '/',
   });
   res.status(204).send();

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 
-const isProd = process.env.NODE_ENV === 'production';
+const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 
 // Errors whose .message is safe to surface to clients verbatim. Any other
 // message at status 500 is replaced with a generic 'Server error' so that

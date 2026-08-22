@@ -32,7 +32,10 @@ function rejectProductionPlaceholder(name: string, value: string): string {
   return value;
 }
 
-const nodeEnv = process.env.NODE_ENV || 'development';
+// Vercel does not guarantee NODE_ENV is explicitly present in every project.
+// Treat a Vercel runtime as production so cookies, CORS, and error handling
+// cannot accidentally fall back to development behaviour after deployment.
+const nodeEnv = process.env.NODE_ENV || (process.env.VERCEL === '1' ? 'production' : 'development');
 const isProduction = nodeEnv === 'production';
 const frontendRaw = process.env.FRONTEND_URL || (isProduction ? '' : 'http://localhost:3000');
 const frontendAppUrl = isProduction ? requireEnv('FRONTEND_URL', 8).replace(/\/$/, '') : frontendRaw.replace(/\/$/, '');
