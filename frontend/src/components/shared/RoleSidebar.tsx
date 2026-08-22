@@ -60,6 +60,8 @@ const RoleSidebar: React.FC<RoleSidebarProps> = ({ items, isOpen, onClose, role 
 
       {/* Sidebar — outer shell (Doppelrand) */}
       <aside
+        id="dashboard-sidebar"
+        aria-label={`${roleAccent[role]} dashboard navigation`}
         className={`
           fixed inset-y-0 left-0 z-30 flex w-72 p-3
           transition-transform duration-700 ease-[cubic-bezier(0.32,0.72,0,1)]
@@ -113,7 +115,7 @@ const RoleSidebar: React.FC<RoleSidebarProps> = ({ items, isOpen, onClose, role 
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto px-3 space-y-1.5">
+          <nav aria-label="Dashboard navigation" className="flex-1 overflow-y-auto px-3 space-y-1.5">
             {items.map((item) => (
               <NavLink
                 key={item.label}

@@ -128,6 +128,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
 
   return (
     <div className="dashboard-teal flex min-h-[100dvh] bg-ink-50 overflow-hidden relative">
+      <a href="#dashboard-content" className="skip-link">Skip to dashboard content</a>
       {/* Subtle ambient mesh */}
       <div
         aria-hidden
@@ -164,6 +165,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
                 active:scale-[0.96]
               "
               aria-label="Open sidebar"
+              aria-expanded={sidebarOpen}
+              aria-controls="dashboard-sidebar"
             >
               <Stroke d="M3 6h18 M3 12h18 M3 18h18" />
             </button>
@@ -350,7 +353,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 relative">
+        <main id="dashboard-content" tabIndex={-1} className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 relative">
           <Outlet />
         </main>
       </div>
