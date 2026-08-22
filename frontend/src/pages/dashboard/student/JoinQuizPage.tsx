@@ -23,6 +23,8 @@ const JoinQuizPage = () => {
   const [canStart, setCanStart] = useState(true);
   const [isExpired, setIsExpired] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showViolationNotice, setShowViolationNotice] = useState(false);
+  const [rulesAcknowledged, setRulesAcknowledged] = useState(false);
 
   // Check if quiz can be started based on scheduled time and expiration
   useEffect(() => {
@@ -113,7 +115,15 @@ const JoinQuizPage = () => {
     }
   };
 
-  const handleStartQuiz = async () => {
+  const requestQuizStart = () => {
+    if (quizDetails?.quiz?.cameraMonitoring === false) {
+      handleCameraAllowed();
+      return;
+    }
+    setShowCameraModal(true);
+  };
+
+  const handleStartQuiz = () => {
     if (isExpired) {
       toast.error('This quiz has expired and is no longer accessible.');
       return;
@@ -124,12 +134,13 @@ const JoinQuizPage = () => {
       return;
     }
 
-    // Only request camera permission if the teacher enabled monitoring for this quiz.
-    if (quizDetails?.quiz?.cameraMonitoring === false) {
-      handleCameraAllowed();
-      return;
-    }
-    setShowCameraModal(true);
+    setRulesAcknowledged(false);
+    setShowViolationNotice(true);
+  };
+
+  const handleRulesContinue = () => {
+    setShowViolationNotice(false);
+    requestQuizStart();
   };
 
   // Called after camera permission is granted
@@ -177,6 +188,8 @@ const JoinQuizPage = () => {
     setCanStart(true);
     setTimeUntilStart(null);
     setShowCameraModal(false);
+    setShowViolationNotice(false);
+    setRulesAcknowledged(false);
   };
 
   return (
@@ -367,6 +380,30 @@ const JoinQuizPage = () => {
       </div>
 
       {/* Camera Permission Modal — shown before quiz starts */}
+      {showViolationNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-950/55 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-primary-900/10">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-amber-100 text-amber-700"><ExclamationCircleIcon className="h-6 w-6" /></div>
+            <h2 className="mt-4 text-xl font-semibold text-primary-950">Before you start</h2>
+            <p className="mt-2 text-sm leading-relaxed text-gray-600">This assessment records integrity events to help your teacher review the session fairly.</p>
+            <ul className="mt-4 space-y-2 rounded-xl bg-primary-50 p-4 text-sm text-primary-950">
+              <li>• Stay on the quiz tab and avoid switching windows.</li>
+              <li>• Do not copy, paste, or use unauthorised assistance.</li>
+              <li>• Follow your teacher’s quiz rules and instructions.</li>
+              <li>• Repeated violations may be recorded and can lead to automatic submission.</li>
+            </ul>
+            <label className="mt-5 flex cursor-pointer items-start gap-3 text-sm text-gray-700">
+              <input type="checkbox" checked={rulesAcknowledged} onChange={(event) => setRulesAcknowledged(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-700 focus:ring-primary-600" />
+              <span>I understand the quiz rules and want to continue.</span>
+            </label>
+            <div className="mt-6 flex gap-3">
+              <button type="button" onClick={() => setShowViolationNotice(false)} className="flex-1 rounded-xl border border-primary-200 px-4 py-2.5 text-sm font-semibold text-primary-800 hover:bg-primary-50">Go back</button>
+              <button type="button" onClick={handleRulesContinue} disabled={!rulesAcknowledged} className="flex-1 rounded-xl bg-primary-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-50">I understand, continue</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <CameraPermissionModal
         isOpen={showCameraModal}
         onAllow={handleCameraAllowed}
