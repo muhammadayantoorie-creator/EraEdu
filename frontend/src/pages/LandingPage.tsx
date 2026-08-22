@@ -243,7 +243,7 @@ const Hero = () => (
         </div>
 
         <p className="reveal reveal-delay-4 mt-6 text-xs text-ink-400">
-          No credit card · Set up in under 5 minutes · Trusted by 200+ institutions
+          No credit card · Five free assessment trials · Built for thoughtful educators
         </p>
       </div>
 
@@ -352,52 +352,6 @@ const Hero = () => (
 );
 
 /* ───── SOCIAL PROOF marquee ───── */
-const TrustStrip = () => (
-  <section className="border-y border-ink-900/5 bg-white py-10">
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-      <p className="text-center text-[10px] font-semibold uppercase tracking-eyebrow text-ink-400">
-        Trusted by faculty, security teams, and academic boards worldwide
-      </p>
-      <div className="relative mt-6 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_15%,black_85%,transparent)]">
-        <div className="flex w-max animate-marquee gap-12 whitespace-nowrap py-2">
-          {[
-            'NUTECH',
-            'COMSATS',
-            'STANFORD ED',
-            'BUITEMS',
-            'IBA',
-            'NUST',
-            'OXFORD ONLINE',
-            'CAMBRIDGE EDU',
-            'MIT OPEN',
-            'UoP',
-          ]
-            .concat([
-              'NUTECH',
-              'COMSATS',
-              'STANFORD ED',
-              'BUITEMS',
-              'IBA',
-              'NUST',
-              'OXFORD ONLINE',
-              'CAMBRIDGE EDU',
-              'MIT OPEN',
-              'UoP',
-            ])
-            .map((n, i) => (
-              <span
-                key={i}
-                className="font-display text-2xl font-medium tracking-tightest text-ink-300"
-              >
-                {n}
-              </span>
-            ))}
-        </div>
-      </div>
-    </div>
-  </section>
-);
-
 /* ───── FEATURE BENTO (Asymmetrical) ───── */
 type Feat = {
   title: string;
@@ -689,12 +643,12 @@ const IntegritySpotlight = () => (
           <p className="reveal reveal-delay-2 mt-5 max-w-xl text-lg text-white/60 text-pretty">
             All face-presence inference happens on-device using face-api.js.
             We store anomaly events, never video. Reviewable. Explainable.
-            FERPA-aligned.
+            Designed with privacy-aware assessment workflows in mind.
           </p>
 
           <ul className="reveal reveal-delay-3 mt-10 space-y-4">
             {[
-              'On-device inference — no biometric uploads',
+              'On-device processing designed to minimise unnecessary data collection',
               'Event-only logs with timestamped rationale',
               'Configurable strike thresholds per quiz',
               'Auditable trail for every flagged moment',
@@ -770,10 +724,10 @@ const IntegritySpotlight = () => (
 /* ───── METRICS strip ───── */
 const Metrics = () => {
   const items = [
-    { k: '2.4M+', l: 'Sessions secured' },
-    { k: '99.97%', l: 'Uptime SLA' },
-    { k: '<14ms', l: 'Detection latency' },
-    { k: '0', l: 'Biometric uploads' },
+    { k: 'Privacy-aware', l: 'Designed for responsible assessment workflows' },
+    { k: 'Configurable', l: 'Set rules and violation thresholds per quiz' },
+    { k: 'Actionable', l: 'Review clear integrity events and quiz results' },
+    { k: 'Launch offer', l: 'Start with five free assessment trials' },
   ];
   return (
     <section className="bg-white py-24">
@@ -784,7 +738,7 @@ const Metrics = () => {
               key={m.k}
               className={`reveal reveal-delay-${i + 1} border-l border-ink-900/10 pl-6`}
             >
-              <p className="font-display text-5xl tracking-tightest text-ink-900">
+              <p className="font-display text-3xl tracking-tightest text-primary-800">
                 {m.k}
               </p>
               <p className="mt-2 text-sm font-medium text-ink-500">{m.l}</p>
@@ -842,23 +796,23 @@ const Pricing = () => {
 };
 
 const Testimonials = () => {
-  const quotes = [
+  const principles = [
     {
-      q: 'EraEdu solved our cheating problem in a single semester. Faculty actually trust online assessments again.',
-      a: 'Dr. Hira Khan',
-      r: 'Dean of Computing, NUTECH',
+      q: 'Make assessment expectations clear before students start, then capture the events educators need to review.',
+      a: 'Clear by design',
+      r: 'Transparent assessment workflows',
       rot: 'md:-rotate-2',
     },
     {
-      q: 'The forensic timeline is what sold us. When a student disputes a grade, we have the receipts.',
-      a: 'Prof. Daniyal Ahmad',
-      r: 'Department Head, COMSATS',
+      q: 'Give educators practical controls for tab switches, copy-paste behaviour, and automatic submission limits.',
+      a: 'Educator control',
+      r: 'Configurable safeguards per quiz',
       rot: 'md:rotate-1',
     },
     {
-      q: 'On-device proctoring with no video upload — finally an integrity tool our DPO actually approves.',
-      a: 'Sara Iqbal',
-      r: 'Privacy Officer, IBA',
+      q: 'Build a defensible assessment record without turning a classroom into a surveillance exercise.',
+      a: 'Respectful integrity',
+      r: 'Purposeful monitoring and review',
       rot: 'md:-rotate-1',
     },
   ];
@@ -867,14 +821,14 @@ const Testimonials = () => {
     <section id="trust" className="relative bg-ink-50 py-32">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="reveal mx-auto max-w-3xl text-center">
-          <span className="eyebrow eyebrow-light">Voices</span>
+          <span className="eyebrow eyebrow-light">Our approach</span>
           <h2 className="mt-4 font-display text-4xl md:text-6xl tracking-tightest text-ink-900 text-balance">
-            Educators who got their classrooms back.
+            Built for fair, reviewable assessments.
           </h2>
         </div>
 
         <div className="mt-20 grid gap-6 md:grid-cols-3">
-          {quotes.map((qq, i) => (
+          {principles.map((qq, i) => (
             <figure
               key={i}
               className={`reveal reveal-delay-${i + 1} bezel ${qq.rot} transition-transform duration-700 ease-spring hover:rotate-0`}
@@ -930,8 +884,7 @@ const FinalCTA = () => (
             </span>
           </h2>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-white/60 text-pretty">
-            Join the institutions running fairer, faster, more defensible exams
-            with EraEdu.
+            Create fairer, faster, and more defensible assessments with EraEdu.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Link to="/register" className="btn-island-emerald">
