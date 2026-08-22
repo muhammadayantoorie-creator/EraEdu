@@ -99,12 +99,12 @@ const StudentOverview = () => {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="student-teal mx-auto max-w-7xl space-y-8">
       {/* HERO */}
-      <section className="relative overflow-hidden rounded-[2rem] p-1.5 bg-ink-900/[0.04] ring-1 ring-ink-900/5">
+      <section className="relative overflow-hidden rounded-[2rem] bg-primary-900/10 p-1.5 ring-1 ring-primary-700/15">
         <div
           className="
-            relative overflow-hidden rounded-[calc(2rem-0.375rem)] bg-ink-950
+            relative overflow-hidden rounded-[calc(2rem-0.375rem)] bg-gradient-to-br from-primary-950 via-primary-900 to-teal-800
             px-6 py-8 sm:px-10 sm:py-10
             shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]
           "

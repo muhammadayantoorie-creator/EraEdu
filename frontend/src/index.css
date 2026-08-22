@@ -129,6 +129,18 @@
     --tw-ring-color: rgba(4, 120, 87, 0.14) !important;
     border-color: rgba(4, 120, 87, 0.12) !important;
   }
+
+  /* Student dashboard uses the same calm teal system as the landing page. */
+  .student-teal .text-ink-900,
+  .student-teal .text-ink-950 { color: #064E3B !important; }
+  .student-teal .bg-ink-900,
+  .student-teal .bg-ink-950 { background-color: #047857 !important; }
+  .student-teal [class*="bg-ink-900/"] { background-color: rgba(4, 120, 87, 0.07) !important; }
+  .student-teal [class*="ring-ink-900"],
+  .student-teal [class*="border-ink-900"] {
+    --tw-ring-color: rgba(4, 120, 87, 0.14) !important;
+    border-color: rgba(4, 120, 87, 0.12) !important;
+  }
   /* ───── Reveal-on-scroll ───── */
   .reveal {
     opacity: 0;
