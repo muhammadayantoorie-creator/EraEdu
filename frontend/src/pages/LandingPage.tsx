@@ -353,6 +353,28 @@ const Hero = () => (
 
 /* ───── SOCIAL PROOF marquee ───── */
 /* ───── FEATURE BENTO (Asymmetrical) ───── */
+const TrustByDesign = () => {
+  const principles = [
+    { title: 'Teacher-controlled rules', copy: 'Set quiz availability, assessment rules, and violation limits before a session begins.', icon: 'M5 12h14 M12 5v14' },
+    { title: 'Reviewable activity', copy: 'Keep quiz submissions and integrity events together for clear, informed follow-up.', icon: 'M5 12l4 4L19 6 M5 6h14' },
+    { title: 'A practical way to start', copy: 'Explore the workflow with five free assessment trials before choosing a paid plan.', icon: 'M12 5v14 M5 12h14' },
+  ];
+  return (
+    <section className="relative border-y border-primary-900/5 bg-white py-8 sm:py-10">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid gap-5 md:grid-cols-3 md:gap-0">
+          {principles.map((item, index) => (
+            <div key={item.title} className={`flex gap-4 px-2 py-3 md:px-8 ${index ? 'md:border-l md:border-primary-900/10' : ''}`}>
+              <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700 ring-1 ring-primary-100"><Stroke d={item.icon} size={18} /></span>
+              <div><h2 className="text-sm font-semibold text-primary-950">{item.title}</h2><p className="mt-1 text-sm leading-relaxed text-ink-500">{item.copy}</p></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 type Feat = {
   title: string;
   copy: string;
@@ -984,6 +1006,7 @@ const LandingPage = () => {
       <NavIsland />
       <main>
         <Hero />
+        <TrustByDesign />
         <FeaturesBento />
         <HowItWorks />
         <IntegritySpotlight />
