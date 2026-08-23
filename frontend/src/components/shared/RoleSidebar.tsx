@@ -52,7 +52,7 @@ const RoleSidebar: React.FC<RoleSidebarProps> = ({ items, isOpen, onClose, role 
       {/* Mobile backdrop */}
       <div
         className={`
-          fixed inset-0 z-20 bg-ink-950/60 backdrop-blur-sm transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] lg:hidden
+          fixed inset-0 z-20 bg-primary-950/60 backdrop-blur-sm transition-opacity duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] lg:hidden
           ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
         `}
         onClick={onClose}
@@ -73,7 +73,7 @@ const RoleSidebar: React.FC<RoleSidebarProps> = ({ items, isOpen, onClose, role 
         <div
           className="
             relative flex flex-col w-full overflow-hidden
-            rounded-[2rem] bg-ink-950
+            rounded-[2rem] bg-gradient-to-b from-primary-900 via-primary-800 to-teal-800
             ring-1 ring-white/10
             shadow-[0_30px_80px_-30px_rgba(5,7,11,0.6),inset_0_1px_0_rgba(255,255,255,0.06)]
           "
@@ -189,7 +189,7 @@ const RoleSidebar: React.FC<RoleSidebarProps> = ({ items, isOpen, onClose, role 
                 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]
               "
             >
-              <div className="flex items-center gap-3 rounded-[calc(1rem-0.375rem)] bg-ink-900/60 px-3 py-2.5">
+              <div className="flex items-center gap-3 rounded-[calc(1rem-0.375rem)] bg-primary-950/25 px-3 py-2.5">
                 <span
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-display text-sm text-white"
                   style={{

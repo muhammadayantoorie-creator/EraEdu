@@ -152,17 +152,17 @@ const TeacherOverview = () => {
     <div className="mx-auto max-w-7xl space-y-8">
       {/* HERO — Editorial dark glass */}
       <section
-        className="relative overflow-hidden rounded-[2rem] p-1.5 bg-ink-900/[0.04] ring-1 ring-ink-900/5"
+        className="relative overflow-hidden rounded-[2rem] bg-primary-100/70 p-1.5 ring-1 ring-primary-200/70"
       >
         <div
           className="
-            relative overflow-hidden rounded-[calc(2rem-0.375rem)] bg-ink-950
+            relative overflow-hidden rounded-[calc(2rem-0.375rem)] bg-gradient-to-br from-primary-800 via-primary-700 to-teal-700
             px-6 py-8 sm:px-10 sm:py-10
             shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]
           "
           style={{
             backgroundImage:
-              'radial-gradient(60% 80% at 0% 0%, rgba(16,185,129,0.18) 0%, transparent 55%), radial-gradient(50% 60% at 100% 100%, rgba(6,182,212,0.14) 0%, transparent 55%)',
+              'radial-gradient(60% 80% at 0% 0%, rgba(167,243,208,0.24) 0%, transparent 55%), radial-gradient(50% 60% at 100% 100%, rgba(103,232,249,0.20) 0%, transparent 55%)',
           }}
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -199,7 +199,7 @@ const TeacherOverview = () => {
                 "
               >
                 <span>{checkoutLoading ? 'Opening Safepay…' : 'Upgrade · PKR 4,999'}</span>
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-950/10 ring-1 ring-ink-950/10 transition-all duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-[1px]">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-950/10 ring-1 ring-primary-950/10 transition-all duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-[1px]">
                   {checkoutLoading ? (
                     <span className="h-3.5 w-3.5 animate-spin rounded-full border border-ink-900/40 border-t-ink-900" />
                   ) : (
