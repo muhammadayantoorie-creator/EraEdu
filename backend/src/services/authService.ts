@@ -22,11 +22,14 @@ const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 128;
 const MAX_BIO_LEN = 500;
 export const STUDENT_EMAIL_DOMAIN = '@nutech.edu.pk';
+// Presentation-only exception: this is the verified Resend account used to
+// demonstrate email OTP delivery before EraEdu has a verified sending domain.
+const DEMO_STUDENT_EMAIL = 'muhammadayantoorie@gmail.com';
 
 const isStudentEmail = (email: string): boolean => {
   const normalized = email.toLowerCase().trim();
   const at = normalized.lastIndexOf('@');
-  return at > 0 && normalized.slice(at) === STUDENT_EMAIL_DOMAIN;
+  return normalized === DEMO_STUDENT_EMAIL || (at > 0 && normalized.slice(at) === STUDENT_EMAIL_DOMAIN);
 };
 
 const hashStudentOtp = (code: string) =>
