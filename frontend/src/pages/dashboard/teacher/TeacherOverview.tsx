@@ -56,6 +56,18 @@ const TeacherOverview = () => {
   const [coursePerformance, setCoursePerformance] = useState<CoursePerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
+  const handleUpgrade = useCallback(async () => {
+    setCheckoutLoading(true);
+    try {
+      const response = await api.post('/safepay/checkout');
+      window.location.assign(response.data.data.url);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error?.message || 'Unable to open Safepay checkout. Please try again.');
+      setCheckoutLoading(false);
+    }
+  }, []);
 
   const handleExportMarks = useCallback(async () => {
     setExporting(true);
@@ -174,6 +186,28 @@ const TeacherOverview = () => {
 
             {/* CTA cluster */}
             <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={handleUpgrade}
+                disabled={checkoutLoading}
+                className="
+                  group inline-flex items-center gap-2 rounded-full
+                  bg-gradient-to-r from-primary-400 to-primary-500 pl-5 pr-1.5 py-1.5
+                  text-[13px] font-semibold text-ink-950
+                  transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]
+                  hover:from-primary-300 hover:to-accent-300 active:scale-[0.98] disabled:opacity-60
+                  shadow-[0_8px_30px_-10px_rgba(16,185,129,0.8)]
+                "
+              >
+                <span>{checkoutLoading ? 'Opening Safepay…' : 'Upgrade · PKR 4,999'}</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-950/10 ring-1 ring-ink-950/10 transition-all duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-[1px]">
+                  {checkoutLoading ? (
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border border-ink-900/40 border-t-ink-900" />
+                  ) : (
+                    <Stroke d="M5 12h14 M13 6l6 6-6 6" size={13} />
+                  )}
+                </span>
+              </button>
+
               <button
                 onClick={handleExportMarks}
                 disabled={exporting}
