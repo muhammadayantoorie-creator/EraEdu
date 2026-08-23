@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import eraEduLogo from '../../assets/eraedu-logo.svg';
 
 type BrandProps = {
   to?: string;
@@ -23,6 +24,9 @@ const Brand = ({
 
   const content = (
     <div className={`group inline-flex items-center gap-2.5 ${className}`.trim()}>
+      {!iconOnly && !isDark ? (
+        <img src={eraEduLogo} alt="ERAEDU — Assessment Intelligence" className="h-10 w-auto" />
+      ) : <>
       {/* Double-bezel mark */}
       <span
         className={[
@@ -86,6 +90,7 @@ const Brand = ({
           </span>
         </span>
       )}
+      </>}
     </div>
   );
 
