@@ -87,5 +87,6 @@ export const config = {
   safepaySecretKey: process.env.SAFEPAY_SECRET_KEY || '',
   safepayPublicKey: process.env.SAFEPAY_PUBLIC_KEY || '',
   safepayWebhookSecret: process.env.SAFEPAY_WEBHOOK_SECRET || '',
-  safepayEducatorPricePkr: Number(process.env.SAFEPAY_EDUCATOR_PRICE_PKR || 4999),
+  // Retain the old variable as a fallback while the public plan is renamed.
+  safepayInstitutionPricePkr: Number(process.env.SAFEPAY_INSTITUTION_PRICE_PKR || process.env.SAFEPAY_EDUCATOR_PRICE_PKR || 4999),
 };

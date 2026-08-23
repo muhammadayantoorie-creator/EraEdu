@@ -198,7 +198,7 @@ const TeacherOverview = () => {
                   shadow-[0_8px_30px_-10px_rgba(16,185,129,0.8)]
                 "
               >
-                <span>{checkoutLoading ? 'Opening Safepay…' : 'Upgrade · PKR 4,999'}</span>
+                <span>{checkoutLoading ? 'Opening Safepay…' : 'Institution plan · PKR 4,999/month'}</span>
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-950/10 ring-1 ring-primary-950/10 transition-all duration-500 group-hover:translate-x-0.5 group-hover:-translate-y-[1px]">
                   {checkoutLoading ? (
                     <span className="h-3.5 w-3.5 animate-spin rounded-full border border-ink-900/40 border-t-ink-900" />

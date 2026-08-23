@@ -139,7 +139,7 @@ const ProfilePage: React.FC = () => {
         if (cancelled) return;
         if (response.data.data.status === 'paid') {
           setPaymentStatus('paid');
-          toast.success('Payment confirmed. Your Educator plan is active.');
+          toast.success('Payment confirmed. Your Institution plan is active.');
           window.history.replaceState({}, '', window.location.pathname);
           return;
         }
@@ -185,7 +185,7 @@ const ProfilePage: React.FC = () => {
       {paymentStatus && (
         <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${paymentStatus === 'paid' ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
           {paymentStatus === 'paid'
-            ? 'Payment confirmed — your Educator plan is active.'
+            ? 'Payment confirmed — your Institution plan is active.'
             : paymentStatus === 'checking'
               ? 'Checking your Safepay payment…'
               : 'Your payment is still being confirmed. Please refresh this page in a moment.'}
@@ -324,18 +324,18 @@ const ProfilePage: React.FC = () => {
           <div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div>
               <h3 className="text-lg font-medium text-gray-900">Billing &amp; subscription</h3>
-              <p className="mt-1 text-sm text-gray-500">Your most recent EraEdu Educator plan payment.</p>
+              <p className="mt-1 text-sm text-gray-500">Your most recent EraEdu Institution plan payment. This covers your institution for one month.</p>
             </div>
-            {billing?.status === 'paid' && <span className="w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Educator plan active</span>}
+            {billing?.status === 'paid' && <span className="w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Institution plan active</span>}
           </div>
           <div className="px-4 py-5 sm:px-6">
             {billingLoading ? (
               <p className="text-sm text-gray-500">Checking your billing status…</p>
             ) : !billing ? (
-              <p className="text-sm text-gray-500">No Educator plan payment has been recorded yet.</p>
+              <p className="text-sm text-gray-500">No Institution plan payment has been recorded yet.</p>
             ) : (
               <dl className="grid gap-4 sm:grid-cols-3">
-                <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</dt><dd className="mt-1 text-sm font-medium capitalize text-gray-900">{billing.plan}</dd></div>
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</dt><dd className="mt-1 text-sm font-medium text-gray-900">Institution — monthly</dd></div>
                 <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Amount</dt><dd className="mt-1 text-sm font-medium text-gray-900">{billing.currency} {(billing.amount / 100).toLocaleString()}</dd></div>
                 <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Status</dt><dd className={`mt-1 text-sm font-semibold capitalize ${billing.status === 'paid' ? 'text-emerald-700' : 'text-amber-700'}`}>{billing.status}</dd></div>
               </dl>

@@ -33,8 +33,8 @@ const updatePaymentFromTracker = async (trackerToken: string, userId?: string) =
       .update({ status: 'paid', paid_at: now, updated_at: now })
       .eq('tracker_token', trackerToken);
     if (updateError) throw updateError;
-    // This is a one-time Educator purchase. A later recurring plan can replace
-    // this field with its own entitlement dates without changing payment history.
+    // This checkout records a monthly Institution licence. It is currently a
+    // manual monthly renewal, not an automatic recurring charge.
     const { error: userError } = await supabase.from('users').update({ subscription_status: 'active' }).eq('id', payment.user_id);
     if (userError) throw userError;
   }
@@ -46,7 +46,7 @@ router.post('/checkout', protect, authorize('teacher'), async (req, res) => {
   try {
     const env = config.safepayEnvironment === 'production' ? 'production' : 'sandbox';
     const client = getClient();
-    const payment: any = await client.payments.session.setup({ merchant_api_key: config.safepayPublicKey, intent: 'CYBERSOURCE', mode: 'payment', entry_mode: 'raw', currency: 'PKR', amount: Math.round(config.safepayEducatorPricePkr * 100), metadata: { order_id: `educator-${req.user!._id}` }, include_fees: false } as any);
+    const payment: any = await client.payments.session.setup({ merchant_api_key: config.safepayPublicKey, intent: 'CYBERSOURCE', mode: 'payment', entry_mode: 'raw', currency: 'PKR', amount: Math.round(config.safepayInstitutionPricePkr * 100), metadata: { order_id: `institution-${req.user!._id}`, plan: 'institution-monthly' }, include_fees: false } as any);
     const passport: any = await client.client.passport.create();
     // The profile page polls Safepay with the tracker after checkout. Include
     // it in the return URL so a completed payment can activate the educator
@@ -55,8 +55,8 @@ router.post('/checkout', protect, authorize('teacher'), async (req, res) => {
     const { error: saveError } = await supabase.from('safepay_payments').insert({
       tracker_token: payment.data.tracker.token,
       user_id: req.user!._id,
-      plan: 'educator',
-      amount: Math.round(config.safepayEducatorPricePkr * 100),
+      plan: 'institution',
+      amount: Math.round(config.safepayInstitutionPricePkr * 100),
       currency: 'PKR',
     });
     if (saveError) throw saveError;

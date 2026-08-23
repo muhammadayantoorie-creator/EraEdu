@@ -781,8 +781,8 @@ const Pricing = () => {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const plans = [
     { name: 'Explore', price: 'Free', description: 'A confident way to see how EraEdu fits your assessment workflow.', features: ['5 free assessment trials', 'AI integrity monitoring', 'Core quiz analytics', 'No credit card required'], cta: 'Start 5 free trials', to: '/register' },
-    { name: 'Educator', price: 'Paid', description: 'For individual educators who need dependable assessment integrity.', features: ['Unlimited assessments', 'Face-presence proctoring', 'Detailed integrity reports', 'Priority support'], cta: 'Talk to us', to: '/contact', featured: true },
-    { name: 'Institution', price: 'Custom', description: 'A tailored rollout for departments and academic institutions.', features: ['Everything in Educator', 'Flexible seats and permissions', 'Institutional analytics', 'Dedicated onboarding'], cta: 'Talk to sales', to: '/contact' },
+    { name: 'Institution', price: 'PKR 4,999', suffix: '/ month', description: 'One monthly licence for your whole institution, not per teacher.', features: ['Institution workspace', 'Unlimited assessments', 'Detailed integrity reports', 'Priority support'], cta: 'Pay with Safepay', to: '/profile', featured: true },
+    { name: 'Enterprise', price: 'Custom', description: 'A tailored rollout for large departments and academic networks.', features: ['Everything in Institution', 'Flexible permissions', 'Institutional analytics', 'Dedicated onboarding'], cta: 'Talk to sales', to: '/contact' },
   ];
   const startCheckout = async () => {
     setCheckoutLoading(true);
@@ -815,7 +815,7 @@ const Pricing = () => {
             </article>
           ))}
         </div>
-        <p className="reveal mt-8 text-center text-sm text-ink-400">Start with five free assessment trials. Paid plans are available on request.</p>
+        <p className="reveal mt-8 text-center text-sm text-ink-400">PKR 4,999 covers one institution for one month. Renew monthly to continue service.</p>
       </div>
     </section>
   );
