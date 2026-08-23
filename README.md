@@ -3,6 +3,8 @@
 EraEdu is a full-stack learning and assessment platform for secure online
 quizzes, course delivery, teacher oversight, and student progress tracking.
 
+**Live demo:** [era-edu-mtoc.vercel.app](https://era-edu-mtoc.vercel.app/)
+
 It provides role-based access for students, teachers, and administrators;
 face-assisted login; quiz proctoring signals; teacher analytics; quiz access
 codes; and optional AI-powered question and study assistance.
