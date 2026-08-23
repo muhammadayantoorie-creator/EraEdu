@@ -1,0 +1,28 @@
+<svg width="920" height="220" viewBox="0 0 920 220" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ERAEDU</title>
+  <desc id="desc">EraEdu Assessment Intelligence logo</desc>
+  <defs>
+    <linearGradient id="brand" x1="28" y1="22" x2="181" y2="193" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#064E3B"/>
+      <stop offset="0.52" stop-color="#059669"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="69" y1="40" x2="146" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D1FAE5" stop-opacity="0.68"/>
+      <stop offset="1" stop-color="#D1FAE5" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="220" height="220" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="9" stdDeviation="8" flood-color="#064E3B" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="20" y="20" width="180" height="180" rx="52" fill="url(#brand)"/>
+    <rect x="21.5" y="21.5" width="177" height="177" rx="50.5" stroke="white" stroke-opacity="0.2" stroke-width="3"/>
+    <path d="M52 75C78 66 103 70 121 87V156C103 139 78 135 52 144V75Z" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M168 75C142 66 117 70 99 87V156C117 139 142 135 168 144V75Z" stroke="white" stroke-width="8" stroke-linejoin="round"/>
+    <path d="M110 49V62M84 56L92 65M136 56L128 65" stroke="#D1FAE5" stroke-width="7" stroke-linecap="round"/>
+    <path d="M42 36H178V145C178 174 154 190 126 190H94C65 190 42 174 42 145V36Z" fill="url(#glow)" opacity="0.45"/>
+  </g>
+  <text x="242" y="105" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="800" letter-spacing="3">ERA<tspan fill="#10B981">EDU</tspan></text>
+  <text x="246" y="148" fill="#64748B" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700" letter-spacing="6">ASSESSMENT INTELLIGENCE</text>
+</svg>
