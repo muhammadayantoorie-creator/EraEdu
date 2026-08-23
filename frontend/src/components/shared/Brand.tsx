@@ -69,11 +69,12 @@ const Brand = ({
         <span className="flex flex-col leading-none">
           <span
             className={[
-              'font-display text-[17px] font-semibold tracking-tightest',
+              'font-display text-[16px] font-bold uppercase tracking-[0.1em]',
               isDark ? 'text-white' : 'text-ink-900',
             ].join(' ')}
+            aria-label="ERAEDU"
           >
-            Era<span className="text-primary-500">Edu</span>
+            ERA<span className="text-primary-500">EDU</span>
           </span>
           <span
             className={[
@@ -81,7 +82,7 @@ const Brand = ({
               isDark ? 'text-white/50' : 'text-ink-400',
             ].join(' ')}
           >
-            Learning&nbsp;Platform
+            Assessment&nbsp;Intelligence
           </span>
         </span>
       )}
