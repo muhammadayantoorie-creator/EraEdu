@@ -28,7 +28,9 @@ const RegisterPage = () => {
   const extractFaceEncoding = async (imgElement: HTMLImageElement): Promise<number[] | null> => {
     setExtractingFace(true);
     try {
-       await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+      faceapi.tf.setBackend('cpu');
+      if (faceapi.tf.getBackend() !== 'cpu') throw new Error('CPU face-analysis backend is unavailable.');
+      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
       await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
 

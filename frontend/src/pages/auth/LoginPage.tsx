@@ -56,6 +56,11 @@ const LoginPage = () => {
     let cancelled = false;
     (async () => {
       try {
+        // face-api.js v0.20 relies on TensorFlow.js' built-in CPU backend.
+        // Prefer it here: some WebGL drivers display the camera correctly but
+        // never resolve live inference.
+        faceapi.tf.setBackend('cpu');
+        if (faceapi.tf.getBackend() !== 'cpu') throw new Error('CPU face-analysis backend is unavailable.');
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
@@ -121,12 +126,29 @@ const LoginPage = () => {
     setVerifyError(null);
 
     try {
+      const video = videoRef.current;
+      if (video.videoWidth < 1 || video.videoHeight < 1) {
+        throw new Error('Camera is still starting. Please wait a moment and retry.');
+      }
+
+      // Analyse a freshly captured, downscaled frame rather than the moving
+      // video element. This is faster and avoids the browser video-inference
+      // hang seen on some WebGL configurations. The frame is never uploaded
+      // or stored.
+      const frame = document.createElement('canvas');
+      const scale = Math.min(320 / video.videoWidth, 240 / video.videoHeight, 1);
+      frame.width = Math.max(1, Math.round(video.videoWidth * scale));
+      frame.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const context = frame.getContext('2d');
+      if (!context) throw new Error('Unable to prepare the camera image. Please retry.');
+      context.drawImage(video, 0, 0, frame.width, frame.height);
+
       // Use a smaller detector input for a responsive login experience. A
       // separate timeout prevents some browser GPU/WebGL implementations from
       // trapping the verification screen on an unfinished inference.
       const detection = await Promise.race([
         faceapi
-          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 }))
+          .detectSingleFace(frame, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.45 }))
           .withFaceLandmarks()
           .withFaceDescriptor(),
         new Promise<never>((_, reject) => window.setTimeout(
