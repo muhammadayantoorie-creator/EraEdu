@@ -12,6 +12,14 @@ type Organization = {
   seat_limit: number;
 };
 
+type BillingRecord = {
+  plan: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'paid' | 'failed' | 'cancelled';
+  paid_at: string | null;
+};
+
 const OrganizationCard = () => {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [name, setName] = useState('');
@@ -90,6 +98,8 @@ const ProfilePage: React.FC = () => {
   const { user, logout, updateProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'checking' | 'paid' | 'pending' | null>(null);
+  const [billing, setBilling] = useState<BillingRecord | null>(null);
+  const [billingLoading, setBillingLoading] = useState(user?.role === 'teacher');
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
       name: user?.name || '',
@@ -145,6 +155,28 @@ const ProfilePage: React.FC = () => {
       window.setTimeout(checkPayment, 3000);
     };
     void checkPayment();
+    return () => { cancelled = true; };
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== 'teacher') {
+      setBillingLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadBilling = async () => {
+      try {
+        const response = await api.get('/safepay/subscription');
+        if (!cancelled) setBilling(response.data.data);
+      } catch {
+        // Billing is supplementary to the profile, so keep this view usable
+        // when a gateway check is temporarily unavailable.
+      } finally {
+        if (!cancelled) setBillingLoading(false);
+      }
+    };
+    void loadBilling();
     return () => { cancelled = true; };
   }, [user?.role]);
 
@@ -287,6 +319,30 @@ const ProfilePage: React.FC = () => {
           )}
         </div>
       </div>
+      {user?.role === 'teacher' && (
+        <section className="mt-6 overflow-hidden rounded-lg bg-white shadow">
+          <div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900">Billing &amp; subscription</h3>
+              <p className="mt-1 text-sm text-gray-500">Your most recent EraEdu Educator plan payment.</p>
+            </div>
+            {billing?.status === 'paid' && <span className="w-fit rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Educator plan active</span>}
+          </div>
+          <div className="px-4 py-5 sm:px-6">
+            {billingLoading ? (
+              <p className="text-sm text-gray-500">Checking your billing status…</p>
+            ) : !billing ? (
+              <p className="text-sm text-gray-500">No Educator plan payment has been recorded yet.</p>
+            ) : (
+              <dl className="grid gap-4 sm:grid-cols-3">
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</dt><dd className="mt-1 text-sm font-medium capitalize text-gray-900">{billing.plan}</dd></div>
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Amount</dt><dd className="mt-1 text-sm font-medium text-gray-900">{billing.currency} {(billing.amount / 100).toLocaleString()}</dd></div>
+                <div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Status</dt><dd className={`mt-1 text-sm font-semibold capitalize ${billing.status === 'paid' ? 'text-emerald-700' : 'text-amber-700'}`}>{billing.status}</dd></div>
+              </dl>
+            )}
+          </div>
+        </section>
+      )}
       {user?.role === 'teacher' && <OrganizationCard />}
     </div>
   );

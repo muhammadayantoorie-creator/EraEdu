@@ -71,6 +71,34 @@ router.get('/status/:tracker', protect, authorize('teacher'), async (req, res) =
   }
 });
 
+// Lets the profile page recover a payment status even when a teacher closes
+// the hosted-checkout return page before its tracker check finishes.
+router.get('/subscription', protect, authorize('teacher'), async (req, res) => {
+  try {
+    const { data: latestPayment, error } = await supabase
+      .from('safepay_payments')
+      .select('tracker_token, plan, amount, currency, status, paid_at, created_at')
+      .eq('user_id', req.user!._id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!latestPayment) return res.json({ success: true, data: null });
+
+    const updated = await updatePaymentFromTracker(latestPayment.tracker_token, req.user!._id);
+    res.json({
+      success: true,
+      data: {
+        ...latestPayment,
+        status: updated?.status || latestPayment.status,
+      },
+    });
+  } catch (error: any) {
+    res.status(502).json({ success: false, error: { message: error?.message || 'Unable to check subscription status.' } });
+  }
+});
+
 // Mounted with express.raw() before the app JSON parser. Safepay retries
 // webhooks, so fetching the tracker and updating an already-paid record is safe.
 export const safepayWebhook = async (req: Request, res: Response) => {
