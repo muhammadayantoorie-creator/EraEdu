@@ -86,11 +86,17 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       const response = await api.post<any>('/auth/verify-face-login', {
         tempToken: pending.tempToken,
         faceEncoding,
+      }, {
+        // Face matching is normally fast. Do not leave a student trapped on
+        // a spinner if a cold server or unstable network never responds.
+        timeout: 15000,
       });
       const { user } = response.data.data;
       set({ user, token: null, isAuthenticated: true, isLoading: false, isAuthChecking: false, faceVerificationPending: null, error: null });
     } catch (error: any) {
-      const message = error.response?.data?.message || error.response?.data?.error?.message || 'Face verification failed';
+      const message = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
+        ? 'Face verification took too long. Please check your connection and try again.'
+        : error.response?.data?.message || error.response?.data?.error?.message || 'Face verification failed. Please try again.';
       set({ error: message, isLoading: false });
       throw error;
     }
