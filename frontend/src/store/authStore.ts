@@ -37,7 +37,18 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   faceVerificationPending: null,
 
   login: async (credentials) => {
-    set({ isLoading: true, error: null, faceVerificationPending: null });
+    // A new sign-in attempt must never inherit an earlier user session. In
+    // particular, a student must not be redirected by a stale /auth/me check
+    // before completing the required face verification step.
+    set({
+      isLoading: true,
+      error: null,
+      faceVerificationPending: null,
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isAuthChecking: false,
+    });
     try {
        const response = await api.post<any>('/auth/login', credentials);
       const responseData = response.data.data;
@@ -45,6 +56,8 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       if (responseData.requiresFaceVerification) {
         set({
           isLoading: false,
+          isAuthenticated: false,
+          isAuthChecking: false,
           faceVerificationPending: {
             tempToken: responseData.tempToken,
             userName: responseData.userName,
@@ -146,6 +159,13 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     // Don't set isLoading, use separate isAuthChecking
     try {
       const response = await api.get<any>('/auth/me');
+      // A student has just passed password validation and is awaiting camera
+      // verification. Ignore any older cookie-session response so it cannot
+      // bypass the face-verification screen.
+      if (_get().faceVerificationPending) {
+        set({ isAuthChecking: false });
+        return;
+      }
       set({ user: response.data.data, isAuthenticated: true, isAuthChecking: false });
     } catch (error) {
       // Do not let an older failed checkAuth request overwrite a session that

@@ -41,11 +41,11 @@ const LoginPage = () => {
   // Redirect when authenticated
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !faceVerificationPending) {
       toast.success('Logged in successfully!');
       navigate('/dashboard');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, faceVerificationPending, navigate]);
 
   // Load face-api models when entering face verification step
   useEffect(() => {

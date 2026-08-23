@@ -13,6 +13,16 @@ const sessionCookie = (res: Response, token: string) => {
   });
 };
 
+const clearSessionCookie = (res: Response) => {
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+  res.clearCookie('eraedu_session', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/',
+  });
+};
+
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.register(req.body);
   
@@ -27,6 +37,10 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   if ('token' in result && result.token) {
     sessionCookie(res, result.token);
     delete (result as { token?: string }).token;
+  } else if ('requiresFaceVerification' in result && result.requiresFaceVerification) {
+    // Never leave a previous account's authenticated cookie active while a
+    // student is completing the mandatory face-verification step.
+    clearSessionCookie(res);
   }
   
   res.status(200).json({
@@ -104,12 +118,6 @@ export const switchRole = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const logout = asyncHandler(async (_req: Request, res: Response) => {
-  const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
-  res.clearCookie('eraedu_session', {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
-    path: '/',
-  });
+  clearSessionCookie(res);
   res.status(204).send();
 });
