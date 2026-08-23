@@ -22,7 +22,10 @@ const updatePaymentFromTracker = async (trackerToken: string, userId?: string) =
   if (!payment) return null;
 
   const report: any = await getClient().reporter.payments.fetch(trackerToken);
-  const isPaid = report?.data?.tracker?.state === 'TRACKER_ENDED';
+  // The current Reporter endpoint returns the tracker directly under `data`.
+  // Keep the nested fallback for older SDK response shapes.
+  const tracker = report?.data?.tracker || report?.data;
+  const isPaid = tracker?.state === 'TRACKER_ENDED';
   if (isPaid && payment.status !== 'paid') {
     const now = new Date().toISOString();
     const { error: updateError } = await supabase
