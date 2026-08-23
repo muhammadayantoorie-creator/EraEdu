@@ -79,7 +79,7 @@ const RoleSidebar: React.FC<RoleSidebarProps> = ({ items, isOpen, onClose, role 
           "
           style={{
             backgroundImage:
-              'radial-gradient(120% 70% at 0% 0%, rgba(16,185,129,0.10) 0%, transparent 55%), radial-gradient(80% 60% at 100% 100%, rgba(6,182,212,0.06) 0%, transparent 55%)',
+              'radial-gradient(120% 70% at 0% 0%, rgba(167,243,208,0.20) 0%, transparent 55%), radial-gradient(80% 60% at 100% 100%, rgba(103,232,249,0.14) 0%, transparent 55%), linear-gradient(180deg, #064E3B 0%, #047857 52%, #0F766E 100%)',
           }}
         >
           {/* Mobile close */}

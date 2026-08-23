@@ -162,7 +162,7 @@ const TeacherOverview = () => {
           "
           style={{
             backgroundImage:
-              'radial-gradient(60% 80% at 0% 0%, rgba(167,243,208,0.24) 0%, transparent 55%), radial-gradient(50% 60% at 100% 100%, rgba(103,232,249,0.20) 0%, transparent 55%)',
+              'radial-gradient(60% 80% at 0% 0%, rgba(167,243,208,0.24) 0%, transparent 55%), radial-gradient(50% 60% at 100% 100%, rgba(103,232,249,0.20) 0%, transparent 55%), linear-gradient(135deg, #065F46 0%, #047857 52%, #0F766E 100%)',
           }}
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
