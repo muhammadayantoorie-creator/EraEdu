@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { register, login, forgotPassword, resetPassword, getCurrentUser, updateProfile, switchRole, verifyFaceLogin, logout } from '../controllers/authController';
+import { register, login, forgotPassword, resetPassword, getCurrentUser, updateProfile, switchRole, verifyStudentEmailOtp, logout } from '../controllers/authController';
 import { uploadProfilePicture, uploadRegistrationPicture } from '../controllers/profilePictureController';
 import { protect } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
@@ -9,7 +9,7 @@ import { z } from 'zod';
 const loginSchema = z.object({ email: z.string().trim().email().max(254), password: z.string().min(1).max(128) });
 const forgotPasswordSchema = z.object({ email: z.string().trim().email().max(254) });
 const resetPasswordSchema = z.object({ token: z.string().min(1).max(512), password: z.string().min(8).max(128) });
-const faceLoginSchema = z.object({ tempToken: z.string().min(1).max(2048), faceEncoding: z.array(z.number().finite()).min(1).max(512) });
+const studentOtpSchema = z.object({ tempToken: z.string().min(1).max(2048), code: z.string().regex(/^\d{6}$/, 'Enter the six-digit code from your email.') });
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(80),
   email: z.string().trim().email().max(254),
@@ -46,7 +46,7 @@ router.post('/login', validateBody(loginSchema), login);
 router.post('/forgot-password', validateBody(forgotPasswordSchema), forgotPassword);
 router.post('/reset-password', validateBody(resetPasswordSchema), resetPassword);
 router.post('/validate-picture', upload.single('profilePicture'), uploadRegistrationPicture);
-router.post('/verify-face-login', validateBody(faceLoginSchema), verifyFaceLogin);
+router.post('/verify-student-otp', validateBody(studentOtpSchema), verifyStudentEmailOtp);
 router.post('/logout', logout);
 
 // Protected routes

@@ -38,7 +38,7 @@ api.interceptors.response.use(
     // — skip auth endpoints where 401 is expected (check-auth, login, register)
     if (error.response && error.response.status === 401) {
       const url: string = error.config?.url ?? '';
-      const isAuthEndpoint = url.includes('/auth/me') || url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/verify-face-login');
+      const isAuthEndpoint = url.includes('/auth/me') || url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/verify-student-otp');
       if (!isAuthEndpoint) {
         window.location.href = `${import.meta.env.BASE_URL}login`;
       }

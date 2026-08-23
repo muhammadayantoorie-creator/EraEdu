@@ -37,7 +37,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   if ('token' in result && result.token) {
     sessionCookie(res, result.token);
     delete (result as { token?: string }).token;
-  } else if ('requiresFaceVerification' in result && result.requiresFaceVerification) {
+  } else if ('requiresEmailOtp' in result && result.requiresEmailOtp) {
     // Never leave a previous account's authenticated cookie active while a
     // student is completing the mandatory face-verification step.
     clearSessionCookie(res);
@@ -105,6 +105,13 @@ export const verifyFaceLogin = asyncHandler(async (req: Request, res: Response) 
     success: true,
     data: result,
   });
+});
+
+export const verifyStudentEmailOtp = asyncHandler(async (req: Request, res: Response) => {
+  const result = await authService.verifyStudentEmailOtp(req.body.tempToken, req.body.code);
+  sessionCookie(res, result.token);
+  delete (result as { token?: string }).token;
+  res.status(200).json({ success: true, data: result });
 });
 
 export const switchRole = asyncHandler(async (req: Request, res: Response) => {

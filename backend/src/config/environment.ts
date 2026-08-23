@@ -81,6 +81,7 @@ export const config = {
     return rejectProductionPlaceholder('JWT_SECRET', secret);
   })(),
   resendApiKey: process.env.RESEND_API_KEY || '',
+  emailFrom: process.env.EMAIL_FROM || 'EraEdu <onboarding@resend.dev>',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
   safepayEnvironment: process.env.SAFEPAY_ENV || 'sandbox',
   safepaySecretKey: process.env.SAFEPAY_SECRET_KEY || '',

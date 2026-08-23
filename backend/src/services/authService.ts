@@ -14,7 +14,9 @@ const PASSWORD_RESET_SUCCESS_MESSAGE =
 const ALLOWED_ROLES = ['student', 'teacher'] as const;
 const BCRYPT_ROUNDS = 12;
 const ACCESS_TOKEN_TTL = '7d';
-const FACE_VERIFY_TOKEN_TTL = '5m';
+const STUDENT_OTP_TOKEN_TTL = '10m';
+const STUDENT_OTP_TTL_MS = 10 * 60 * 1000;
+const STUDENT_OTP_MAX_ATTEMPTS = 5;
 const MAX_NAME_LEN = 80;
 const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 128;
@@ -26,6 +28,9 @@ const isStudentEmail = (email: string): boolean => {
   const at = normalized.lastIndexOf('@');
   return at > 0 && normalized.slice(at) === STUDENT_EMAIL_DOMAIN;
 };
+
+const hashStudentOtp = (code: string) =>
+  crypto.createHmac('sha256', config.jwtSecret).update(code).digest('hex');
 
 export const assertStudentEmailPolicy = async (userId: string): Promise<void> => {
   const { data: user, error } = await supabase
@@ -171,12 +176,20 @@ export const authService = {
     }
 
     if (normalizedRole === 'student') {
+      const code = crypto.randomInt(100000, 1_000_000).toString();
+      const expiresAt = new Date(Date.now() + STUDENT_OTP_TTL_MS).toISOString();
+      const { error: otpError } = await supabase
+        .from('users')
+        .update({ student_otp_hash: hashStudentOtp(code), student_otp_expires_at: expiresAt, student_otp_attempts: 0 })
+        .eq('id', user.id);
+      if (otpError) throw new Error('Unable to create a sign-in code. Please try again.');
+      await emailService.sendStudentLoginOtp(user.email, user.name, code);
       const tempToken = jwt.sign(
-        { id: user.id, role: user.role, type: 'face_verification' },
+        { id: user.id, role: user.role, type: 'student_email_otp' },
         config.jwtSecret,
-        { expiresIn: FACE_VERIFY_TOKEN_TTL },
+        { expiresIn: STUDENT_OTP_TOKEN_TTL },
       );
-      return { requiresFaceVerification: true, tempToken, userName: user.name };
+      return { requiresEmailOtp: true, tempToken, userName: user.name, email: user.email };
     }
 
     // Fallback for unknown roles — issue token so app doesn't deadlock
@@ -186,6 +199,29 @@ export const authService = {
       user: { _id: user.id, name: user.name, email: user.email, role: user.role },
       token,
     };
+  },
+
+  async verifyStudentEmailOtp(tempToken: string, code: string) {
+    let decoded: any;
+    try { decoded = jwt.verify(tempToken, config.jwtSecret); }
+    catch { throw createHttpError('Your sign-in code has expired. Please sign in again.', 401); }
+    if (decoded.type !== 'student_email_otp') throw createHttpError('Invalid sign-in verification request.', 401);
+
+    const { data: user, error } = await supabase.from('users').select('*').eq('id', decoded.id).single();
+    if (error || !user) throw createHttpError('User not found', 404);
+    if (!user.student_otp_hash || !user.student_otp_expires_at || new Date(user.student_otp_expires_at).getTime() < Date.now()) {
+      throw createHttpError('Your sign-in code has expired. Please sign in again.', 401);
+    }
+    const attempts = Number(user.student_otp_attempts || 0);
+    if (attempts >= STUDENT_OTP_MAX_ATTEMPTS) throw createHttpError('Too many incorrect codes. Please sign in again.', 429);
+    const receivedHash = hashStudentOtp(code);
+    if (receivedHash.length !== user.student_otp_hash.length || !crypto.timingSafeEqual(Buffer.from(receivedHash), Buffer.from(user.student_otp_hash))) {
+      await supabase.from('users').update({ student_otp_attempts: attempts + 1 }).eq('id', user.id);
+      throw createHttpError('Incorrect sign-in code. Please try again.', 401);
+    }
+    await supabase.from('users').update({ student_otp_hash: null, student_otp_expires_at: null, student_otp_attempts: 0 }).eq('id', user.id);
+    const token = jwt.sign({ id: user.id, role: user.role }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
+    return { user: { _id: user.id, name: user.name, email: user.email, role: user.role }, token };
   },
 
   async verifyFaceLogin(tempToken: string, liveFaceEncoding: number[]) {

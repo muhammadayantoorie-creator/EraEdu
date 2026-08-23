@@ -78,7 +78,7 @@ export const emailService = {
 
     try {
       const data = await getResend().emails.send({
-        from: 'EraEdu <onboarding@resend.dev>',
+        from: config.emailFrom,
         to: [email],
         subject: 'Reset your EraEdu password',
         html: `
@@ -104,5 +104,20 @@ export const emailService = {
       console.error('Error sending password reset email:', error);
       throw Object.assign(new Error('Failed to send password reset email.'), { statusCode: 503 });
     }
-  }
+  },
+  async sendStudentLoginOtp(email: string, name: string, code: string) {
+    if (!config.resendApiKey) {
+      throw Object.assign(new Error('Email verification is not configured. Please contact support.'), { statusCode: 503 });
+    }
+    try {
+      await getResend().emails.send({
+        from: config.emailFrom,
+        to: [email],
+        subject: 'Your EraEdu sign-in code',
+        html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto"><h2>Hello ${name},</h2><p>Use this code to sign in to EraEdu:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>This code expires in 10 minutes. Do not share it with anyone.</p></div>`,
+      });
+    } catch {
+      throw Object.assign(new Error('Unable to send your sign-in code. Please try again.'), { statusCode: 503 });
+    }
+  },
 };

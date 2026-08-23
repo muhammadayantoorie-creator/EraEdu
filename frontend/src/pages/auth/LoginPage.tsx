@@ -1,378 +1,64 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
-import * as faceapi from 'face-api.js';
-import {
-  VideoCameraIcon,
-  VideoCameraSlashIcon,
-  ArrowPathIcon,
-  ShieldCheckIcon,
-} from '@heroicons/react/24/outline';
-
-const MODEL_URL = `${import.meta.env.BASE_URL}models`;
-const FACE_DETECTION_TIMEOUT_MS = 10000;
+import { EnvelopeIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 
 const LoginPage = () => {
-  const { login, verifyFaceLogin, cancelFaceVerification, faceVerificationPending, isLoading } = useAuthStore();
+  const { login, verifyStudentOtp, cancelStudentOtp, studentOtpPending, isLoading } = useAuthStore();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors } } = useForm();
+  const [code, setCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
 
-  // Camera state
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const verificationAttemptRef = useRef(0);
-  const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [verifying, setVerifying] = useState(false);
-  const [verifyError, setVerifyError] = useState<string | null>(null);
-
-  // Step 1: Password login
-  const onPasswordSubmit = async (data: any) => {
-    try {
-      await login(data);
-      // If no face verification required, login() already set isAuthenticated
-    } catch (error: any) {
-      const message = error.response?.data?.message || error.response?.data?.error?.message || 'Login failed';
-      toast.error(message);
-    }
-  };
-
-  // Redirect when authenticated
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   useEffect(() => {
-    if (isAuthenticated && !faceVerificationPending) {
+    if (isAuthenticated && !studentOtpPending) {
       toast.success('Logged in successfully!');
       navigate('/dashboard');
     }
-  }, [isAuthenticated, faceVerificationPending, navigate]);
+  }, [isAuthenticated, studentOtpPending, navigate]);
 
-  // Load face-api models when entering face verification step
-  useEffect(() => {
-    if (!faceVerificationPending) return;
+  const onPasswordSubmit = async (data: any) => {
+    try { await login(data); }
+    catch (error: any) { toast.error(error.response?.data?.error?.message || 'Login failed. Please check your details.'); }
+  };
 
-    let cancelled = false;
-    (async () => {
-      try {
-        // face-api.js v0.20 relies on TensorFlow.js' built-in CPU backend.
-        // Prefer it here: some WebGL drivers display the camera correctly but
-        // never resolve live inference.
-        faceapi.tf.setBackend('cpu');
-        if (faceapi.tf.getBackend() !== 'cpu') throw new Error('CPU face-analysis backend is unavailable.');
-        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-        if (!cancelled) setModelsLoaded(true);
-      } catch (err) {
-        console.error('Failed to load face models:', err);
-        if (!cancelled) setCameraError('Failed to load face recognition models.');
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [faceVerificationPending]);
-
-  // Start camera when models are loaded
-  useEffect(() => {
-    if (!faceVerificationPending || !modelsLoaded) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 480, height: 360, facingMode: 'user' },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-          setCameraReady(true);
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          if (err.name === 'NotAllowedError') {
-            setCameraError('Camera access denied. Please allow camera access in your browser settings and try again.');
-          } else if (err.name === 'NotFoundError') {
-            setCameraError('No camera found on this device.');
-          } else {
-            setCameraError('Could not start camera. It may be in use by another app.');
-          }
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
-    };
-  }, [faceVerificationPending, modelsLoaded]);
-
-  // Capture & Verify
-  const handleCaptureAndVerify = useCallback(async () => {
-    if (!videoRef.current || !cameraReady) return;
-
-    const attemptId = ++verificationAttemptRef.current;
-    setVerifying(true);
-    setVerifyError(null);
-
-    try {
-      const video = videoRef.current;
-      if (video.videoWidth < 1 || video.videoHeight < 1) {
-        throw new Error('Camera is still starting. Please wait a moment and retry.');
-      }
-
-      // Analyse a freshly captured, downscaled frame rather than the moving
-      // video element. This is faster and avoids the browser video-inference
-      // hang seen on some WebGL configurations. The frame is never uploaded
-      // or stored.
-      const frame = document.createElement('canvas');
-      const scale = Math.min(320 / video.videoWidth, 240 / video.videoHeight, 1);
-      frame.width = Math.max(1, Math.round(video.videoWidth * scale));
-      frame.height = Math.max(1, Math.round(video.videoHeight * scale));
-      const context = frame.getContext('2d');
-      if (!context) throw new Error('Unable to prepare the camera image. Please retry.');
-      context.drawImage(video, 0, 0, frame.width, frame.height);
-
-      // Use a smaller detector input for a responsive login experience. A
-      // separate timeout prevents some browser GPU/WebGL implementations from
-      // trapping the verification screen on an unfinished inference.
-      const detection = await Promise.race([
-        faceapi
-          .detectSingleFace(frame, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.45 }))
-          .withFaceLandmarks()
-          .withFaceDescriptor(),
-        new Promise<never>((_, reject) => window.setTimeout(
-          () => reject(new Error('Face analysis took too long. Please improve the lighting and try again.')),
-          FACE_DETECTION_TIMEOUT_MS,
-        )),
-      ]);
-
-      // A timed-out attempt may finish in the background after the student
-      // retries. It must not submit a stale face descriptor.
-      if (attemptId !== verificationAttemptRef.current) return;
-
-      if (!detection) {
-        setVerifyError('No face detected. Please look directly at the camera and try again.');
-        setVerifying(false);
-        return;
-      }
-
-      const encoding = Array.from(detection.descriptor);
-      await verifyFaceLogin(encoding);
-    } catch (error: any) {
-      if (attemptId !== verificationAttemptRef.current) return;
-      const message = error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Verification failed';
-      setVerifyError(message);
-    } finally {
-      if (attemptId === verificationAttemptRef.current) setVerifying(false);
+  const submitCode = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(code)) {
+      setOtpError('Enter the six-digit code sent to your university email.');
+      return;
     }
-  }, [cameraReady, verifyFaceLogin]);
+    setOtpError(null);
+    try { await verifyStudentOtp(code); }
+    catch (error: any) { setOtpError(error.response?.data?.error?.message || 'Unable to verify this code. Please try again.'); }
+  };
 
-  // Cancel and go back to password step
-  const handleCancel = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setCameraReady(false);
-    setCameraError(null);
-    setVerifyError(null);
-    setModelsLoaded(false);
-    cancelFaceVerification();
-  }, [cancelFaceVerification]);
-
-  // ---- Face Verification Step ----
-  if (faceVerificationPending) {
-    return (
-      <div>
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <ShieldCheckIcon className="h-8 w-8 text-primary-600" />
-        </div>
-        <h2 className="text-center text-2xl font-extrabold text-gray-900">
-          Face Verification Required
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Welcome back, <span className="font-semibold">{faceVerificationPending.userName}</span>. Please verify your identity using your camera. If this is your first time, your face will be enrolled for future logins.
-        </p>
-
-        <div className="mt-6 space-y-4">
-          {/* Camera preview */}
-          <div className="relative rounded-xl overflow-hidden border-2 border-gray-200 bg-black aspect-[4/3]">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-              style={{ transform: 'scaleX(-1)' }}
-            />
-
-            {/* Loading overlay */}
-            {!cameraReady && !cameraError && (
-              <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-white gap-3">
-                <div className="animate-spin h-8 w-8 border-2 border-white border-t-transparent rounded-full" />
-                <span className="text-sm">
-                  {modelsLoaded ? 'Starting camera...' : 'Loading face recognition models...'}
-                </span>
-              </div>
-            )}
-
-            {/* Camera error overlay */}
-            {cameraError && (
-              <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white gap-3 px-4 text-center">
-                <VideoCameraSlashIcon className="h-10 w-10 text-red-400" />
-                <p className="text-sm">{cameraError}</p>
-              </div>
-            )}
-
-            {/* Face guide overlay */}
-            {cameraReady && !verifying && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-48 h-60 border-2 border-dashed border-white/50 rounded-full" />
-              </div>
-            )}
-
-            {/* Verifying overlay */}
-            {verifying && (
-              <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center text-white gap-3">
-                <div className="animate-spin h-8 w-8 border-2 border-white border-t-transparent rounded-full" />
-                <span className="text-sm font-medium">Verifying your face...</span>
-              </div>
-            )}
-          </div>
-
-          {/* Error message */}
-          {verifyError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-              {verifyError}
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleCancel}
-              className="flex-1 py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              Back to Login
-            </button>
-            <button
-              onClick={handleCaptureAndVerify}
-              disabled={!cameraReady || verifying || isLoading}
-              className="flex-1 flex justify-center items-center gap-2 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
-            >
-              {verifying || isLoading ? (
-                <>
-                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                  Verifying...
-                </>
-              ) : verifyError ? (
-                <>
-                  <ArrowPathIcon className="h-4 w-4" />
-                  Retry
-                </>
-              ) : (
-                <>
-                  <VideoCameraIcon className="h-4 w-4" />
-                  Capture & Verify
-                </>
-              )}
-            </button>
-          </div>
-
-          <p className="text-xs text-gray-400 text-center">
-            Your live image is used for verification only and is not stored.
-          </p>
-        </div>
-      </div>
-    );
+  if (studentOtpPending) {
+    return <div>
+      <div className="flex justify-center"><span className="rounded-full bg-primary-50 p-3 text-primary-700"><EnvelopeIcon className="h-8 w-8" /></span></div>
+      <h2 className="mt-4 text-center text-2xl font-extrabold text-gray-900">Check your university email</h2>
+      <p className="mt-2 text-center text-sm text-gray-600">We sent a six-digit sign-in code to <span className="font-semibold">{studentOtpPending.email}</span>. It expires in 10 minutes.</p>
+      <form onSubmit={submitCode} className="mt-6 space-y-4">
+        <div><label htmlFor="otp" className="block text-sm font-medium text-gray-700">Sign-in code</label><input id="otp" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" autoFocus placeholder="123456" className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-3 text-center text-xl font-semibold tracking-[0.45em] shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500" /></div>
+        {otpError && <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{otpError}</p>}
+        <button type="submit" disabled={isLoading} className="flex w-full items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 disabled:opacity-50"><ShieldCheckIcon className="h-5 w-5" />{isLoading ? 'Verifying…' : 'Verify and sign in'}</button>
+        <button type="button" onClick={() => { setCode(''); setOtpError(null); cancelStudentOtp(); }} className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Back to login</button>
+      </form>
+    </div>;
   }
 
-  // ---- Standard Password Step ----
-  return (
-    <div>
-      <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-        Sign in to your account
-      </h2>
-      <p className="mt-2 text-center text-sm text-gray-600">
-        Or{' '}
-        <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500">
-          create a new account
-        </Link>
-      </p>
-
-      <div className="mt-8">
-        <form className="space-y-6" onSubmit={handleSubmit(onPasswordSubmit)}>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
-            <div className="mt-1">
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                {...register('email', { 
-                  required: 'Email is required',
-                  pattern: {
-                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                    message: 'Invalid email address'
-                  }
-                })}
-              />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message as string}</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <div className="mt-1">
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                {...register('password', { required: 'Password is required' })}
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message as string}</p>
-              )}
-            </div>
-            <div className="mt-2 text-right">
-              <Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">
-                Forgot password?
-              </Link>
-            </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
-            >
-              {isLoading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  return <div>
+    <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Sign in to your account</h2>
+    <p className="mt-2 text-center text-sm text-gray-600">Or <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500">create a new account</Link></p>
+    <form className="mt-8 space-y-6" onSubmit={handleSubmit(onPasswordSubmit)}>
+      <div><label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label><input id="email" type="email" autoComplete="email" className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500" {...register('email', { required: 'Email is required' })} />{errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message as string}</p>}</div>
+      <div><label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label><input id="password" type="password" autoComplete="current-password" className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500" {...register('password', { required: 'Password is required' })} /><div className="mt-2 text-right"><Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">Forgot password?</Link></div></div>
+      <button type="submit" disabled={isLoading} className="flex w-full justify-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 disabled:opacity-50">{isLoading ? 'Signing in…' : 'Sign in'}</button>
+    </form>
+  </div>;
 };
 
 export default LoginPage;

@@ -3,12 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
-import { CameraIcon, XMarkIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
-import * as faceapi from 'face-api.js';
+import { CameraIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg'];
-const MODEL_URL = `${import.meta.env.BASE_URL}models`;
 const STUDENT_EMAIL_DOMAIN = '@nutech.edu.pk';
 
 const RegisterPage = () => {
@@ -21,43 +19,11 @@ const RegisterPage = () => {
   const [profilePreview, setProfilePreview] = useState<string | null>(null);
   const [profileFile, setProfileFile] = useState<File | null>(null);
   const [pictureError, setPictureError] = useState<string | null>(null);
-  const [faceEncoding, setFaceEncoding] = useState<number[] | null>(null);
-  const [extractingFace, setExtractingFace] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const extractFaceEncoding = async (imgElement: HTMLImageElement): Promise<number[] | null> => {
-    setExtractingFace(true);
-    try {
-      faceapi.tf.setBackend('cpu');
-      if (faceapi.tf.getBackend() !== 'cpu') throw new Error('CPU face-analysis backend is unavailable.');
-      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-
-      const detection = await faceapi
-        .detectSingleFace(imgElement, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-
-      if (!detection) {
-        setPictureError('No face detected in the image. Please upload a clear photo of your face.');
-        return null;
-      }
-
-      const descriptor = Array.from(detection.descriptor);
-      return descriptor;
-    } catch (err) {
-      setPictureError('Failed to process face data. Please try a different image.');
-      return null;
-    } finally {
-      setExtractingFace(false);
-    }
-  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     setPictureError(null);
-    setFaceEncoding(null);
 
     if (!file) return;
 
@@ -79,21 +45,12 @@ const RegisterPage = () => {
     });
     setProfilePreview(dataUrl);
 
-    // Extract face encoding from uploaded image
-    const img = new Image();
-    img.src = dataUrl;
-    await new Promise((resolve) => { img.onload = resolve; });
-    const encoding = await extractFaceEncoding(img);
-    if (encoding) {
-      setFaceEncoding(encoding);
-    }
   };
 
   const removeProfilePicture = () => {
     setProfileFile(null);
     setProfilePreview(null);
     setPictureError(null);
-    setFaceEncoding(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -111,7 +68,6 @@ const RegisterPage = () => {
       await registerUser({
         ...data,
         profilePictureBase64,
-        faceEncoding: data.role === 'student' ? (faceEncoding || undefined) : undefined,
       });
       toast.success('Registration complete. Please log in.');
       navigate('/login');
@@ -257,9 +213,7 @@ const RegisterPage = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Upload Profile Picture
               </label>
-              <p className="text-xs text-gray-500 mb-3">
-                Used for face recognition verification during quizzes. Accepts JPG or PNG (max 5MB).
-              </p>
+              <p className="text-xs text-gray-500 mb-3">Optional profile photo. Accepts JPG or PNG (max 5MB).</p>
 
               {profilePreview ? (
                 <div className="flex items-center gap-4">
@@ -273,14 +227,6 @@ const RegisterPage = () => {
                     <p className="text-xs text-gray-500">
                       {profileFile ? `${(profileFile.size / 1024).toFixed(1)} KB` : ''}
                     </p>
-                    {extractingFace && (
-                      <p className="text-xs text-blue-600 animate-pulse">Analyzing face...</p>
-                    )}
-                    {faceEncoding && (
-                      <p className="text-xs text-green-600 flex items-center gap-1">
-                        <CheckCircleIcon className="h-4 w-4" /> Face detected
-                      </p>
-                    )}
                     <button
                       type="button"
                       onClick={removeProfilePicture}

@@ -2,9 +2,10 @@ import { create } from 'zustand';
 import api from '../services/api';
 import { User } from '../types';
 
-interface FaceVerificationPending {
+interface StudentOtpPending {
   tempToken: string;
   userName: string;
+  email: string;
 }
 
 interface AuthState {
@@ -14,11 +15,11 @@ interface AuthState {
   isLoading: boolean;
   isAuthChecking: boolean;
   error: string | null;
-  faceVerificationPending: FaceVerificationPending | null;
+  studentOtpPending: StudentOtpPending | null;
   
   login: (credentials: any) => Promise<void>;
-  verifyFaceLogin: (faceEncoding: number[]) => Promise<void>;
-  cancelFaceVerification: () => void;
+  verifyStudentOtp: (code: string) => Promise<void>;
+  cancelStudentOtp: () => void;
   register: (data: any) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
@@ -34,7 +35,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   isLoading: false,
   isAuthChecking: true, // Start as true to prevent flash
   error: null,
-  faceVerificationPending: null,
+  studentOtpPending: null,
 
   login: async (credentials) => {
     // A new sign-in attempt must never inherit an earlier user session. In
@@ -43,7 +44,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     set({
       isLoading: true,
       error: null,
-      faceVerificationPending: null,
+      studentOtpPending: null,
       user: null,
       token: null,
       isAuthenticated: false,
@@ -53,14 +54,15 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
        const response = await api.post<any>('/auth/login', credentials);
       const responseData = response.data.data;
 
-      if (responseData.requiresFaceVerification) {
+      if (responseData.requiresEmailOtp) {
         set({
           isLoading: false,
           isAuthenticated: false,
           isAuthChecking: false,
-          faceVerificationPending: {
+          studentOtpPending: {
             tempToken: responseData.tempToken,
             userName: responseData.userName,
+            email: responseData.email,
           },
         });
         return;
@@ -77,33 +79,31 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     }
   },
 
-  verifyFaceLogin: async (faceEncoding: number[]) => {
-    const pending = _get().faceVerificationPending;
-    if (!pending) throw new Error('No face verification pending');
+  verifyStudentOtp: async (code: string) => {
+    const pending = _get().studentOtpPending;
+    if (!pending) throw new Error('No email verification pending');
 
     set({ isLoading: true, error: null });
     try {
-      const response = await api.post<any>('/auth/verify-face-login', {
+      const response = await api.post<any>('/auth/verify-student-otp', {
         tempToken: pending.tempToken,
-        faceEncoding,
+        code,
       }, {
-        // Face matching is normally fast. Do not leave a student trapped on
-        // a spinner if a cold server or unstable network never responds.
         timeout: 15000,
       });
       const { user } = response.data.data;
-      set({ user, token: null, isAuthenticated: true, isLoading: false, isAuthChecking: false, faceVerificationPending: null, error: null });
+      set({ user, token: null, isAuthenticated: true, isLoading: false, isAuthChecking: false, studentOtpPending: null, error: null });
     } catch (error: any) {
       const message = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
-        ? 'Face verification took too long. Please check your connection and try again.'
-        : error.response?.data?.message || error.response?.data?.error?.message || 'Face verification failed. Please try again.';
+        ? 'Email verification took too long. Please check your connection and try again.'
+        : error.response?.data?.message || error.response?.data?.error?.message || 'Email verification failed. Please try again.';
       set({ error: message, isLoading: false });
       throw error;
     }
   },
 
-  cancelFaceVerification: () => {
-    set({ faceVerificationPending: null, error: null });
+  cancelStudentOtp: () => {
+    set({ studentOtpPending: null, error: null });
   },
 
   register: async (data) => {
@@ -168,7 +168,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       // A student has just passed password validation and is awaiting camera
       // verification. Ignore any older cookie-session response so it cannot
       // bypass the face-verification screen.
-      if (_get().faceVerificationPending) {
+      if (_get().studentOtpPending) {
         set({ isAuthChecking: false });
         return;
       }
