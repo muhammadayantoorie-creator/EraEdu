@@ -12,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const MODEL_URL = `${import.meta.env.BASE_URL}models`;
+const FACE_DETECTION_TIMEOUT_MS = 10000;
 
 const LoginPage = () => {
   const { login, verifyFaceLogin, cancelFaceVerification, faceVerificationPending, isLoading } = useAuthStore();
@@ -21,6 +22,7 @@ const LoginPage = () => {
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const verificationAttemptRef = useRef(0);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -114,14 +116,28 @@ const LoginPage = () => {
   const handleCaptureAndVerify = useCallback(async () => {
     if (!videoRef.current || !cameraReady) return;
 
+    const attemptId = ++verificationAttemptRef.current;
     setVerifying(true);
     setVerifyError(null);
 
     try {
-      const detection = await faceapi
-        .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
-        .withFaceLandmarks()
-        .withFaceDescriptor();
+      // Use a smaller detector input for a responsive login experience. A
+      // separate timeout prevents some browser GPU/WebGL implementations from
+      // trapping the verification screen on an unfinished inference.
+      const detection = await Promise.race([
+        faceapi
+          .detectSingleFace(videoRef.current, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 }))
+          .withFaceLandmarks()
+          .withFaceDescriptor(),
+        new Promise<never>((_, reject) => window.setTimeout(
+          () => reject(new Error('Face analysis took too long. Please improve the lighting and try again.')),
+          FACE_DETECTION_TIMEOUT_MS,
+        )),
+      ]);
+
+      // A timed-out attempt may finish in the background after the student
+      // retries. It must not submit a stale face descriptor.
+      if (attemptId !== verificationAttemptRef.current) return;
 
       if (!detection) {
         setVerifyError('No face detected. Please look directly at the camera and try again.');
@@ -132,10 +148,11 @@ const LoginPage = () => {
       const encoding = Array.from(detection.descriptor);
       await verifyFaceLogin(encoding);
     } catch (error: any) {
+      if (attemptId !== verificationAttemptRef.current) return;
       const message = error.response?.data?.message || error.response?.data?.error?.message || error.message || 'Verification failed';
       setVerifyError(message);
     } finally {
-      setVerifying(false);
+      if (attemptId === verificationAttemptRef.current) setVerifying(false);
     }
   }, [cameraReady, verifyFaceLogin]);
 
