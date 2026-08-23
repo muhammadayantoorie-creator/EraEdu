@@ -22,14 +22,11 @@ const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 128;
 const MAX_BIO_LEN = 500;
 export const STUDENT_EMAIL_DOMAIN = '@nutech.edu.pk';
-// Presentation-only exception: this is the verified Resend account used to
-// demonstrate email OTP delivery before EraEdu has a verified sending domain.
-const DEMO_STUDENT_EMAIL = 'muhammadayantoorie@gmail.com';
 
 const isStudentEmail = (email: string): boolean => {
   const normalized = email.toLowerCase().trim();
   const at = normalized.lastIndexOf('@');
-  return normalized === DEMO_STUDENT_EMAIL || (at > 0 && normalized.slice(at) === STUDENT_EMAIL_DOMAIN);
+  return at > 0 && normalized.slice(at) === STUDENT_EMAIL_DOMAIN;
 };
 
 const hashStudentOtp = (code: string) =>
@@ -169,30 +166,13 @@ export const authService = {
       throw createHttpError('Student accounts must use a valid @nutech.edu.pk university email address', 403);
     }
 
-    if (normalizedRole === 'teacher') {
+    if (normalizedRole === 'teacher' || normalizedRole === 'student') {
       const token = jwt.sign({ id: user.id, role: user.role }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
       return {
         requiresFaceVerification: false,
         user: { _id: user.id, name: user.name, email: user.email, role: user.role },
         token,
       };
-    }
-
-    if (normalizedRole === 'student') {
-      const code = crypto.randomInt(100000, 1_000_000).toString();
-      const expiresAt = new Date(Date.now() + STUDENT_OTP_TTL_MS).toISOString();
-      const { error: otpError } = await supabase
-        .from('users')
-        .update({ student_otp_hash: hashStudentOtp(code), student_otp_expires_at: expiresAt, student_otp_attempts: 0 })
-        .eq('id', user.id);
-      if (otpError) throw new Error('Unable to create a sign-in code. Please try again.');
-      await emailService.sendStudentLoginOtp(user.email, user.name, code);
-      const tempToken = jwt.sign(
-        { id: user.id, role: user.role, type: 'student_email_otp' },
-        config.jwtSecret,
-        { expiresIn: STUDENT_OTP_TOKEN_TTL },
-      );
-      return { requiresEmailOtp: true, tempToken, userName: user.name, email: user.email };
     }
 
     // Fallback for unknown roles — issue token so app doesn't deadlock

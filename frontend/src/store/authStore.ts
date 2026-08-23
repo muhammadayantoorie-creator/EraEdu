@@ -2,12 +2,6 @@ import { create } from 'zustand';
 import api from '../services/api';
 import { User } from '../types';
 
-interface StudentOtpPending {
-  tempToken: string;
-  userName: string;
-  email: string;
-}
-
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -15,11 +9,7 @@ interface AuthState {
   isLoading: boolean;
   isAuthChecking: boolean;
   error: string | null;
-  studentOtpPending: StudentOtpPending | null;
-  
   login: (credentials: any) => Promise<void>;
-  verifyStudentOtp: (code: string) => Promise<void>;
-  cancelStudentOtp: () => void;
   register: (data: any) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
@@ -35,7 +25,6 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   isLoading: false,
   isAuthChecking: true, // Start as true to prevent flash
   error: null,
-  studentOtpPending: null,
 
   login: async (credentials) => {
     // A new sign-in attempt must never inherit an earlier user session. In
@@ -44,7 +33,6 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     set({
       isLoading: true,
       error: null,
-      studentOtpPending: null,
       user: null,
       token: null,
       isAuthenticated: false,
@@ -53,20 +41,6 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
     try {
        const response = await api.post<any>('/auth/login', credentials);
       const responseData = response.data.data;
-
-      if (responseData.requiresEmailOtp) {
-        set({
-          isLoading: false,
-          isAuthenticated: false,
-          isAuthChecking: false,
-          studentOtpPending: {
-            tempToken: responseData.tempToken,
-            userName: responseData.userName,
-            email: responseData.email,
-          },
-        });
-        return;
-      }
 
       // A slow initial /auth/me check can still be in flight when a user signs
       // in. Mark the new session as settled immediately so that stale check
@@ -77,33 +51,6 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       set({ error: message, isLoading: false });
       throw error;
     }
-  },
-
-  verifyStudentOtp: async (code: string) => {
-    const pending = _get().studentOtpPending;
-    if (!pending) throw new Error('No email verification pending');
-
-    set({ isLoading: true, error: null });
-    try {
-      const response = await api.post<any>('/auth/verify-student-otp', {
-        tempToken: pending.tempToken,
-        code,
-      }, {
-        timeout: 15000,
-      });
-      const { user } = response.data.data;
-      set({ user, token: null, isAuthenticated: true, isLoading: false, isAuthChecking: false, studentOtpPending: null, error: null });
-    } catch (error: any) {
-      const message = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT'
-        ? 'Email verification took too long. Please check your connection and try again.'
-        : error.response?.data?.message || error.response?.data?.error?.message || 'Email verification failed. Please try again.';
-      set({ error: message, isLoading: false });
-      throw error;
-    }
-  },
-
-  cancelStudentOtp: () => {
-    set({ studentOtpPending: null, error: null });
   },
 
   register: async (data) => {
@@ -168,10 +115,6 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       // A student has just passed password validation and is awaiting camera
       // verification. Ignore any older cookie-session response so it cannot
       // bypass the face-verification screen.
-      if (_get().studentOtpPending) {
-        set({ isAuthChecking: false });
-        return;
-      }
       set({ user: response.data.data, isAuthenticated: true, isAuthChecking: false });
     } catch (error) {
       // Do not let an older failed checkAuth request overwrite a session that

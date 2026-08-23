@@ -8,7 +8,6 @@ import { CameraIcon, XMarkIcon } from '@heroicons/react/24/outline';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg'];
 const STUDENT_EMAIL_DOMAIN = '@nutech.edu.pk';
-const DEMO_STUDENT_EMAIL = 'muhammadayantoorie@gmail.com';
 
 const RegisterPage = () => {
   const { register: registerUser, isLoading } = useAuthStore();
@@ -133,7 +132,7 @@ const RegisterPage = () => {
                     value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                     message: 'Invalid email address'
                   },
-                  validate: (value) => role !== 'student' || String(value).toLowerCase().trim().endsWith(STUDENT_EMAIL_DOMAIN) || String(value).toLowerCase().trim() === DEMO_STUDENT_EMAIL
+                  validate: (value) => role !== 'student' || String(value).toLowerCase().trim().endsWith(STUDENT_EMAIL_DOMAIN)
                     || 'Students must use a valid @nutech.edu.pk university email address'
                 })}
               />
