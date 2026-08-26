@@ -93,6 +93,50 @@ const TeacherOverview = () => {
       toast.success('Marks exported successfully!');
     } catch (error: any) {
       console.error('Export failed:', error);
+
+      // Keep exporting available if a deployment still serves an older
+      // analytics route. The submissions endpoint contains the same completed
+      // marks and is already used by the teacher submissions screen.
+      try {
+        const fallbackResponse = await api.get('/quizzes/teacher/submissions');
+        const submissions = fallbackResponse.data?.data || [];
+
+        if (submissions.length === 0) {
+          toast('No completed student quizzes to export yet.');
+          return;
+        }
+
+        const escapeField = (value: unknown) => {
+          const field = String(value ?? '');
+          return /[",\n]/.test(field) ? `"${field.replace(/"/g, '""')}"` : field;
+        };
+        const rows = submissions.map((submission: any) => [
+          escapeField(submission.studentName),
+          escapeField(submission.studentEmail),
+          escapeField(submission.quizTitle),
+          escapeField(submission.score),
+          escapeField(submission.maxScore),
+          escapeField(submission.percentage),
+          escapeField(submission.completedAt ? new Date(submission.completedAt).toISOString().split('T')[0] : 'N/A'),
+        ].join(','));
+        const fallbackCsv = [[
+          'Student Name', 'Student Email', 'Quiz / Test Name', 'Marks Obtained',
+          'Total Marks', 'Percentage (%)', 'Submitted Date',
+        ].join(','), ...rows].join('\n');
+        const fallbackUrl = window.URL.createObjectURL(new Blob([`\uFEFF${fallbackCsv}`], { type: 'text/csv;charset=utf-8' }));
+        const fallbackLink = document.createElement('a');
+        fallbackLink.href = fallbackUrl;
+        fallbackLink.setAttribute('download', `student_marks_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(fallbackLink);
+        fallbackLink.click();
+        fallbackLink.remove();
+        window.setTimeout(() => window.URL.revokeObjectURL(fallbackUrl), 1000);
+        toast.success('Marks exported successfully!');
+        return;
+      } catch (fallbackError) {
+        console.error('Submission export fallback failed:', fallbackError);
+      }
+
       let message = 'Failed to export marks. Please try again.';
       const errorBlob = error.response?.data;
 
