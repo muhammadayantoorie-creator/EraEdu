@@ -37,7 +37,8 @@ function isMissingColumnError(err: any, column: string): boolean {
     err.code === '42703' ||
     haystack.includes(`column "${column}"`) ||
     haystack.includes(`'${column}' column`) ||
-    haystack.includes(`column ${column} does not exist`)
+    haystack.includes(`column ${column} does not exist`) ||
+    haystack.includes(`could not find the '${column}'`)
   );
 }
 
@@ -259,6 +260,15 @@ export const quizService = {
         .insert([baseInsert])
         .select()
         .single();
+    }
+
+    // Course scoping and the violation limit are required to preserve the
+    // student-access and integrity rules, so tell the owner exactly which
+    // safe migration is needed instead of returning an opaque server error.
+    if (insertResult.error && (isMissingColumnError(insertResult.error, 'course_id') || isMissingColumnError(insertResult.error, 'violation_limit'))) {
+      const err: any = new Error('Quiz setup is incomplete. Run migration 016_complete_teacher_quiz_schema.sql in Supabase, then try again.');
+      err.statusCode = 400;
+      throw err;
     }
 
     const { data: quiz, error } = insertResult;
