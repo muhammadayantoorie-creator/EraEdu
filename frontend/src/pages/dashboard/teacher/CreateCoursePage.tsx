@@ -62,9 +62,8 @@ const CreateCoursePage = () => {
       const status = error.response?.status;
       const message = errorData?.message || errorData?.error?.message || errorData?.error || 'Failed to create course';
       
-      // Show detailed error
-      alert(`Error ${status}: ${message}\n\nFull error: ${JSON.stringify(errorData, null, 2)}`);
-      toast.error(message);
+      console.error('Course creation failed:', { status, errorData });
+      toast.error(status === 500 ? 'Unable to create the course right now. Please try again shortly.' : message);
     } finally {
       setLoading(false);
     }

@@ -211,7 +211,7 @@ export const courseService = {
       if (Number.isFinite(n) && n > 0) insertData.max_students = Math.floor(n);
     }
 
-    let insertResult = await supabase
+    let insertResult: any = await supabase
       .from('courses')
       .insert([insertData])
       .select()
@@ -227,13 +227,25 @@ export const courseService = {
         .single();
     }
 
+    // Databases created before course codes existed can still create courses.
+    // Migration 015 adds this optional field back for join-by-code support.
+    if (insertResult.error && isMissingColumnError(insertResult.error, 'course_code')) {
+      console.warn('courses.course_code is missing; creating the course without a join code.');
+      const { course_code, max_students, ...fallback } = insertData;
+      insertResult = await supabase
+        .from('courses')
+        .insert([fallback])
+        .select()
+        .single();
+    }
+
     const { data: course, error } = insertResult;
     if (error) {
       console.error('Supabase error creating course:', error);
       throw new Error(error.message);
     }
 
-    return { ...course, _id: course.id, createdBy: course.created_by, courseCode: course.course_code };
+    return { ...course, _id: course.id, createdBy: course.created_by, courseCode: course.course_code || null };
   },
 
   async updateCourse(teacherId: string, courseId: string, courseData: any) {
