@@ -101,7 +101,7 @@ const StudentOverview = () => {
   return (
     <div className="student-teal mx-auto max-w-7xl space-y-8">
       {/* HERO */}
-      <section className="relative overflow-hidden rounded-[2rem] bg-primary-900/10 p-1.5 ring-1 ring-primary-700/15">
+      <section className="relative overflow-hidden rounded-[2rem] bg-primary-100/70 p-1.5 ring-1 ring-primary-200/70">
         <div
           className="
             relative overflow-hidden rounded-[calc(2rem-0.375rem)] bg-gradient-to-br from-primary-950 via-primary-900 to-teal-800
@@ -110,7 +110,7 @@ const StudentOverview = () => {
           "
           style={{
             backgroundImage:
-              'radial-gradient(60% 80% at 100% 0%, rgba(16,185,129,0.18) 0%, transparent 55%), radial-gradient(50% 60% at 0% 100%, rgba(124,58,237,0.10) 0%, transparent 55%)',
+              'radial-gradient(60% 80% at 0% 0%, rgba(167,243,208,0.24) 0%, transparent 55%), radial-gradient(50% 60% at 100% 100%, rgba(103,232,249,0.20) 0%, transparent 55%), linear-gradient(135deg, #065F46 0%, #047857 52%, #0F766E 100%)',
           }}
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
