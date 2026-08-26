@@ -1,9 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import { ClockIcon, CheckCircleIcon, ExclamationTriangleIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
-import FaceDetectionCamera from '../../components/shared/FaceDetectionCamera';
+
+// Face models are large. Load them only for quizzes where monitoring is on,
+// so normal quizzes become ready without downloading ML code.
+const FaceDetectionCamera = lazy(() => import('../../components/shared/FaceDetectionCamera'));
 
 interface Question {
   _id: string;
@@ -619,11 +622,15 @@ const QuizTakePage = () => {
       )}
 
       {/* Face Detection Camera — only when the teacher enabled monitoring for this quiz */}
-      <FaceDetectionCamera
-        enabled={!!quizData && quizData.quiz.cameraMonitoring !== false}
-        onViolation={handleFaceViolation}
-        onAutoSubmit={handleFaceAutoSubmit}
-      />
+      {quizData?.quiz.cameraMonitoring !== false && (
+        <Suspense fallback={null}>
+          <FaceDetectionCamera
+            enabled
+            onViolation={handleFaceViolation}
+            onAutoSubmit={handleFaceAutoSubmit}
+          />
+        </Suspense>
+      )}
 
       {/* Violation Warning Banner */}
       {showWarning && (
