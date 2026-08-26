@@ -124,6 +124,11 @@ const JoinQuizPage = () => {
   };
 
   const handleStartQuiz = () => {
+    if (quizDetails?.quiz?.alreadySubmitted) {
+      toast.error('You have already submitted this quiz. Each student has one attempt.');
+      return;
+    }
+
     if (isExpired) {
       toast.error('This quiz has expired and is no longer accessible.');
       return;
@@ -315,7 +320,21 @@ const JoinQuizPage = () => {
               )}
             </div>
 
-            {isExpired && (
+            {quizDetails.quiz?.alreadySubmitted ? (
+              <div className="rounded-lg border border-primary-200 bg-primary-50 p-5 text-center">
+                <ExclamationCircleIcon className="mx-auto mb-2 h-12 w-12 text-primary-600" />
+                <p className="text-lg font-semibold text-primary-900">Quiz already submitted</p>
+                <p className="mt-1 text-sm text-primary-700">You have completed your one allowed attempt for this quiz.</p>
+                {quizDetails.quiz?.completedAttemptId && (
+                  <button
+                    onClick={() => navigate(`/quiz/teacher-results/${quizDetails.quiz.completedAttemptId}`)}
+                    className="mt-4 rounded-xl bg-primary-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-800"
+                  >
+                    View submission
+                  </button>
+                )}
+              </div>
+            ) : isExpired && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
                 <ExclamationCircleIcon className="h-12 w-12 text-red-500 mx-auto mb-2" />
                 <p className="text-lg font-semibold text-red-700">Quiz Has Expired</p>
@@ -330,21 +349,21 @@ const JoinQuizPage = () => {
               </div>
             )}
 
-            {!isExpired && !canStart && timeUntilStart && (
+            {!quizDetails.quiz?.alreadySubmitted && !isExpired && !canStart && timeUntilStart && (
               <div className="bg-primary-50 rounded-lg p-4 text-center">
                 <p className="text-sm text-primary-800 mb-2">Quiz starts in:</p>
                 <p className="text-3xl font-bold text-primary-700">{timeUntilStart}</p>
               </div>
             )}
 
-            <div className="bg-yellow-50 rounded-lg p-4">
+            {!quizDetails.quiz?.alreadySubmitted && <div className="bg-yellow-50 rounded-lg p-4">
               <p className="text-sm text-yellow-700">
                 <strong>Important:</strong> Once you start the quiz, the timer will begin. 
                 Do not switch tabs or windows during the quiz.
               </p>
-            </div>
+            </div>}
 
-            <div className="flex gap-3">
+            {!quizDetails.quiz?.alreadySubmitted && <div className="flex gap-3">
               <button
                 onClick={handleTryAnother}
                 disabled={starting}
@@ -374,7 +393,7 @@ const JoinQuizPage = () => {
                   'Start Quiz'
                 )}
               </button>
-            </div>
+            </div>}
           </div>
         )}
       </div>

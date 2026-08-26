@@ -443,6 +443,24 @@ export const quizService = {
       throw new Error('This quiz is no longer accepting attempts.');
     }
 
+    // One submitted attempt per student. This is enforced on the server so a
+    // student cannot bypass the user interface by reusing the quiz code.
+    const { data: completedAttempt, error: completedAttemptError } = await supabase
+      .from('quiz_attempts')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('quiz_id', quiz.id)
+      .eq('status', 'completed')
+      .maybeSingle();
+
+    if (completedAttemptError) throw new Error(completedAttemptError.message);
+    if (completedAttempt) {
+      throw Object.assign(
+        new Error('You have already submitted this quiz. Each student has one attempt.'),
+        { statusCode: 409 },
+      );
+    }
+
     // Reuse an existing in-progress attempt instead of spawning duplicates.
     // This also prevents a student from racing two concurrent attempts to
     // submit different answer sets.

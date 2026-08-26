@@ -89,6 +89,21 @@ export const quizCodeService = {
       }
     }
 
+    // Let the join screen clearly show a completed submission instead of
+    // offering a second attempt. startQuizByCode enforces this again.
+    let completedAttemptId: string | null = null;
+    if (userId && userRole === 'student') {
+      const { data: completedAttempt, error: attemptError } = await supabase
+        .from('quiz_attempts')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('quiz_id', quiz.id)
+        .eq('status', 'completed')
+        .maybeSingle();
+      if (attemptError) throw new Error(attemptError.message);
+      completedAttemptId = completedAttempt?.id || null;
+    }
+
     let courseTitle = 'General';
     if (quiz.course_id) {
       const { data: course } = await supabase
@@ -123,6 +138,8 @@ export const quizCodeService = {
         cameraMonitoring: quiz.camera_monitoring !== false,
         expiresAt,
         isExpired,
+        alreadySubmitted: Boolean(completedAttemptId),
+        completedAttemptId,
       },
       code: quiz.access_code
     };
