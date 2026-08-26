@@ -169,7 +169,7 @@ const QuizTakePage = () => {
         const limit = response.data.data.violationLimit;
         sessionStorage.removeItem('currentQuiz');
         toast.error(`Quiz automatically submitted after reaching the ${limit}-violation limit.`, { duration: 5000 });
-        navigate(`/quiz/results/${attemptId}`);
+        navigate(`/quiz/teacher-results/${attemptId}`);
       } else if (response.data?.data?.remainingViolations !== undefined) {
         const remaining = response.data.data.remainingViolations;
         toast.error(`${remaining} violation${remaining === 1 ? '' : 's'} remaining before automatic submission.`, { duration: 3000 });
@@ -224,7 +224,7 @@ const QuizTakePage = () => {
       // Even if submit fails, navigate to results — attempt is flagged in-progress
     }
     sessionStorage.removeItem('currentQuiz');
-    navigate(`/quiz/results/${attemptId}`);
+    navigate(`/quiz/teacher-results/${attemptId}`);
   }, [attemptId, navigate, quizData, selectedAnswers]);
 
   // -----------------------------------------------------------------------
@@ -458,7 +458,7 @@ const QuizTakePage = () => {
           toast.success('Quiz session recovered. Continue where you left off.');
         } else {
           toast.error('This quiz session has already ended.');
-          navigate(`/quiz/results/${attemptId}`);
+          navigate(`/quiz/teacher-results/${attemptId}`);
         }
       })
       .catch(() => {
@@ -575,7 +575,7 @@ const QuizTakePage = () => {
 
       sessionStorage.removeItem('currentQuiz');
       toast.success('Quiz submitted successfully!');
-      navigate(`/quiz/results/${attemptId}`);
+      navigate(`/quiz/teacher-results/${attemptId}`);
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message ||
