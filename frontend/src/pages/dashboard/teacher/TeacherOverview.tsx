@@ -73,26 +73,42 @@ const TeacherOverview = () => {
     setExporting(true);
     try {
       const response = await api.get('/analytics/teacher/export-marks', { responseType: 'blob' });
-      const blob = new Blob([response.data], { type: 'text/csv' });
+      const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8' });
       const text = await blob.text();
       const lines = text.trim().split('\n');
       if (lines.length <= 1) {
-        toast('No student marks data to export yet.', { icon: 'ℹ️' });
-        setExporting(false);
+        toast('No completed student quizzes to export yet.');
         return;
       }
-      const url = window.URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      // The UTF-8 marker keeps names readable when the file is opened in Excel.
+      const url = window.URL.createObjectURL(new Blob([`\uFEFF${text}`], { type: 'text/csv;charset=utf-8' }));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `student_marks_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
+      // Some browsers cancel a download if its URL is revoked immediately.
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       toast.success('Marks exported successfully!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Export failed:', error);
-      toast.error('Failed to export marks. Please try again.');
+      let message = 'Failed to export marks. Please try again.';
+      const errorBlob = error.response?.data;
+
+      // Axios returns error responses as Blobs when responseType is "blob".
+      if (errorBlob instanceof Blob) {
+        try {
+          const payload = JSON.parse(await errorBlob.text());
+          message = payload?.message || payload?.error?.message || message;
+        } catch {
+          // Keep the safe fallback message when the response is not JSON.
+        }
+      } else {
+        message = error.response?.data?.message || error.response?.data?.error?.message || message;
+      }
+
+      toast.error(message);
     } finally {
       setExporting(false);
     }

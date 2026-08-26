@@ -10,15 +10,17 @@ export const exportMarksCSV = asyncHandler(async (req: Request, res: Response) =
   if (rows.length === 0) {
     // Return a CSV with headers only
     const emptyCSV = exportService.generateCSV([]);
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="student_marks.csv"');
+    res.setHeader('Cache-Control', 'no-store');
     res.status(200).send(emptyCSV);
     return;
   }
 
   const csv = exportService.generateCSV(rows);
 
-  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="student_marks.csv"');
+  res.setHeader('Cache-Control', 'no-store');
   res.status(200).send(csv);
 });
