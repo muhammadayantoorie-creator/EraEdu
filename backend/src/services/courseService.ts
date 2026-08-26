@@ -4,7 +4,13 @@ import { emailService } from './emailService';
 function isMissingColumnError(err: any, column: string): boolean {
   if (!err) return false;
   const haystack = `${err.message || ''} ${err.details || ''}`.toLowerCase();
-  return err.code === '42703' || haystack.includes(`column "${column}"`) || haystack.includes(`column ${column} does not exist`);
+  return err.code === '42703'
+    || haystack.includes(`column "${column}"`)
+    || haystack.includes(`column ${column} does not exist`)
+    // Supabase/PostgREST schema-cache errors use this wording and code
+    // PGRST204 instead of PostgreSQL's normal 42703 code.
+    || haystack.includes(`'${column}' column`)
+    || haystack.includes(`could not find the '${column}'`);
 }
 
 // Throws 400 when an enrollment would exceed the teacher-defined cap.
