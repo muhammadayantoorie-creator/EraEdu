@@ -77,7 +77,7 @@ export const emailService = {
     }
 
     try {
-      const data = await getResend().emails.send({
+      const { data, error } = await getResend().emails.send({
         from: config.emailFrom,
         to: [email],
         subject: 'Reset your EraEdu password',
@@ -98,6 +98,14 @@ export const emailService = {
           </div>
         `,
       });
+
+      // The Resend SDK reports many delivery failures in its `error` result
+      // instead of rejecting the promise. Do not claim the reset link was
+      // sent when the provider rejected it.
+      if (error) {
+        console.error('Password reset email rejected by Resend:', error);
+        throw Object.assign(new Error('Unable to send the password reset email. Please try again later.'), { statusCode: 503 });
+      }
 
       return data;
     } catch (error) {
