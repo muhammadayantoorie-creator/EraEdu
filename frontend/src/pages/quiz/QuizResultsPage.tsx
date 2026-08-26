@@ -31,7 +31,9 @@ const QuizResultsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-primary-50/60 px-4 py-12 sm:px-6 lg:px-8">
-      {!reviewPending && <PostQuizFeedbackModal attemptId={attemptId} />}
+      {/* Students can rate their EraEdu quiz experience immediately after
+          submission, even while a teacher's grade is still pending. */}
+      <PostQuizFeedbackModal attemptId={attemptId} />
       <div className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-primary-900/10 bg-white shadow-soft">
         <div className="bg-gradient-to-br from-primary-800 via-primary-700 to-teal-700 px-6 py-9 text-center text-white sm:px-10">
           <CheckCircleIcon className="mx-auto h-12 w-12 text-primary-200" />
