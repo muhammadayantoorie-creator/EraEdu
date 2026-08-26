@@ -851,13 +851,37 @@ export const quizService = {
     // Atomic guard: only the first concurrent submit succeeds. The
     // `.eq('status', 'in-progress')` filter prevents a double-submit from
     // overwriting the original score with a second answer set.
-    const { data: updatedRows, error: updateError } = await supabase
+    let updateResult = await supabase
       .from('quiz_attempts')
       .update(updateData)
       .eq('id', attemptId)
       .eq('status', 'in-progress')
       .select('id');
 
+    // Earlier EraEdu databases may not yet have the optional violation or
+    // auto-submit columns. Do not lose the student's completed submission
+    // because only optional monitoring metadata cannot be stored.
+    const missingOptionalSubmissionColumn = (error: any) => {
+      const message = String(error?.message || '').toLowerCase();
+      return ['violations', 'violation_count', 'auto_submitted', 'submission_reason']
+        .some((column) => message.includes(column) && (message.includes('column') || message.includes('schema cache')));
+    };
+    if (updateResult.error && missingOptionalSubmissionColumn(updateResult.error)) {
+      console.warn('Optional quiz-attempt monitoring columns are unavailable; saving submission without them.');
+      updateResult = await supabase
+        .from('quiz_attempts')
+        .update({
+          status: 'completed',
+          completed_at: new Date(),
+          score,
+          answers,
+        })
+        .eq('id', attemptId)
+        .eq('status', 'in-progress')
+        .select('id');
+    }
+
+    const { data: updatedRows, error: updateError } = updateResult;
     if (updateError) throw new Error(updateError.message);
     if (!updatedRows || updatedRows.length === 0) {
       throw new Error('Quiz already submitted');
