@@ -62,6 +62,9 @@ const TeacherQuizzes = () => {
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [quizPendingOpen, setQuizPendingOpen] = useState<Quiz | null>(null);
   const [formMode, setFormMode] = useState<'quiz' | 'question'>('quiz');
+  const [creatingCourse, setCreatingCourse] = useState(false);
+  const [newCourseTitle, setNewCourseTitle] = useState('');
+  const [creatingCourseLoading, setCreatingCourseLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -113,6 +116,35 @@ const TeacherQuizzes = () => {
     } catch (error) {
       console.error('Error fetching teacher courses:', error);
       setTeacherCourses([]);
+    }
+  };
+
+  const createCourseInline = async () => {
+    const title = newCourseTitle.trim();
+    if (!title) {
+      toast.error('Enter a course name first');
+      return;
+    }
+    setCreatingCourseLoading(true);
+    try {
+      const response = await api.post('/courses', {
+        title,
+        description: `Learn ${title}`,
+        category: 'Other',
+        difficulty: 'Beginner',
+        maxStudents: null,
+      });
+      const course = response.data.data;
+      const entry = { _id: course._id || course.id, title: course.title };
+      setTeacherCourses((previous) => [...previous, entry]);
+      setFormData((previous) => ({ ...previous, courseId: entry._id }));
+      setNewCourseTitle('');
+      setCreatingCourse(false);
+      toast.success('Course created and selected');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || error.response?.data?.error?.message || 'Unable to create the course');
+    } finally {
+      setCreatingCourseLoading(false);
     }
   };
 
@@ -555,12 +587,16 @@ const TeacherQuizzes = () => {
                         required
                       >
                         <option value="">Select a course</option>
-                        {teacherCourses.map((course) => (
-                          <option key={course._id} value={course._id}>
-                            {course.title}
-                          </option>
-                        ))}
+                       {teacherCourses.map((course) => (
+                         <option key={course._id} value={course._id}>
+                           {course.title}
+                         </option>
+                       ))}
                       </select>
+                      <button type="button" onClick={() => setCreatingCourse((value) => !value)} className="mt-2 text-xs font-semibold text-primary-700 hover:text-primary-800">
+                        {creatingCourse ? 'Cancel new course' : '+ Create a course manually'}
+                      </button>
+                      {creatingCourse && <div className="mt-2 flex gap-2"><input value={newCourseTitle} onChange={(event) => setNewCourseTitle(event.target.value)} placeholder="New course name" className="min-w-0 flex-1 rounded-lg border border-primary-200 px-3 py-2 text-sm focus:border-primary-500 focus:ring-primary-500" /><button type="button" onClick={createCourseInline} disabled={creatingCourseLoading} className="rounded-lg bg-primary-700 px-3 py-2 text-xs font-semibold text-white hover:bg-primary-800 disabled:opacity-60">{creatingCourseLoading ? 'Creating…' : 'Create'}</button></div>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Total Time (minutes)</label>
