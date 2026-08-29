@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="eraedu-gradient" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10B981"/>
+      <stop offset="1" stop-color="#0E7490"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="17" fill="url(#eraedu-gradient)"/>
+  <path d="M17 21.5C22.6 19.3 28.5 20.3 32 24.2C35.5 20.3 41.4 19.3 47 21.5V42.5C41.3 40.6 35.7 41.4 32 45C28.3 41.4 22.7 40.6 17 42.5V21.5Z" stroke="white" stroke-width="3.4" stroke-linejoin="round"/>
+  <path d="M32 24.5V43.5M23 29H28M23 34H28M36 29H41M36 34H41" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="49" cy="15" r="6" fill="#A5F3FC"/>
+  <path d="M49 11.8V18.2M45.8 15H52.2" stroke="#0F766E" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

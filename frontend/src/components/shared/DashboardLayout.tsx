@@ -138,6 +138,12 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
             'radial-gradient(60% 40% at 80% 0%, rgba(16,185,129,0.06) 0%, transparent 60%), radial-gradient(40% 30% at 0% 100%, rgba(6,182,212,0.05) 0%, transparent 60%)',
         }}
       />
+      <img
+        src="/dashboard-open-book.png"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none fixed -right-20 top-20 z-0 hidden w-[30rem] select-none opacity-[0.10] blur-[0.2px] lg:block xl:w-[36rem]"
+      />
 
       <RoleSidebar
         items={sidebarItems}
