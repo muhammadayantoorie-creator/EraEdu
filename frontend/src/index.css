@@ -248,6 +248,12 @@
     background-color: rgba(255, 255, 255, 0.96) !important;
     border-color: rgba(4, 120, 87, 0.2) !important;
   }
+  .dashboard-teal .quiz-opening-title {
+    color: #064E3B !important;
+  }
+  .dashboard-teal .quiz-opening-subtitle {
+    color: #3F6B5D !important;
+  }
   .dashboard-teal .quiz-secondary-action {
     color: #064E3B !important;
     background-color: #FFFFFF !important;
@@ -261,6 +267,7 @@
   }
   .dashboard-teal .quiz-primary-action:disabled {
     color: #FFFFFF !important;
+    -webkit-text-fill-color: #FFFFFF;
     background: #64748B !important;
   }
   /* ───── Reveal-on-scroll ───── */

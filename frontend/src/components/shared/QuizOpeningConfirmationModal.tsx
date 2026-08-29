@@ -187,8 +187,8 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-300">{isPreparing ? 'Secure launch' : showFinalConfirmation ? 'Final checkpoint' : 'Pre-launch review'}</p>
-                  <h2 id="quiz-preview-title" className="mt-1 text-xl font-bold text-slate-950 sm:text-2xl dark:text-white">{isPreparing ? 'Preparing Quiz...' : showFinalConfirmation ? 'Final Confirmation' : 'Quiz Preview'}</h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{isPreparing ? 'Please wait while EraEdu completes its launch checks.' : showFinalConfirmation ? 'You are about to open this quiz.' : 'Review the assessment before opening it.'}</p>
+                  <h2 id="quiz-preview-title" className="quiz-opening-title mt-1 text-xl font-bold text-slate-950 sm:text-2xl dark:text-white">{isPreparing ? 'Preparing Quiz...' : showFinalConfirmation ? 'Final Confirmation' : 'Quiz Preview'}</h2>
+                  <p className="quiz-opening-subtitle mt-1 text-sm text-slate-500 dark:text-slate-400">{isPreparing ? 'Please wait while EraEdu completes its launch checks.' : showFinalConfirmation ? 'You are about to open this quiz.' : 'Review the assessment before opening it.'}</p>
                 </div>
               </div>
               <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close dialog" className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:hover:bg-white/10 dark:hover:text-white">
