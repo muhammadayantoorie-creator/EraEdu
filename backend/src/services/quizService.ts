@@ -342,6 +342,9 @@ export const quizService = {
       title: data.title,
       description: data.description || '',
       time_limit: data.timeLimit,
+      // Preserve a newly selected date/time and allow a teacher to clear an
+      // existing schedule by submitting null from the edit form.
+      scheduled_start: data.scheduledStart || null,
       questions: data.questions,
       updated_at: new Date(),
     };
@@ -382,6 +385,7 @@ export const quizService = {
       description: quiz.description,
       timeLimit: quiz.time_limit,
       questions: quiz.questions,
+      scheduledStart: quiz.scheduled_start,
       cameraMonitoring: quiz.camera_monitoring !== false,
       violationLimit: quiz.violation_limit ?? 3,
       createdAt: quiz.created_at,

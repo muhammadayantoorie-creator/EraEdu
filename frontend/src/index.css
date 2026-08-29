@@ -172,9 +172,13 @@
   .dashboard-teal .text-gray-400,
   .dashboard-teal .text-slate-500 { color: #5B776C !important; }
   .dashboard-teal [class*="text-indigo-"],
-  .dashboard-teal [class*="text-blue-"] { color: #047857 !important; }
+  .dashboard-teal [class*="text-blue-"],
+  .dashboard-teal [class*="text-purple-"],
+  .dashboard-teal [class*="text-violet-"] { color: #047857 !important; }
   .dashboard-teal [class*="bg-indigo-"],
-  .dashboard-teal [class*="bg-blue-"] { background-color: #ECFEF7 !important; }
+  .dashboard-teal [class*="bg-blue-"],
+  .dashboard-teal [class*="bg-purple-"],
+  .dashboard-teal [class*="bg-violet-"] { background-color: #ECFEF7 !important; }
   .dashboard-teal [class*="bg-gray-"],
   .dashboard-teal [class*="bg-slate-"] { background-color: #F3FBF7 !important; }
   .dashboard-teal [class*="bg-indigo-50"],
@@ -189,16 +193,54 @@
   .dashboard-teal [class*="bg-blue-600"] { background-color: #059669 !important; }
   .dashboard-teal [class*="bg-indigo-700"],
   .dashboard-teal [class*="bg-blue-700"] { background-color: #047857 !important; }
+  .dashboard-teal [class*="bg-purple-100"],
+  .dashboard-teal [class*="bg-violet-100"] { background-color: #D0FBE9 !important; }
+  .dashboard-teal [class*="bg-purple-500"],
+  .dashboard-teal [class*="bg-violet-500"] { background-color: #10B981 !important; }
+  .dashboard-teal [class*="bg-purple-600"],
+  .dashboard-teal [class*="bg-violet-600"] { background-color: #059669 !important; }
+  .dashboard-teal [class*="bg-purple-700"],
+  .dashboard-teal [class*="bg-violet-700"] { background-color: #047857 !important; }
   .dashboard-teal [class*="border-gray-"],
   .dashboard-teal [class*="border-slate-"] {
     border-color: rgba(4, 120, 87, 0.14) !important;
   }
   .dashboard-teal [class*="ring-indigo-"],
-  .dashboard-teal [class*="ring-blue-"] { --tw-ring-color: rgba(16, 185, 129, 0.5) !important; }
+  .dashboard-teal [class*="ring-blue-"],
+  .dashboard-teal [class*="ring-purple-"],
+  .dashboard-teal [class*="ring-violet-"] { --tw-ring-color: rgba(16, 185, 129, 0.5) !important; }
   .dashboard-teal [class*="focus:ring-indigo-"],
-  .dashboard-teal [class*="focus:ring-blue-"] { --tw-ring-color: #10B981 !important; }
+  .dashboard-teal [class*="focus:ring-blue-"],
+  .dashboard-teal [class*="focus:ring-purple-"],
+  .dashboard-teal [class*="focus:ring-violet-"] { --tw-ring-color: #10B981 !important; }
   .dashboard-teal [class*="focus:border-indigo-"],
-  .dashboard-teal [class*="focus:border-blue-"] { border-color: #10B981 !important; }
+  .dashboard-teal [class*="focus:border-blue-"],
+  .dashboard-teal [class*="focus:border-purple-"],
+  .dashboard-teal [class*="focus:border-violet-"] { border-color: #10B981 !important; }
+
+  /* Keep legacy dashboard cards visually aligned with the glass surfaces in
+     the newer student, teacher, and admin views. */
+  .dashboard-teal .bg-white {
+    background-color: rgba(255, 255, 255, 0.78) !important;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+  .dashboard-teal [class*="from-indigo-"],
+  .dashboard-teal [class*="from-purple-"],
+  .dashboard-teal [class*="from-violet-"] {
+    --tw-gradient-from: #059669 var(--tw-gradient-from-position) !important;
+    --tw-gradient-to: rgb(5 150 105 / 0) var(--tw-gradient-to-position) !important;
+  }
+  .dashboard-teal [class*="via-indigo-"],
+  .dashboard-teal [class*="via-purple-"],
+  .dashboard-teal [class*="via-violet-"] {
+    --tw-gradient-stops: var(--tw-gradient-from), #0F766E var(--tw-gradient-via-position), var(--tw-gradient-to) !important;
+  }
+  .dashboard-teal [class*="to-indigo-"],
+  .dashboard-teal [class*="to-purple-"],
+  .dashboard-teal [class*="to-violet-"] {
+    --tw-gradient-to: #0F766E var(--tw-gradient-to-position) !important;
+  }
   /* ───── Reveal-on-scroll ───── */
   .reveal {
     opacity: 0;

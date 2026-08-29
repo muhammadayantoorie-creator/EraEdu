@@ -36,13 +36,14 @@ export const getTeacherQuizzes = asyncHandler(async (req: Request, res: Response
 
 export const updateQuiz = asyncHandler(async (req: Request, res: Response) => {
   const { quizId } = req.params;
-  const { title, description, timeLimit, questions, cameraMonitoring, violationLimit } = req.body;
+  const { title, description, timeLimit, scheduledStart, questions, cameraMonitoring, violationLimit } = req.body;
   const teacherId = req.user!._id.toString();
 
   const quiz = await quizService.updateQuiz(quizId, teacherId, {
     title,
     description,
     timeLimit,
+    scheduledStart,
     questions,
     cameraMonitoring,
     violationLimit,

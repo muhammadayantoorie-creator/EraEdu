@@ -77,7 +77,7 @@ const StudentCourses = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
       </div>
     );
   }
@@ -95,7 +95,7 @@ const StudentCourses = () => {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowJoinModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
           >
             <PlusIcon className="h-5 w-5" />
             Join Course
@@ -105,7 +105,7 @@ const StudentCourses = () => {
       </header>
 
       {/* Join Course Card */}
-      <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl shadow-sm p-6 text-white">
+      <div className="bg-gradient-to-r from-primary-600 to-teal-600 rounded-xl shadow-sm p-6 text-white">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-white/20 rounded-lg backdrop-blur-sm">
@@ -113,12 +113,12 @@ const StudentCourses = () => {
             </div>
             <div>
               <h2 className="text-lg font-semibold">Join a New Course</h2>
-              <p className="text-indigo-100 text-sm mt-0.5">Enter the course code provided by your teacher to enroll</p>
+              <p className="text-primary-100 text-sm mt-0.5">Enter the course code provided by your teacher to enroll</p>
             </div>
           </div>
           <button
             onClick={() => setShowJoinModal(true)}
-            className="px-5 py-2.5 bg-white text-indigo-600 font-semibold rounded-lg hover:bg-indigo-50 transition-colors shadow-sm"
+            className="px-5 py-2.5 bg-white text-primary-700 font-semibold rounded-lg hover:bg-primary-50 transition-colors shadow-sm"
           >
             Enter Code
           </button>
@@ -135,7 +135,7 @@ const StudentCourses = () => {
               placeholder="Search enrolled courses..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ const StudentCourses = () => {
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value as 'all' | 'in-progress' | 'completed')}
-              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             >
               <option value="all">All Courses</option>
               <option value="in-progress">In Progress</option>
@@ -179,7 +179,7 @@ const StudentCourses = () => {
           </p>
           <button
             onClick={() => setShowJoinModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700"
           >
             <PlusIcon className="h-4 w-4" />
             Join with Code
@@ -200,8 +200,8 @@ const StudentCourses = () => {
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-100 rounded-lg">
-                  <AcademicCapIcon className="h-5 w-5 text-indigo-600" />
+                <div className="p-2 bg-primary-100 rounded-lg">
+                  <AcademicCapIcon className="h-5 w-5 text-primary-700" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">Join Course</h3>
               </div>
@@ -226,7 +226,7 @@ const StudentCourses = () => {
                   onChange={(e) => setCourseCode(e.target.value.toUpperCase().slice(0, 6))}
                   placeholder="e.g. AB3K7X"
                   maxLength={6}
-                  className="w-full px-4 py-3 text-center text-2xl font-mono font-bold tracking-[0.3em] border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-gray-300 placeholder:tracking-[0.3em] placeholder:text-lg uppercase"
+                  className="w-full px-4 py-3 text-center text-2xl font-mono font-bold tracking-[0.3em] border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 placeholder:text-gray-300 placeholder:tracking-[0.3em] placeholder:text-lg uppercase"
                   autoFocus
                   onKeyDown={(e) => { if (e.key === 'Enter' && courseCode.length === 6) handleJoinCourse(); }}
                 />
@@ -244,7 +244,7 @@ const StudentCourses = () => {
               <button
                 onClick={handleJoinCourse}
                 disabled={joining || courseCode.length < 6}
-                className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
+                className="px-6 py-2 bg-primary-600 text-white rounded-lg font-medium text-sm hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
               >
                 {joining ? (
                   <>

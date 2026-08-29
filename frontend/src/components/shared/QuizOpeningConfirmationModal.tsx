@@ -303,10 +303,10 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
                   </div>
                 </section>
 
-                <section id="quiz-preview-warning" className="rounded-2xl border border-amber-300/70 bg-amber-50/80 p-5 dark:border-amber-400/20 dark:bg-amber-400/[0.08]">
-                  <div className="flex items-center gap-3"><ShieldCheckIcon className="h-6 w-6 text-amber-600 dark:text-amber-400" /><h3 className="text-base font-bold text-amber-950 dark:text-amber-100">Before Opening</h3></div>
+                <section id="quiz-preview-warning" className="rounded-2xl border border-amber-300 bg-amber-50 p-5">
+                  <div className="flex items-center gap-3"><ShieldCheckIcon className="h-6 w-6 text-amber-700" /><h3 className="text-base font-bold text-amber-950">Before Opening</h3></div>
                   <ul className="mt-4 space-y-2.5">
-                    {warnings.map((warning) => <li key={warning} className="flex gap-2 text-sm leading-5 text-amber-950/80 dark:text-amber-100/80"><CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />{warning}</li>)}
+                    {warnings.map((warning) => <li key={warning} className="flex gap-2 text-sm leading-5 text-amber-950"><CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />{warning}</li>)}
                   </ul>
                 </section>
               </div>
