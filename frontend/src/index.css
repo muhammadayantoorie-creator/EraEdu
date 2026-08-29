@@ -241,6 +241,28 @@
   .dashboard-teal [class*="to-violet-"] {
     --tw-gradient-to: #0F766E var(--tw-gradient-to-position) !important;
   }
+
+  /* The launch-confirmation modal appears inside a dashboard but needs its
+     own contrast-safe actions, independent of the dashboard palette rules. */
+  .dashboard-teal .quiz-opening-footer {
+    background-color: rgba(255, 255, 255, 0.96) !important;
+    border-color: rgba(4, 120, 87, 0.2) !important;
+  }
+  .dashboard-teal .quiz-secondary-action {
+    color: #064E3B !important;
+    background-color: #FFFFFF !important;
+    border-color: #A4F4D3 !important;
+    opacity: 1 !important;
+  }
+  .dashboard-teal .quiz-primary-action {
+    color: #FFFFFF !important;
+    background: linear-gradient(135deg, #059669 0%, #0F766E 100%) !important;
+    opacity: 1 !important;
+  }
+  .dashboard-teal .quiz-primary-action:disabled {
+    color: #FFFFFF !important;
+    background: #64748B !important;
+  }
   /* ───── Reveal-on-scroll ───── */
   .reveal {
     opacity: 0;
