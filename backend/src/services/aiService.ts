@@ -116,15 +116,13 @@ export const aiService = {
       return "Unable to generate explanation at this time.";
     }
   },
-  async chatAssistant(messages: ChatMessage[]) {
+  async chatAssistant(messages: ChatMessage[], userRole: string = 'student') {
     const { genAI } = getGenAI();
 
-    const systemPrompt =
-      'You are the EraEdu assistant. Your job is to explain quiz rules, '
-      + 'anti-cheating policies, and help users navigate features like joining quizzes, '
-      + 'viewing reports/analytics, and moving through student and teacher pages. '
-      + 'Never provide help to cheat, bypass monitoring, or break rules. If asked, '
-      + 'refuse briefly and offer allowed guidance. Keep responses concise and helpful.';
+    const isTeacher = userRole === 'teacher' || userRole === 'admin';
+    const systemPrompt = isTeacher
+      ? 'You are the EraEdu Teacher Assistant. Provide complete, practical help for educators using EraEdu: creating and editing courses, topics, questions, and quizzes; setting dates, 12-hour AM/PM schedules, durations, security settings, grading, reviewing submissions, interpreting analytics, and navigating every teacher dashboard feature. You may offer teaching strategies, question-writing help, rubrics, and assessment design. Be clear and actionable. Do not claim to have performed an action, accessed private records, or changed data unless that information is supplied in the conversation. Never provide help to cheat, bypass monitoring, expose student data, or break rules; refuse those requests briefly and offer a safe alternative.'
+      : 'You are the EraEdu Student Assistant. Help students understand quiz rules, anti-cheating policies, joining quizzes, viewing their own reports, and navigating student features. Do not provide teacher-only authoring, grading, private student data, or administrative guidance. Never provide help to cheat, bypass monitoring, get answers, or break rules; refuse briefly and offer safe study or navigation guidance. Keep responses concise and helpful.';
 
     try {
       return await callWithFallback(async (modelName) => {

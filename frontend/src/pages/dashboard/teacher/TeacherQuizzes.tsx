@@ -53,6 +53,33 @@ interface QuestionItem {
   answerText?: string;
 }
 
+const emptySchedule = {
+  scheduledDate: '',
+  scheduledHour: '12',
+  scheduledMinute: '00',
+  scheduledPeriod: 'AM' as 'AM' | 'PM',
+};
+
+const scheduleToFields = (value?: string) => {
+  if (!value) return emptySchedule;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return emptySchedule;
+  const hours = date.getHours();
+  return {
+    scheduledDate: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+    scheduledHour: String(hours % 12 || 12),
+    scheduledMinute: String(date.getMinutes()).padStart(2, '0'),
+    scheduledPeriod: hours >= 12 ? 'PM' as const : 'AM' as const,
+  };
+};
+
+const scheduleToIso = (date: string, hour: string, minute: string, period: 'AM' | 'PM') => {
+  if (!date) return null;
+  const twelveHour = Number(hour);
+  const hour24 = (twelveHour % 12) + (period === 'PM' ? 12 : 0);
+  return new Date(`${date}T${String(hour24).padStart(2, '0')}:${minute}:00`).toISOString();
+};
+
 const TeacherQuizzes = () => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourse[]>([]);
@@ -70,7 +97,7 @@ const TeacherQuizzes = () => {
     description: '',
     courseId: '',
     timeLimit: 0,
-    scheduledStart: '',
+    ...emptySchedule,
     cameraMonitoring: true,
     violationLimit: 3,
     questionTitle: '',
@@ -148,14 +175,6 @@ const TeacherQuizzes = () => {
     }
   };
 
-  // Convert UTC date to local datetime-local format
-  const utcToLocal = (utcDate: string) => {
-    const date = new Date(utcDate);
-    const offset = date.getTimezoneOffset();
-    const localDate = new Date(date.getTime() - offset * 60000);
-    return localDate.toISOString().slice(0, 16);
-  };
-
   const handleOpenModal = (quiz?: Quiz) => {
     if (quiz) {
       setFormMode('quiz');
@@ -165,7 +184,7 @@ const TeacherQuizzes = () => {
         description: quiz.description,
         courseId: quiz.courseId || '',
         timeLimit: quiz.timeLimit || 0,
-        scheduledStart: quiz.scheduledStart ? utcToLocal(quiz.scheduledStart) : '',
+        ...scheduleToFields(quiz.scheduledStart),
         cameraMonitoring: quiz.cameraMonitoring !== false,
         violationLimit: quiz.violationLimit ?? 3,
         questionTitle: '',
@@ -186,7 +205,7 @@ const TeacherQuizzes = () => {
         description: '',
         courseId: '',
         timeLimit: 0,
-        scheduledStart: '',
+        ...emptySchedule,
         cameraMonitoring: true,
         violationLimit: 3,
         questionTitle: '',
@@ -321,12 +340,10 @@ const TeacherQuizzes = () => {
       return;
     }
 
-    // Convert local datetime to ISO string for proper timezone handling
+    // Convert the teacher's explicit 12-hour local time to the ISO value the API stores.
     const submitData = {
       ...formData,
-      scheduledStart: formData.scheduledStart && formData.scheduledStart.trim() !== ''
-        ? new Date(formData.scheduledStart).toISOString()
-        : null,
+      scheduledStart: scheduleToIso(formData.scheduledDate, formData.scheduledHour, formData.scheduledMinute, formData.scheduledPeriod),
       cameraMonitoring: formData.cameraMonitoring,
     };
 
@@ -548,7 +565,7 @@ const TeacherQuizzes = () => {
                       ...prev,
                       title: '',
                       description: '',
-                      scheduledStart: '',
+                      ...emptySchedule,
                       questionTitle: '',
                       questionScheduledStart: '',
                       questions: [prev.questions[0] || { text: '', options: ['', '', '', ''], correctAnswer: 0, difficulty: 'Medium', explanation: '', timeLimit: 60, answerText: '' }],
@@ -610,14 +627,27 @@ const TeacherQuizzes = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Scheduled Start Time (Optional)
                     </label>
-                    <input
-                      type="datetime-local"
-                      value={formData.scheduledStart}
-                      onChange={(e) => setFormData({ ...formData, scheduledStart: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                    />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1.5fr_0.7fr_0.7fr_0.7fr]">
+                      <input
+                        type="date"
+                        value={formData.scheduledDate}
+                        onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
+                        aria-label="Scheduled start date"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                      <select value={formData.scheduledHour} onChange={(e) => setFormData({ ...formData, scheduledHour: e.target.value })} aria-label="Scheduled start hour" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                        {Array.from({ length: 12 }, (_, index) => index + 1).map((hour) => <option key={hour} value={hour}>{hour}</option>)}
+                      </select>
+                      <select value={formData.scheduledMinute} onChange={(e) => setFormData({ ...formData, scheduledMinute: e.target.value })} aria-label="Scheduled start minute" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                        {Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, '0')).map((minute) => <option key={minute} value={minute}>:{minute}</option>)}
+                      </select>
+                      <select value={formData.scheduledPeriod} onChange={(e) => setFormData({ ...formData, scheduledPeriod: e.target.value as 'AM' | 'PM' })} aria-label="Scheduled start AM or PM" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                    </div>
                     <p className="mt-1 text-xs text-gray-500">
-                      If set, students cannot start the quiz before this time
+                      Choose a date to schedule the quiz. Time uses 1–12 with AM/PM.
                     </p>
                   </div>
 

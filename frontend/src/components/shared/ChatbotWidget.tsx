@@ -2,10 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FiMessageCircle, FiSend, FiX } from 'react-icons/fi';
 import api from '../../services/api';
 
-const initialTips = [
+const studentTips = [
   'Ask me about quiz rules and violations.',
   'I can guide you to reports, quizzes, and teacher pages.',
   'I will not help with cheating or bypassing rules.'
+];
+
+const teacherTips = [
+  'Ask me how to create, schedule, or update a quiz.',
+  'I can help with questions, marking, submissions, and analytics.',
+  'I can guide you through every teacher dashboard feature.'
 ];
 
 type ChatMessage = {
@@ -13,7 +19,12 @@ type ChatMessage = {
   content: string;
 };
 
-const ChatbotWidget = () => {
+interface ChatbotWidgetProps {
+  role: 'student' | 'teacher' | 'admin';
+}
+
+const ChatbotWidget = ({ role }: ChatbotWidgetProps) => {
+  const isTeacher = role === 'teacher' || role === 'admin';
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,13 +32,15 @@ const ChatbotWidget = () => {
     {
       role: 'assistant',
       content:
-        'Hi! I am the EraEdu assistant. I can explain rules, violations, and help you navigate quizzes, reports, and teacher pages.'
+        isTeacher
+          ? 'Hi! I am your EraEdu Teacher Assistant. I can help with quizzes, schedules, questions, courses, grading, reports, analytics, and every teacher dashboard feature.'
+          : 'Hi! I am the EraEdu Student Assistant. I can explain quiz rules, violations, and help you navigate your quizzes and reports.'
     }
   ]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const tips = useMemo(() => initialTips, []);
+  const tips = useMemo(() => isTeacher ? teacherTips : studentTips, [isTeacher]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -80,8 +93,8 @@ const ChatbotWidget = () => {
         <div className="mb-3 w-[22rem] max-w-[90vw] rounded-2xl border border-gray-200 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <div>
-              <p className="text-sm font-semibold text-gray-900">EraEdu Assistant</p>
-              <p className="text-xs text-gray-500">Rules, navigation, and safe guidance</p>
+              <p className="text-sm font-semibold text-gray-900">EraEdu {isTeacher ? 'Teacher' : 'Student'} Assistant</p>
+              <p className="text-xs text-gray-500">{isTeacher ? 'Teaching tools, assessment guidance, and navigation' : 'Rules, navigation, and safe guidance'}</p>
             </div>
             <button
               onClick={() => setIsOpen(false)}
@@ -131,7 +144,7 @@ const ChatbotWidget = () => {
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={handleKeyDown}
                 rows={2}
-                placeholder="Ask about rules or navigation..."
+                placeholder={isTeacher ? 'Ask about teaching or dashboard tools...' : 'Ask about rules or navigation...'}
                 className="flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
               />
               <button

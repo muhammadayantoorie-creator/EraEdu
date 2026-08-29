@@ -358,7 +358,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
         </main>
       </div>
 
-      <ChatbotWidget />
+      <ChatbotWidget role={role} />
     </div>
   );
 };

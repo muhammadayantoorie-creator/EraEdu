@@ -152,7 +152,8 @@ export const chatAssistant = asyncHandler(async (req: Request, res: Response) =>
     .slice(-10);
 
   try {
-    const reply = await aiService.chatAssistant(normalizedMessages as any);
+    // The role comes from the verified JWT, never from the browser payload.
+    const reply = await aiService.chatAssistant(normalizedMessages as any, req.user!.role);
 
     res.status(200).json({
       success: true,
