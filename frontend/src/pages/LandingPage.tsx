@@ -201,12 +201,7 @@ const Hero = () => (
       aria-hidden
       className="absolute left-1/2 top-32 -z-10 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary-300/30 blur-3xl animate-pulse-soft"
     />
-    <div aria-hidden="true" className="landing-hero-book">
-      <div className="landing-hero-book-shadow" />
-      <img src="/dashboard-open-book.png" alt="" />
-    </div>
-
-    <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl text-center">
         <span className="eyebrow eyebrow-light reveal">
           <span className="h-1.5 w-1.5 rounded-full bg-primary-500 animate-pulse" />
