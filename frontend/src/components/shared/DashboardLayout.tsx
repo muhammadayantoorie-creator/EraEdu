@@ -138,19 +138,13 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
             'radial-gradient(60% 40% at 80% 0%, rgba(16,185,129,0.06) 0%, transparent 60%), radial-gradient(40% 30% at 0% 100%, rgba(6,182,212,0.05) 0%, transparent 60%)',
         }}
       />
+      <div aria-hidden="true" className="dashboard-learning-flow" />
       <img
         src="/dashboard-open-book.png"
         alt=""
         aria-hidden="true"
         className="pointer-events-none fixed -right-20 top-20 z-0 hidden w-[30rem] select-none opacity-[0.10] blur-[0.2px] lg:block xl:w-[36rem]"
       />
-      <img
-        src="/pakistan-flag-watermark.svg"
-        alt=""
-        aria-hidden="true"
-        className="pointer-events-none fixed bottom-4 left-10 z-[1] w-64 -rotate-6 select-none opacity-[0.07] blur-[0.2px] sm:left-16 sm:w-80 lg:w-[26rem] xl:w-[30rem]"
-      />
-
       <RoleSidebar
         items={sidebarItems}
         isOpen={sidebarOpen}

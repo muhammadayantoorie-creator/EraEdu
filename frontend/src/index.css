@@ -271,6 +271,30 @@
     background: #64748B !important;
   }
   /* ───── Reveal-on-scroll ───── */
+  /* Global learning-flow watermark: abstract enough for every region, quiet
+     enough to preserve the focus and contrast of dashboard content. */
+  .dashboard-learning-flow {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.52;
+    background-image:
+      radial-gradient(circle at 12% 82%, rgba(20, 184, 166, 0.09) 0 2px, transparent 2.5px),
+      radial-gradient(circle at 78% 66%, rgba(5, 150, 105, 0.08) 0 2px, transparent 2.5px),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='960' height='580' viewBox='0 0 960 580' fill='none'%3E%3Cg stroke='%23059669' stroke-opacity='.12' stroke-width='1.2'%3E%3Cpath d='M-40 466C116 382 222 506 367 401S644 308 748 370s155-6 252-89'/%3E%3Cpath d='M12 168c140 40 188-99 335-24s195 153 346 54 188-37 291-73'/%3E%3Cpath d='M196 0c40 109 166 91 223 161s100 130 244 99 166 70 297 44'/%3E%3C/g%3E%3Cg fill='%2314B8A6' fill-opacity='.16'%3E%3Ccircle cx='115' cy='419' r='4'/%3E%3Ccircle cx='367' cy='401' r='5'/%3E%3Ccircle cx='748' cy='370' r='4'/%3E%3Ccircle cx='347' cy='144' r='4'/%3E%3Ccircle cx='693' cy='198' r='5'/%3E%3Ccircle cx='419' cy='161' r='4'/%3E%3C/g%3E%3C/svg%3E");
+    background-position: 0 0, 100% 100%, center;
+    background-repeat: no-repeat, no-repeat, repeat;
+    background-size: 18rem 18rem, 20rem 20rem, 960px 580px;
+  }
+
+  @media (max-width: 640px) {
+    .dashboard-learning-flow {
+      opacity: 0.36;
+      background-size: 14rem 14rem, 16rem 16rem, 720px 435px;
+    }
+  }
+
   .reveal {
     opacity: 0;
     transform: translateY(28px);
