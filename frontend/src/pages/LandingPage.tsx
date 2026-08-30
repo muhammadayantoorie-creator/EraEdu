@@ -393,7 +393,9 @@ const AnimatedQuoteBackground = () => {
   ];
 
   useEffect(() => {
-    const revealOnScroll = () => { if (window.scrollY > 180) setRevealed(true); };
+    const revealOnScroll = () => {
+      if (window.scrollY > Math.max(420, window.innerHeight * 0.65)) setRevealed(true);
+    };
     revealOnScroll();
     window.addEventListener('scroll', revealOnScroll, { passive: true });
     return () => window.removeEventListener('scroll', revealOnScroll);
