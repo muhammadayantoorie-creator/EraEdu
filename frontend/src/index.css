@@ -277,8 +277,9 @@
     pointer-events: none;
     position: fixed;
     inset: 0;
-    z-index: 0;
-    opacity: 0.52;
+    z-index: 1;
+    opacity: 0.72;
+    mix-blend-mode: multiply;
     background-image:
       radial-gradient(circle at 12% 82%, rgba(20, 184, 166, 0.09) 0 2px, transparent 2.5px),
       radial-gradient(circle at 78% 66%, rgba(5, 150, 105, 0.08) 0 2px, transparent 2.5px),
@@ -290,7 +291,7 @@
 
   @media (max-width: 640px) {
     .dashboard-learning-flow {
-      opacity: 0.36;
+      opacity: 0.52;
       background-size: 14rem 14rem, 16rem 16rem, 720px 435px;
     }
   }
