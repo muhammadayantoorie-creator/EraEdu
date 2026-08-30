@@ -995,6 +995,7 @@ const Testimonials = () => {
 };
 
 const FAQ = () => {
+  const [openQuestion, setOpenQuestion] = useState<number | null>(0);
   const questions = [
     ['What do the five free trials include?', 'Your institution can create up to five assessments on the free plan. The Institution plan unlocks unlimited assessment creation for its teachers.'],
     ['Is student camera footage stored?', 'EraEdu is designed for on-device face-presence checks. The product records configured integrity events for review, not a video recording of students.'],
@@ -1013,13 +1014,19 @@ const FAQ = () => {
         </div>
         <div className="mt-12 space-y-3">
           {questions.map(([question, answer], index) => (
-            <details key={question} className={`reveal reveal-delay-${Math.min(index + 1, 5)} group rounded-2xl bg-white/80 px-5 ring-1 ring-ink-900/5 transition-all open:shadow-[0_16px_35px_-30px_rgba(4,120,87,.5)]`}>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-left text-sm font-semibold text-ink-900 marker:content-none">
+            <div key={question} className={`reveal reveal-delay-${Math.min(index + 1, 5)} rounded-2xl bg-white/80 px-5 ring-1 ring-ink-900/5 transition-all ${openQuestion === index ? 'shadow-[0_16px_35px_-30px_rgba(4,120,87,.5)]' : ''}`}>
+              <button
+                type="button"
+                onClick={() => setOpenQuestion((current) => current === index ? null : index)}
+                className="flex w-full items-center justify-between gap-6 py-5 text-left text-sm font-semibold text-ink-900"
+                aria-expanded={openQuestion === index}
+                aria-controls={`faq-answer-${index}`}
+              >
                 {question}
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-lg font-normal text-primary-700 transition-transform duration-300 group-open:rotate-45">+</span>
-              </summary>
-              <p className="max-w-3xl pb-5 text-sm leading-relaxed text-ink-500">{answer}</p>
-            </details>
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-lg font-normal text-primary-700 transition-transform duration-300 ${openQuestion === index ? 'rotate-45' : ''}`}>+</span>
+              </button>
+              {openQuestion === index && <p id={`faq-answer-${index}`} className="max-w-3xl pb-5 text-sm leading-relaxed text-ink-500">{answer}</p>}
+            </div>
           ))}
         </div>
       </div>
