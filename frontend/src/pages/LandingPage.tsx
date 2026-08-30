@@ -384,6 +384,25 @@ const Hero = () => (
   </section>
 );
 
+/* A quiet brand moment between the hero and the product content. */
+const EducationQuote = () => (
+  <section className="landing-education-quote relative overflow-hidden py-10 sm:py-14" aria-label="EraEdu learning philosophy">
+    <div aria-hidden="true" className="landing-education-quote-glow" />
+    <figure className="reveal relative mx-auto max-w-5xl px-6 text-center sm:px-8">
+      <blockquote className="font-display text-[clamp(2rem,4.8vw,4.5rem)] leading-[1.04] tracking-tightest text-ink-900 text-balance">
+        <span aria-hidden="true" className="mr-2 align-top text-primary-400/70">“</span>
+        Better learning begins with <span className="landing-education-quote-accent">better tools.</span>
+        <span aria-hidden="true" className="ml-2 align-top text-primary-400/70">”</span>
+      </blockquote>
+      <figcaption className="mx-auto mt-5 flex items-center justify-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-400">
+        <span className="h-px w-8 bg-primary-300/70" />
+        EraEdu
+        <span className="h-px w-8 bg-primary-300/70" />
+      </figcaption>
+    </figure>
+  </section>
+);
+
 /* ───── SOCIAL PROOF marquee ───── */
 /* ───── FEATURE BENTO (Asymmetrical) ───── */
 const TrustByDesign = () => {
@@ -1073,6 +1092,7 @@ const LandingPage = () => {
       <NavIsland />
       <main id="main-content" tabIndex={-1}>
         <Hero />
+        <EducationQuote />
         <TrustByDesign />
         <FeaturesBento />
         <HowItWorks />
