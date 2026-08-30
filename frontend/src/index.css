@@ -289,6 +289,61 @@
     background-size: 18rem 18rem, 20rem 20rem, 960px 580px;
   }
 
+  /* The product's only animated 3D accent lives on the marketing hero, never
+     in assessment or workspace screens where motion could distract users. */
+  .landing-hero-book {
+    pointer-events: none;
+    position: absolute;
+    top: 11rem;
+    right: max(-7rem, calc((100vw - 90rem) / 2));
+    z-index: 1;
+    display: none;
+    width: min(34rem, 38vw);
+    transform: perspective(1100px) rotateY(-16deg) rotateX(7deg);
+    transform-style: preserve-3d;
+    animation: landing-book-float 9s ease-in-out infinite;
+  }
+
+  .landing-hero-book img {
+    position: relative;
+    z-index: 1;
+    display: block;
+    width: 100%;
+    filter: drop-shadow(0 32px 30px rgba(4, 120, 87, 0.17));
+  }
+
+  .landing-hero-book-shadow {
+    position: absolute;
+    right: 12%;
+    bottom: 4%;
+    left: 12%;
+    height: 11%;
+    border-radius: 999px;
+    background: rgba(4, 120, 87, 0.25);
+    filter: blur(18px);
+    transform: translateZ(-40px);
+    animation: landing-book-shadow 9s ease-in-out infinite;
+  }
+
+  @media (min-width: 1280px) {
+    .landing-hero-book { display: block; }
+  }
+
+  @keyframes landing-book-float {
+    0%, 100% { transform: perspective(1100px) rotateY(-16deg) rotateX(7deg) translate3d(0, 0, 0); }
+    50% { transform: perspective(1100px) rotateY(-11deg) rotateX(4deg) translate3d(-12px, -18px, 18px); }
+  }
+
+  @keyframes landing-book-shadow {
+    0%, 100% { opacity: 0.55; transform: translateZ(-40px) scale(0.96); }
+    50% { opacity: 0.28; transform: translateZ(-40px) scale(0.82); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .landing-hero-book,
+    .landing-hero-book-shadow { animation: none; }
+  }
+
   @media (max-width: 640px) {
     .dashboard-learning-flow {
       opacity: 0.52;
