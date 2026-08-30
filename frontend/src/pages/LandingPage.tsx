@@ -93,7 +93,7 @@ const NavIsland = () => {
       <header className="fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-6">
         <div
           className="
-            flex w-full max-w-3xl items-center gap-2 rounded-full p-1.5
+            flex w-full max-w-6xl items-center gap-2 rounded-full p-1.5
             bg-white/70 backdrop-blur-2xl ring-1 ring-ink-900/5
             shadow-[0_20px_60px_-30px_rgba(5,7,11,0.25)]
           "
@@ -102,13 +102,13 @@ const NavIsland = () => {
             <Brand to="/" />
           </div>
 
-          <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-1 px-2">
+          <nav aria-label="Primary navigation" className="hidden lg:flex items-center gap-1 px-2">
             {links.map((l) => (
               <a
                 key={l.href}
                 href={l.href}
                 className="
-                  rounded-full px-3.5 py-2 text-sm font-medium text-ink-600
+                  whitespace-nowrap rounded-full px-3.5 py-2 text-sm font-medium text-ink-600
                   transition-all duration-500 ease-spring
                   hover:text-ink-900 hover:bg-ink-900/[0.04]
                 "
@@ -122,13 +122,13 @@ const NavIsland = () => {
             <Link
               to="/login"
               className="
-                hidden sm:inline-flex rounded-full px-4 py-2 text-sm font-medium text-ink-700
+                hidden sm:inline-flex whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium text-ink-700
                 transition-all duration-500 ease-spring hover:text-ink-900 hover:bg-ink-900/[0.04]
               "
             >
               Sign in
             </Link>
-            <Link to="/register" className="btn-island-primary">
+            <Link to="/register" className="btn-island-primary whitespace-nowrap">
               <span className="pr-1">Get started</span>
               <span className="btn-icon bg-white/15">
                 <Arrow />
@@ -143,7 +143,7 @@ const NavIsland = () => {
               aria-expanded={open}
               aria-controls="mobile-navigation"
               className="
-                md:hidden relative ml-1 flex h-10 w-10 items-center justify-center
+                lg:hidden relative ml-1 flex h-10 w-10 items-center justify-center
                 rounded-full bg-ink-900/[0.04] ring-1 ring-ink-900/5
               "
             >
