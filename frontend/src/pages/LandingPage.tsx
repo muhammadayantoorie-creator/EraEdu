@@ -93,8 +93,8 @@ const NavIsland = () => {
       <header className="fixed inset-x-0 top-0 z-40 flex justify-center px-4 pt-6">
         <div
           className="
-            flex w-full max-w-6xl items-center gap-2 rounded-full p-1.5
-            bg-white/70 backdrop-blur-2xl ring-1 ring-ink-900/5
+            landing-nav flex w-full max-w-6xl items-center gap-2 rounded-full p-1.5
+            bg-white/90 backdrop-blur-2xl ring-1 ring-ink-900/5
             shadow-[0_20px_60px_-30px_rgba(5,7,11,0.25)]
           "
         >
@@ -424,7 +424,7 @@ const FeatureCard = ({ title, copy, span, visual, accent = 'emerald' }: Feat) =>
       ? 'text-secondary-700 bg-secondary-50 ring-secondary-200'
       : 'text-primary-700 bg-primary-50 ring-primary-200';
   return (
-    <div className={`reveal bezel ${span}`}>
+    <div className={`reveal bezel ${span} transition-transform duration-500 ease-spring hover:-translate-y-1`}>
       <div className="bezel-core flex h-full flex-col justify-between gap-6 p-7">
         <div className="relative h-44 overflow-hidden rounded-[1.25rem] bg-ink-50 ring-1 ring-ink-900/5">
           {visual}
@@ -850,19 +850,16 @@ const Testimonials = () => {
       q: 'Make assessment expectations clear before students start, then capture the events educators need to review.',
       a: 'Clear by design',
       r: 'Transparent assessment workflows',
-      rot: 'md:-rotate-2',
     },
     {
       q: 'Give educators practical controls for tab switches, copy-paste behaviour, and automatic submission limits.',
       a: 'Educator control',
       r: 'Configurable safeguards per quiz',
-      rot: 'md:rotate-1',
     },
     {
       q: 'Build a defensible assessment record without turning a classroom into a surveillance exercise.',
       a: 'Respectful integrity',
       r: 'Purposeful monitoring and review',
-      rot: 'md:-rotate-1',
     },
   ];
 
@@ -880,7 +877,7 @@ const Testimonials = () => {
           {principles.map((qq, i) => (
             <figure
               key={i}
-              className={`reveal reveal-delay-${i + 1} bezel ${qq.rot} transition-transform duration-700 ease-spring hover:rotate-0`}
+              className={`reveal reveal-delay-${i + 1} bezel transition-transform duration-500 ease-spring hover:-translate-y-1`}
             >
               <blockquote className="bezel-core flex h-full flex-col gap-6 p-7">
                 <Stroke
