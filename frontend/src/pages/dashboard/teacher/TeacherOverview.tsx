@@ -57,14 +57,6 @@ const TeacherOverview = () => {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(
-    () => localStorage.getItem('eraedu-teacher-onboarding-dismissed') === 'true'
-  );
-
-  const dismissOnboarding = () => {
-    localStorage.setItem('eraedu-teacher-onboarding-dismissed', 'true');
-    setOnboardingDismissed(true);
-  };
 
   const handleUpgrade = useCallback(async () => {
     setCheckoutLoading(true);
@@ -216,8 +208,6 @@ const TeacherOverview = () => {
     );
   }
 
-  const isNewTeacher = !onboardingDismissed && (stats?.totalCourses || 0) === 0 && (stats?.totalQuestions || 0) === 0;
-
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       {/* HERO — Editorial dark glass */}
@@ -349,33 +339,6 @@ const TeacherOverview = () => {
           </div>
         </div>
       </section>
-
-      {isNewTeacher && (
-        <section className="rounded-[1.5rem] border border-primary-200/70 bg-gradient-to-r from-primary-50/90 via-white to-accent-50/60 p-5 shadow-[0_18px_45px_-36px_rgba(4,120,87,.45)] sm:p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary-700">First assessment setup</p>
-              <h2 className="mt-1 font-display text-2xl tracking-tightest text-ink-900">Start your first quiz in three clear steps.</h2>
-              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-ink-500">Create a course, add your questions, then publish a quiz for students.</p>
-            </div>
-            <button type="button" onClick={dismissOnboarding} className="self-start text-xs font-semibold text-ink-500 transition-colors hover:text-primary-700 lg:self-auto">Dismiss</button>
-          </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            {[
-              { step: '01', title: 'Create a course', copy: 'Organize your class before adding assessments.', to: '/dashboard/teacher/courses/create', action: 'Create course' },
-              { step: '02', title: 'Add questions', copy: 'Build a reusable question bank for your course.', to: '/dashboard/teacher/questions', action: 'Add questions' },
-              { step: '03', title: 'Publish a quiz', copy: 'Set timing, access rules, and open it for students.', to: '/dashboard/teacher/quizzes', action: 'Create quiz' },
-            ].map((item) => (
-              <div key={item.step} className="rounded-2xl bg-white/80 p-4 ring-1 ring-primary-900/5 backdrop-blur-sm">
-                <span className="text-[10px] font-bold tracking-[0.16em] text-primary-600">{item.step}</span>
-                <h3 className="mt-2 text-sm font-semibold text-ink-900">{item.title}</h3>
-                <p className="mt-1 min-h-10 text-xs leading-relaxed text-ink-500">{item.copy}</p>
-                <Link to={item.to} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary-700 transition-colors hover:text-primary-900">{item.action} <span aria-hidden>→</span></Link>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* Stats — Bento */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
