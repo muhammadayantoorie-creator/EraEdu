@@ -220,25 +220,35 @@ export const quizService = {
       throw new Error('You can only create quizzes for your own courses');
     }
 
-    // Give a clear response before attempting the insert. Migration 017 also
-    // enforces the limit inside Postgres, which protects against races and
-    // callers that do not use this API.
-    const { data: subscription, error: subscriptionError } = await supabase
-      .from('users')
-      .select('subscription_status, free_assessment_trials_used')
-      .eq('id', teacherId)
-      .single();
+    // An institution's teachers share one five-quiz free allowance. The
+    // database trigger (migration 018) is the authority and also protects
+    // against concurrent create requests or callers outside this API.
+    const { data: memberships, error: membershipError } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', teacherId)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (membershipError) throw new Error(membershipError.message);
 
-    if (subscriptionError && isMissingColumnError(subscriptionError, 'free_assessment_trials_used')) {
-      const err: any = new Error('Free-trial setup is incomplete. Run migration 017_enforce_free_quiz_trial_limit.sql in Supabase, then try again.');
-      err.statusCode = 400;
-      throw err;
-    }
-    if (subscriptionError) throw new Error(subscriptionError.message);
-    if (subscription?.subscription_status !== 'active' && Number(subscription?.free_assessment_trials_used || 0) >= 5) {
-      const err: any = new Error('Your five free assessment trials have been used. Activate the Institution plan to create more quizzes.');
-      err.statusCode = 403;
-      throw err;
+    if (memberships?.[0]?.organization_id) {
+      const { data: organization, error: organizationError } = await supabase
+        .from('organizations')
+        .select('subscription_status, free_assessment_trials_used')
+        .eq('id', memberships[0].organization_id)
+        .single();
+
+      if (organizationError && isMissingColumnError(organizationError, 'free_assessment_trials_used')) {
+        const err: any = new Error('Institution trial setup is incomplete. Run migration 018_share_free_trials_by_institution.sql in Supabase, then try again.');
+        err.statusCode = 400;
+        throw err;
+      }
+      if (organizationError) throw new Error(organizationError.message);
+      if (organization?.subscription_status !== 'active' && Number(organization?.free_assessment_trials_used || 0) >= 5) {
+        const err: any = new Error('Your institution has used its five free assessment trials. Activate the Institution plan to create more quizzes.');
+        err.statusCode = 403;
+        throw err;
+      }
     }
 
     // Generate unique 4-digit access code
@@ -293,7 +303,7 @@ export const quizService = {
     }
 
     if (insertResult.error && String(insertResult.error.message || '').includes('FREE_ASSESSMENT_TRIAL_LIMIT_REACHED')) {
-      const err: any = new Error('Your five free assessment trials have been used. Activate the Institution plan to create more quizzes.');
+      const err: any = new Error('Your institution has used its five free assessment trials. Activate the Institution plan to create more quizzes.');
       err.statusCode = 403;
       throw err;
     }

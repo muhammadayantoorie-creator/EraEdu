@@ -15,8 +15,19 @@ const getClient = () => {
   });
 };
 
+const getOwnedOrganization = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('owner_id', userId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (error) throw error;
+  return data?.[0] || null;
+};
+
 const updatePaymentFromTracker = async (trackerToken: string, userId?: string) => {
-  const query = supabase.from('safepay_payments').select('tracker_token, user_id, status').eq('tracker_token', trackerToken);
+  const query = supabase.from('safepay_payments').select('tracker_token, user_id, organization_id, status').eq('tracker_token', trackerToken);
   const { data: payment, error } = userId ? await query.eq('user_id', userId).maybeSingle() : await query.maybeSingle();
   if (error) throw error;
   if (!payment) return null;
@@ -35,8 +46,17 @@ const updatePaymentFromTracker = async (trackerToken: string, userId?: string) =
     if (updateError) throw updateError;
     // This checkout records a monthly Institution licence. It is currently a
     // manual monthly renewal, not an automatic recurring charge.
-    const { error: userError } = await supabase.from('users').update({ subscription_status: 'active' }).eq('id', payment.user_id);
-    if (userError) throw userError;
+    if (payment.organization_id) {
+      const { error: organizationError } = await supabase
+        .from('organizations')
+        .update({ subscription_status: 'active' })
+        .eq('id', payment.organization_id);
+      if (organizationError) throw organizationError;
+    } else {
+      // Supports payments created before organization billing was introduced.
+      const { error: userError } = await supabase.from('users').update({ subscription_status: 'active' }).eq('id', payment.user_id);
+      if (userError) throw userError;
+    }
   }
   return { status: isPaid ? 'paid' : payment.status };
 };
@@ -44,6 +64,10 @@ const updatePaymentFromTracker = async (trackerToken: string, userId?: string) =
 router.post('/checkout', protect, authorize('teacher'), async (req, res) => {
   if (!config.safepaySecretKey || !config.safepayPublicKey) return res.status(503).json({ success: false, error: { message: 'Safepay is not configured.' } });
   try {
+    const organization = await getOwnedOrganization(req.user!._id);
+    if (!organization) {
+      return res.status(400).json({ success: false, error: { message: 'Create your institution workspace before activating the Institution plan.' } });
+    }
     const env = config.safepayEnvironment === 'production' ? 'production' : 'sandbox';
     const client = getClient();
     // Safepay only accepts its supported metadata keys. The plan is stored in
@@ -57,6 +81,7 @@ router.post('/checkout', protect, authorize('teacher'), async (req, res) => {
     const { error: saveError } = await supabase.from('safepay_payments').insert({
       tracker_token: payment.data.tracker.token,
       user_id: req.user!._id,
+      organization_id: organization.id,
       plan: 'institution',
       amount: Math.round(config.safepayInstitutionPricePkr * 100),
       currency: 'PKR',
