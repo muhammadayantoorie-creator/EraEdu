@@ -148,7 +148,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
         src="/pakistan-flag-watermark.svg"
         alt=""
         aria-hidden="true"
-        className="pointer-events-none fixed -bottom-32 -left-36 z-0 hidden w-[30rem] -rotate-6 select-none opacity-[0.025] blur-[0.35px] lg:block xl:w-[36rem]"
+        className="pointer-events-none fixed bottom-4 left-3 z-[1] w-64 -rotate-6 select-none opacity-[0.07] blur-[0.2px] sm:w-80 lg:w-[26rem] xl:w-[30rem]"
       />
 
       <RoleSidebar
