@@ -384,24 +384,31 @@ const Hero = () => (
   </section>
 );
 
-/* A quiet brand moment between the hero and the product content. */
-const EducationQuote = () => (
-  <section className="landing-education-quote relative overflow-hidden py-10 sm:py-14" aria-label="EraEdu learning philosophy">
-    <div aria-hidden="true" className="landing-education-quote-glow" />
-    <figure className="reveal relative mx-auto max-w-5xl px-6 text-center sm:px-8">
-      <blockquote className="font-display text-[clamp(2rem,4.8vw,4.5rem)] leading-[1.04] tracking-tightest text-ink-900 text-balance">
-        <span aria-hidden="true" className="mr-2 align-top text-primary-400/70">“</span>
-        Better learning begins with <span className="landing-education-quote-accent">better tools.</span>
-        <span aria-hidden="true" className="ml-2 align-top text-primary-400/70">”</span>
-      </blockquote>
-      <figcaption className="mx-auto mt-5 flex items-center justify-center gap-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-400">
-        <span className="h-px w-8 bg-primary-300/70" />
-        EraEdu
-        <span className="h-px w-8 bg-primary-300/70" />
-      </figcaption>
-    </figure>
-  </section>
-);
+const AnimatedQuoteBackground = () => {
+  const [revealed, setRevealed] = useState(false);
+  const words = [
+    { value: 'Better', color: '#047857' }, { value: 'learning', color: '#059669' },
+    { value: 'begins', color: '#0F766E' }, { value: 'with', color: '#0891B2' },
+    { value: 'better', color: '#10B981' }, { value: 'tools.', color: '#0E7490' },
+  ];
+
+  useEffect(() => {
+    const revealOnScroll = () => { if (window.scrollY > 180) setRevealed(true); };
+    revealOnScroll();
+    window.addEventListener('scroll', revealOnScroll, { passive: true });
+    return () => window.removeEventListener('scroll', revealOnScroll);
+  }, []);
+
+  return (
+    <div aria-hidden="true" className={`landing-scroll-quote ${revealed ? 'is-revealed' : ''}`}>
+      <p className="landing-scroll-quote-line">
+        <span className="landing-scroll-quote-mark">“</span>
+        {words.map((word, index) => <span key={`${word.value}-${index}`} className="landing-scroll-quote-word" style={{ color: word.color, animationDelay: `${index * 120}ms` }}>{word.value}</span>)}
+        <span className="landing-scroll-quote-mark">”</span>
+      </p>
+    </div>
+  );
+};
 
 /* ───── SOCIAL PROOF marquee ───── */
 /* ───── FEATURE BENTO (Asymmetrical) ───── */
@@ -1089,10 +1096,10 @@ const LandingPage = () => {
   return (
     <div data-reveal-root className="landing-teal min-h-[100dvh] bg-[#f4fbf8] text-primary-950 grain-fixed">
       <a href="#main-content" className="skip-link">Skip to content</a>
+      <AnimatedQuoteBackground />
       <NavIsland />
       <main id="main-content" tabIndex={-1}>
         <Hero />
-        <EducationQuote />
         <TrustByDesign />
         <FeaturesBento />
         <HowItWorks />
