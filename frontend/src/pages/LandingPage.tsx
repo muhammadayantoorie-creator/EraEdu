@@ -39,6 +39,36 @@ const Arrow = ({ size = 14, className = '' }: { size?: number; className?: strin
   <Stroke d="M5 19 19 5 M9 5h10v10" size={size} className={className} />
 );
 
+/* An illustrative scan frame makes the proctoring story understandable without
+   implying that a real student's face or camera footage is being shown. */
+const FaceScanArtwork = ({ dark = false }: { dark?: boolean }) => (
+  <div
+    aria-hidden="true"
+    className={`relative aspect-[1.42] w-full overflow-hidden rounded-[1.5rem] ring-1 ${
+      dark
+        ? 'bg-gradient-to-br from-emerald-400/20 via-teal-500/10 to-slate-950/30 ring-white/15'
+        : 'bg-gradient-to-br from-emerald-50 via-white to-cyan-50 ring-emerald-900/10 shadow-[0_20px_45px_-32px_rgba(4,120,87,0.55)]'
+    }`}
+  >
+    <div className={`absolute inset-0 opacity-50 ${dark ? 'bg-[radial-gradient(circle_at_50%_30%,rgba(45,212,191,.32),transparent_38%)]' : 'bg-[radial-gradient(circle_at_50%_30%,rgba(52,211,153,.25),transparent_38%)]'}`} />
+    <div className={`absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-bold tracking-[0.14em] ${dark ? 'bg-emerald-300/10 text-emerald-100 ring-1 ring-emerald-200/20' : 'bg-white/80 text-emerald-700 ring-1 ring-emerald-200'}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.9)]" />
+      FACE VERIFIED
+    </div>
+    <span className={`absolute right-3 top-3 font-mono text-[8px] tracking-[0.16em] ${dark ? 'text-white/45' : 'text-emerald-800/45'}`}>ON-DEVICE</span>
+
+    <div className="absolute inset-x-0 bottom-0 top-8 flex items-end justify-center">
+      <svg viewBox="0 0 220 160" className="h-[94%] w-[94%]" fill="none">
+        <path d="M42 152c7-38 30-56 68-56s61 18 68 56" fill={dark ? 'rgba(45,212,191,.28)' : 'rgba(16,185,129,.20)'} />
+        <ellipse cx="110" cy="70" rx="34" ry="42" fill={dark ? 'rgba(153,246,228,.55)' : 'rgba(209,250,229,.9)'} />
+        <path d="M89 67c5 4 11 4 16 0M116 67c5 4 11 4 16 0M101 88c6 4 12 4 18 0" stroke={dark ? 'rgba(236,253,245,.82)' : 'rgba(4,120,87,.55)'} strokeWidth="2" strokeLinecap="round" />
+        <path d="M61 39h18M61 39v18M159 39h-18M159 39v18M61 117h18M61 117V99M159 117h-18M159 117V99" stroke={dark ? 'rgba(110,231,183,.9)' : 'rgba(5,150,105,.75)'} strokeWidth="3" strokeLinecap="round" />
+        <rect x="70" y="25" width="80" height="106" rx="35" stroke={dark ? 'rgba(94,234,212,.55)' : 'rgba(16,185,129,.42)'} strokeWidth="1.5" strokeDasharray="4 4" />
+      </svg>
+    </div>
+  </div>
+);
+
 /* ───── Floating Glass Island Nav (with morphing hamburger) ───── */
 const NavIsland = () => {
   const [open, setOpen] = useState(false);
@@ -432,17 +462,15 @@ const FeaturesBento = () => (
           copy="Continuously verifies the student is present, alone, and focused — using an on-device face-detection pipeline. Zero footage uploaded."
           accent="emerald"
           visual={
-            <div className="relative flex h-full items-center justify-center">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary-100/60 via-transparent to-accent-100/40" />
-              <div className="relative h-32 w-32 rounded-full bg-white ring-1 ring-ink-900/5 shadow-soft" />
-              <div
-                className="absolute h-44 w-44 rounded-full border-2 border-dashed border-primary-400/60 animate-orbit-slow"
-                style={{ animationDuration: '20s' }}
-              />
-              <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-primary-700 ring-1 ring-primary-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-primary-500 animate-pulse" />
-                FACE OK
-              </span>
+            <div className="relative flex h-full items-center justify-center p-5 sm:p-7">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary-100/70 via-white/20 to-accent-100/50" />
+              <div className="relative w-full max-w-[18rem]">
+                <FaceScanArtwork />
+                <div className="absolute -bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-white/90 px-3 py-1.5 text-[9px] font-semibold text-emerald-800 shadow-[0_10px_22px_-14px_rgba(4,120,87,.5)] ring-1 ring-emerald-100 backdrop-blur-xl">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  PRIVATE · ON-DEVICE ANALYSIS
+                </div>
+              </div>
             </div>
           }
         />
@@ -708,16 +736,12 @@ const IntegritySpotlight = () => (
                   </span>
                 </div>
 
-                <div className="relative mx-auto my-auto flex h-56 w-56 items-center justify-center">
-                  <div className="absolute inset-0 rounded-full border border-white/10" />
-                  <div className="absolute inset-2 rounded-full border border-primary-400/40 animate-orbit-slow" />
-                  <div className="absolute inset-6 rounded-full border-2 border-dashed border-accent-400/40 [animation:orbit_18s_linear_infinite_reverse]" />
-                  <div
-                    className="relative h-32 w-32 rounded-full bg-gradient-to-br from-primary-400/30 to-accent-400/30 backdrop-blur-xl ring-1 ring-white/20"
-                    style={{
-                      boxShadow: '0 0 80px rgba(16,185,129,0.45)',
-                    }}
-                  />
+                <div className="relative mx-auto my-auto w-full max-w-[19rem] py-7">
+                  <FaceScanArtwork dark />
+                  <div className="absolute -bottom-1 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-300/10 px-3 py-1 text-[9px] font-semibold tracking-[0.12em] text-emerald-100 ring-1 ring-emerald-200/20 backdrop-blur-xl">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,.9)]" />
+                    PRESENCE CONFIRMED
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 text-center">
