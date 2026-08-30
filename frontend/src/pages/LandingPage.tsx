@@ -662,6 +662,94 @@ const HowItWorks = () => {
   );
 };
 
+/* ───── PRODUCT WALKTHROUGH ───── */
+const ProductWalkthrough = () => {
+  const [activeStep, setActiveStep] = useState<'teacher' | 'student' | 'insights'>('teacher');
+  const steps = {
+    teacher: {
+      label: '01 · Teacher',
+      title: 'Create a structured assessment',
+      copy: 'Set the course, questions, timing, access rules, and integrity settings from one guided workspace.',
+    },
+    student: {
+      label: '02 · Student',
+      title: 'Join with a secure quiz code',
+      copy: 'Students enter a simple access code and receive clear instructions before their assessment begins.',
+    },
+    insights: {
+      label: '03 · Review',
+      title: 'See results with useful context',
+      copy: 'Review submissions, quiz performance, and configured integrity events in one place after the session.',
+    },
+  } as const;
+  const current = steps[activeStep];
+
+  return (
+    <section id="demo" className="relative overflow-hidden py-24 md:py-32">
+      <div aria-hidden className="absolute inset-x-0 top-1/2 -z-10 h-80 -translate-y-1/2 bg-primary-100/45 blur-3xl" />
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid items-center gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
+          <div>
+            <span className="eyebrow eyebrow-light">Product walkthrough</span>
+            <h2 className="mt-4 font-display text-4xl tracking-tightest text-ink-900 text-balance md:text-6xl">
+              Understand the workflow in under a minute.
+            </h2>
+            <p className="mt-5 max-w-xl text-lg text-ink-500 text-pretty">
+              Move through the essential EraEdu experience before creating your first assessment.
+            </p>
+            <div className="mt-8 space-y-2">
+              {(Object.keys(steps) as Array<keyof typeof steps>).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveStep(key)}
+                  className={`flex w-full items-center gap-4 rounded-2xl px-4 py-3 text-left transition-all duration-300 ${
+                    activeStep === key
+                      ? 'bg-white/90 text-primary-900 shadow-[0_14px_28px_-20px_rgba(4,120,87,.45)] ring-1 ring-primary-200'
+                      : 'text-ink-500 hover:bg-white/55 hover:text-ink-800'
+                  }`}
+                  aria-pressed={activeStep === key}
+                >
+                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${activeStep === key ? 'bg-primary-700 text-white' : 'bg-primary-50 text-primary-700'}`}>
+                    {key === 'teacher' ? '1' : key === 'student' ? '2' : '3'}
+                  </span>
+                  <span className="text-sm font-semibold">{steps[key].label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bezel">
+            <div className="bezel-core overflow-hidden p-5 sm:p-7">
+              <div className="flex items-center justify-between border-b border-ink-900/5 pb-4">
+                <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-rose-300" /><span className="h-2.5 w-2.5 rounded-full bg-amber-300" /><span className="h-2.5 w-2.5 rounded-full bg-emerald-300" /></div>
+                <span className="font-mono text-[10px] tracking-[0.14em] text-ink-400">ERAEDU WORKFLOW</span>
+              </div>
+              <div className="mt-7 grid min-h-[19rem] gap-6 md:grid-cols-[1.15fr_0.85fr]">
+                <div className="rounded-[1.5rem] bg-gradient-to-br from-primary-800 via-primary-700 to-teal-700 p-6 text-white shadow-[0_24px_38px_-28px_rgba(4,120,87,.7)]">
+                  <p className="text-[10px] font-semibold uppercase tracking-eyebrow text-emerald-100/70">{current.label}</p>
+                  <h3 className="mt-4 font-display text-3xl tracking-tightest">{current.title}</h3>
+                  <p className="mt-4 text-sm leading-relaxed text-white/75">{current.copy}</p>
+                  <div className="mt-7 flex items-center gap-2 text-xs font-semibold text-emerald-100"><span className="h-2 w-2 rounded-full bg-emerald-300" /> Guided and role-aware</div>
+                </div>
+                <div className="flex flex-col gap-3 rounded-[1.5rem] bg-primary-50/75 p-4 ring-1 ring-primary-100">
+                  {(activeStep === 'teacher' ? ['Course selected', 'Questions added', 'Schedule confirmed'] : activeStep === 'student' ? ['Quiz code verified', 'Instructions shown', 'Assessment begins'] : ['Results collected', 'Events available', 'Report ready']).map((item, index) => (
+                    <div key={item} className="flex items-center gap-3 rounded-xl bg-white/85 px-3 py-3 ring-1 ring-primary-900/5">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[10px] font-bold text-primary-700">0{index + 1}</span>
+                      <span className="text-xs font-semibold text-ink-700">{item}</span>
+                    </div>
+                  ))}
+                  <div className="mt-auto rounded-xl border border-dashed border-primary-200 px-3 py-3 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-primary-700">Clear next step</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
 /* ───── INTEGRITY SPOTLIGHT (dark editorial split) ───── */
 const IntegritySpotlight = () => (
   <section
@@ -906,6 +994,39 @@ const Testimonials = () => {
   );
 };
 
+const FAQ = () => {
+  const questions = [
+    ['What do the five free trials include?', 'Your institution can create up to five assessments on the free plan. The Institution plan unlocks unlimited assessment creation for its teachers.'],
+    ['Is student camera footage stored?', 'EraEdu is designed for on-device face-presence checks. The product records configured integrity events for review, not a video recording of students.'],
+    ['Can teachers control monitoring rules?', 'Yes. Teachers configure quiz timing, availability, course access, violation limits, and supported integrity settings while creating a quiz.'],
+    ['Who should choose the Institution plan?', 'Choose it when your institution needs a shared workspace, multiple teachers, unlimited assessments, and detailed integrity reporting.'],
+    ['How does payment work?', 'The Institution plan is a monthly Safepay checkout. The institution owner can activate the plan from their EraEdu profile.'],
+  ];
+
+  return (
+    <section id="faq" className="relative bg-white/55 py-24 md:py-32">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+        <div className="reveal mx-auto max-w-2xl text-center">
+          <span className="eyebrow eyebrow-light">Questions, answered</span>
+          <h2 className="mt-4 font-display text-4xl tracking-tightest text-ink-900 text-balance md:text-6xl">Everything you need before your first quiz.</h2>
+          <p className="mt-5 text-lg text-ink-500">Clear expectations for educators, institutions, and students.</p>
+        </div>
+        <div className="mt-12 space-y-3">
+          {questions.map(([question, answer], index) => (
+            <details key={question} className={`reveal reveal-delay-${Math.min(index + 1, 5)} group rounded-2xl bg-white/80 px-5 ring-1 ring-ink-900/5 transition-all open:shadow-[0_16px_35px_-30px_rgba(4,120,87,.5)]`}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-left text-sm font-semibold text-ink-900 marker:content-none">
+                {question}
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-lg font-normal text-primary-700 transition-transform duration-300 group-open:rotate-45">+</span>
+              </summary>
+              <p className="max-w-3xl pb-5 text-sm leading-relaxed text-ink-500">{answer}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 /* ───── FINAL CTA ───── */
 const FinalCTA = () => (
   <section className="relative px-4 py-32">
@@ -973,6 +1094,7 @@ const Footer = () => (
               ['AI Integrity', '#integrity'],
               ['Pricing', '#pricing'],
               ['Trust', '#trust'],
+              ['FAQ', '#faq'],
             ],
           },
           {
@@ -1034,10 +1156,12 @@ const LandingPage = () => {
         <TrustByDesign />
         <FeaturesBento />
         <HowItWorks />
+        <ProductWalkthrough />
         <IntegritySpotlight />
         <Metrics />
         <Pricing />
         <Testimonials />
+        <FAQ />
         <FinalCTA />
       </main>
       <Footer />
