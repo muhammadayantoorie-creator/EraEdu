@@ -936,7 +936,7 @@ const Testimonials = () => {
 };
 
 const FAQ = () => {
-  const [openQuestion, setOpenQuestion] = useState<number | null>(0);
+  const [openQuestion, setOpenQuestion] = useState<number | null>(null);
   const questions = [
     ['What do the five free trials include?', 'Your institution can create up to five assessments on the free plan. The Institution plan unlocks unlimited assessment creation for its teachers.'],
     ['Is student camera footage stored?', 'EraEdu is designed for on-device face-presence checks. The product records configured integrity events for review, not a video recording of students.'],
@@ -965,7 +965,7 @@ const FAQ = () => {
               >
                 {question}
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-lg font-normal text-primary-700">
-                  {openQuestion === index ? '−' : '+'}
+                  +
                 </span>
               </button>
               {openQuestion === index && <p id={`faq-answer-${index}`} className="max-w-3xl pb-5 text-sm leading-relaxed text-ink-500">{answer}</p>}
