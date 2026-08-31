@@ -964,7 +964,9 @@ const FAQ = () => {
                 aria-controls={`faq-answer-${index}`}
               >
                 {question}
-                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-lg font-normal text-primary-700 transition-transform duration-300 ${openQuestion === index ? 'rotate-45' : ''}`}>+</span>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-50 text-lg font-normal text-primary-700">
+                  {openQuestion === index ? '−' : '+'}
+                </span>
               </button>
               {openQuestion === index && <p id={`faq-answer-${index}`} className="max-w-3xl pb-5 text-sm leading-relaxed text-ink-500">{answer}</p>}
             </div>
