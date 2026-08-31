@@ -948,14 +948,14 @@ const FAQ = () => {
   return (
     <section id="faq" className="relative bg-white/55 py-24 md:py-32">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
-        <div className="reveal mx-auto max-w-2xl text-center">
+        <div className="mx-auto max-w-2xl text-center">
           <span className="eyebrow eyebrow-light">Questions, answered</span>
           <h2 className="mt-4 font-display text-4xl tracking-tightest text-ink-900 text-balance md:text-6xl">Everything you need before your first quiz.</h2>
           <p className="mt-5 text-lg text-ink-500">Clear expectations for educators, institutions, and students.</p>
         </div>
         <div className="mt-12 space-y-3">
           {questions.map(([question, answer], index) => (
-            <div key={question} className={`reveal reveal-delay-${Math.min(index + 1, 5)} rounded-2xl bg-white/80 px-5 ring-1 ring-ink-900/5 transition-all ${openQuestion === index ? 'shadow-[0_16px_35px_-30px_rgba(4,120,87,.5)]' : ''}`}>
+            <div key={question} className={`rounded-2xl bg-white/80 px-5 ring-1 ring-ink-900/5 transition-all ${openQuestion === index ? 'shadow-[0_16px_35px_-30px_rgba(4,120,87,.5)]' : ''}`}>
               <button
                 type="button"
                 onClick={() => setOpenQuestion((current) => current === index ? null : index)}
