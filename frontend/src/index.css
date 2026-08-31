@@ -197,7 +197,7 @@
     white-space: nowrap;
     opacity: 0.11;
     filter: drop-shadow(0 18px 28px rgba(4, 120, 87, 0.10));
-    transform: translateY(-22vh);
+    transform: translateY(-28vh);
   }
   .landing-scroll-quote-word,
   .landing-scroll-quote-mark {
@@ -222,7 +222,7 @@
     .landing-scroll-quote-mark { opacity: 1; transform: none; filter: none; }
   }
   @media (max-width: 640px) {
-    .landing-scroll-quote-line { transform: translateY(-14vh); }
+    .landing-scroll-quote-line { transform: translateY(-18vh); }
   }
 
   /* Student dashboard uses the same calm teal system as the landing page. */
