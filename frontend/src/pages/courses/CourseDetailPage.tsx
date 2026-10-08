@@ -105,7 +105,7 @@ const CourseDetailPage: React.FC = () => {
                         className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-xs font-medium rounded text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                       >
                         <CheckCircleIcon className="-ml-0.5 mr-2 h-4 w-4" aria-hidden="true" />
-                        Take Quiz
+                        Take Exam
                       </Link>
                     </div>
                   </div>

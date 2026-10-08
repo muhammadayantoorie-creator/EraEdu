@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DataTable } from '../../../components/shared';
 import api from '../../../services/api';
+import { useAuthStore } from '../../../store/authStore';
 import toast from 'react-hot-toast';
 import {
   PlusIcon,
@@ -39,6 +40,10 @@ interface EditForm {
 
 const TeacherCourses = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const coursesPath = user?.role === 'admin'
+    ? '/dashboard/admin/courses'
+    : '/dashboard/teacher/courses';
   const [courses, setCourses] = useState<TeacherCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -282,7 +287,7 @@ const TeacherCourses = () => {
           </p>
         </div>
         <Link
-          to="/dashboard/teacher/courses/new"
+          to={`${coursesPath}/new`}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
         >
           <PlusIcon className="h-5 w-5" />

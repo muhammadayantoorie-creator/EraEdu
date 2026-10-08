@@ -68,7 +68,7 @@ export const getRecommendations = asyncHandler(async (req: Request, res: Respons
         id: '1',
         type: 'topic',
         title: 'Review JavaScript Closures',
-        description: 'Based on your quiz performance, we recommend reviewing closures.',
+        description: 'Based on your exam performance, we recommend reviewing closures.',
         priority: 'high',
         topicId: 'js-closures-1',
       },
@@ -112,7 +112,7 @@ export const getInsights = asyncHandler(async (req: Request, res: Response) => {
         { day: 'Tuesday', topic: 'Data Structures Practice', duration: '60 min' },
         { day: 'Wednesday', topic: 'Algorithm Challenges', duration: '45 min' },
         { day: 'Thursday', topic: 'Project Work', duration: '90 min' },
-        { day: 'Friday', topic: 'Quiz Practice', duration: '30 min' },
+        { day: 'Friday', topic: 'Exam Practice', duration: '30 min' },
       ],
       overallProgress: 68,
       weeklyGoal: 5,
@@ -141,7 +141,7 @@ export const chatAssistant = asyncHandler(async (req: Request, res: Response) =>
       success: true,
       data: {
         reply:
-          'I cannot help with cheating or bypassing quiz rules. I can explain the rules, how violations work, and how to use the app features.'
+          'I cannot help with cheating or bypassing exam rules. I can explain the rules, how violations work, and how to use the app features.'
       }
     });
     return;

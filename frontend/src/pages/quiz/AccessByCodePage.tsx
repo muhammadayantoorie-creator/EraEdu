@@ -31,7 +31,7 @@ const AccessByCodePage = () => {
     try {
       const response = await api.get(`/quizzes/access-by-code/${code}`);
       setQuizDetails(response.data.data);
-      toast.success('Quiz found!');
+      toast.success('Exam found!');
     } catch (err: any) {
       const message = err.response?.data?.error?.message || 'Invalid or expired code';
       setError(message);
@@ -62,7 +62,7 @@ const AccessByCodePage = () => {
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Access Quiz via Code
+          Access Exam via Code
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Enter the 8-character code provided by your teacher
@@ -75,7 +75,7 @@ const AccessByCodePage = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="code" className="block text-sm font-medium text-gray-700">
-                  Quiz Code
+                  Exam Code
                 </label>
                 <div className="mt-1">
                   <input
@@ -114,7 +114,7 @@ const AccessByCodePage = () => {
                   <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
                 ) : (
                   <>
-                    Access Quiz
+                    Access Exam
                     <FiArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
@@ -123,10 +123,10 @@ const AccessByCodePage = () => {
           ) : (
             <div className="space-y-6">
               <div className="bg-green-50 rounded-lg p-4">
-                <h3 className="text-lg font-medium text-green-800">Quiz Found!</h3>
+                <h3 className="text-lg font-medium text-green-800">Exam Found!</h3>
                 <div className="mt-4 space-y-2">
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Quiz:</span> {quizDetails.quiz?.title || 'Untitled Quiz'}
+                    <span className="font-medium">Exam:</span> {quizDetails.quiz?.title || 'Untitled Exam'}
                   </p>
                   {quizDetails.course && (
                     <p className="text-sm text-gray-600">
@@ -148,7 +148,7 @@ const AccessByCodePage = () => {
 
               <div className="bg-yellow-50 rounded-lg p-4">
                 <p className="text-sm text-yellow-700">
-                  <strong>Important:</strong> Once you start the quiz, do not switch tabs or windows. 
+                  <strong>Important:</strong> Once you start the exam, do not switch tabs or windows.
                   Any suspicious activity will be recorded.
                 </p>
               </div>
@@ -164,7 +164,7 @@ const AccessByCodePage = () => {
                   onClick={handleStartQuiz}
                   className="flex-1 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                 >
-                  Start Quiz
+                  Start Exam
                 </button>
               </div>
             </div>

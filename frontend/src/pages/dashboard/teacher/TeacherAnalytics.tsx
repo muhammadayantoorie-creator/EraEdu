@@ -99,7 +99,7 @@ const TeacherAnalytics = () => {
         />
         <StatCard
           icon={<AcademicCapIcon className="h-6 w-6" />}
-          label="Quiz Attempts"
+          label="Exam Attempts"
           value={analytics?.totalAttempts || 0}
           color="green"
         />
@@ -122,9 +122,9 @@ const TeacherAnalytics = () => {
       {!hasData ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <AcademicCapIcon className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Quiz Data Yet</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Exam Data Yet</h3>
           <p className="text-gray-500">
-            Create quizzes and have students take them to see analytics data here.
+            Create exams and have students take them to see analytics data here.
           </p>
         </div>
       ) : (
@@ -212,7 +212,7 @@ const TeacherAnalytics = () => {
 
           {/* Quiz Attempts by Week */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Weekly Quiz Attempts</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Weekly Exam Attempts</h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={analytics?.weeklyData || []}>
@@ -273,14 +273,14 @@ const TeacherAnalytics = () => {
               </p>
             </div>
             <div className="bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl p-6 text-white">
-              <h4 className="text-lg font-semibold mb-2">Total Quizzes</h4>
+              <h4 className="text-lg font-semibold mb-2">Total Exams</h4>
               <p className="text-4xl font-bold">{analytics?.totalQuizzes || 0}</p>
-              <p className="text-white/90 mt-2">Quizzes created and available</p>
+              <p className="text-white/90 mt-2">Exams created and available</p>
             </div>
             <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-6 text-white">
               <h4 className="text-lg font-semibold mb-2">Engagement</h4>
               <p className="text-4xl font-bold">{analytics?.totalAttempts || 0}</p>
-              <p className="text-orange-100 mt-2">Total quiz attempts by students</p>
+              <p className="text-orange-100 mt-2">Total exam attempts by students</p>
             </div>
           </div>
         </>

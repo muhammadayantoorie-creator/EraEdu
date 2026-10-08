@@ -128,7 +128,7 @@ const AnalyticsPage: React.FC = () => {
                 <li>You are performing exceptionally well in <strong>TypeScript</strong>.</li>
                 <li>Consider reviewing <strong>MongoDB</strong> concepts to improve your score.</li>
                 <li>Your learning streak is <strong>{stats?.streakDays || 0} days</strong>. Keep it up!</li>
-                <li>You have completed <strong>{stats?.quizzesCompleted || 0}</strong> quizzes in total.</li>
+                <li>You have completed <strong>{stats?.quizzesCompleted || 0}</strong> exams in total.</li>
               </ul>
             </div>
           </div>

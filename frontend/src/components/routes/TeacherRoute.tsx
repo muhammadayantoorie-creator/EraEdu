@@ -16,12 +16,13 @@ const TeacherRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.role !== 'teacher' && user.role !== 'admin') {
-    // Redirect non-teachers to their appropriate dashboard
-    if (user.role === 'student') {
-      return <Navigate to="/dashboard/student" replace />;
+  if (user.role !== 'teacher') {
+    // Keep each role in its own dashboard shell when a role-specific URL is
+    // entered directly or refreshed.
+    if (user.role === 'admin') {
+      return <Navigate to="/dashboard/admin" replace />;
     }
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/dashboard/student" replace />;
   }
 
   return <Outlet />;

@@ -17,9 +17,9 @@ export const feedbackService = {
       .eq('id', input.attemptId)
       .single();
 
-    if (attemptError || !attempt) throw Object.assign(new Error('Quiz attempt not found'), { statusCode: 404 });
-    if (attempt.user_id !== studentId) throw Object.assign(new Error('You can only review your own quiz attempt'), { statusCode: 403 });
-    if (attempt.status !== 'completed') throw Object.assign(new Error('Feedback is available after the quiz is completed'), { statusCode: 400 });
+    if (attemptError || !attempt) throw Object.assign(new Error('Exam attempt not found'), { statusCode: 404 });
+    if (attempt.user_id !== studentId) throw Object.assign(new Error('You can only review your own exam attempt'), { statusCode: 403 });
+    if (attempt.status !== 'completed') throw Object.assign(new Error('Feedback is available after the exam is completed'), { statusCode: 400 });
 
     const { data, error } = await supabase.from('student_feedback').insert({
       attempt_id: attempt.id,

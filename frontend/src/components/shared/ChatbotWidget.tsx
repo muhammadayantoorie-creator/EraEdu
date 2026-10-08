@@ -3,13 +3,13 @@ import { FiMessageCircle, FiSend, FiX } from 'react-icons/fi';
 import api from '../../services/api';
 
 const studentTips = [
-  'Ask me about quiz rules and violations.',
-  'I can guide you to reports, quizzes, and teacher pages.',
+  'Ask me about exam rules and violations.',
+  'I can guide you to reports, exams, and teacher pages.',
   'I will not help with cheating or bypassing rules.'
 ];
 
 const teacherTips = [
-  'Ask me how to create, schedule, or update a quiz.',
+  'Ask me how to create, schedule, or update an exam.',
   'I can help with questions, marking, submissions, and analytics.',
   'I can guide you through every teacher dashboard feature.'
 ];
@@ -33,8 +33,8 @@ const ChatbotWidget = ({ role }: ChatbotWidgetProps) => {
       role: 'assistant',
       content:
         isTeacher
-          ? 'Hi! I am your EraEdu Teacher Assistant. I can help with quizzes, schedules, questions, courses, grading, reports, analytics, and every teacher dashboard feature.'
-          : 'Hi! I am the EraEdu Student Assistant. I can explain quiz rules, violations, and help you navigate your quizzes and reports.'
+          ? 'Hi! I am your EraEdu Teacher Assistant. I can help with exams, schedules, questions, courses, grading, reports, analytics, and every teacher dashboard feature.'
+          : 'Hi! I am the EraEdu Student Assistant. I can explain exam rules, violations, and help you navigate your exams and reports.'
     }
   ]);
 

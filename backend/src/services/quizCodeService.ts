@@ -16,9 +16,9 @@ export const quizCodeService = {
       .select('teacher_id, course_id')
       .eq('id', quizId)
       .single();
-    if (quizError || !quiz) throw Object.assign(new Error('Quiz not found'), { statusCode: 404 });
+    if (quizError || !quiz) throw Object.assign(new Error('Exam not found'), { statusCode: 404 });
     if (quiz.teacher_id !== teacherId || quiz.course_id !== courseId) {
-      throw Object.assign(new Error('Not authorized to manage access codes for this quiz'), { statusCode: 403 });
+      throw Object.assign(new Error('Not authorized to manage access codes for this exam'), { statusCode: 403 });
     }
 
     // Generate unique code
@@ -72,7 +72,7 @@ export const quizCodeService = {
       .single();
 
     if (error || !quiz) {
-      throw new Error('Invalid quiz code');
+      throw new Error('Invalid exam code');
     }
 
     // If quiz is tied to a course, only enrolled students can access it

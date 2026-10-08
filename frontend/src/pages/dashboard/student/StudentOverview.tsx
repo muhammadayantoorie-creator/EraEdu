@@ -128,7 +128,7 @@ const StudentOverview = () => {
                 </span>
               </h1>
               <p className="mt-3 max-w-xl text-[14.5px] leading-relaxed text-white/60">
-                Ready to take a quiz? Enter the code shared by your teacher to begin.
+                Ready to take an exam? Enter the code shared by your teacher to begin.
               </p>
 
               <div className="mt-5 flex items-center gap-4">
@@ -140,7 +140,7 @@ const StudentOverview = () => {
                 </div>
                 <span className="h-3 w-px bg-white/15" />
                 <span className="text-[12px] text-white/60">
-                  {analytics?.totalQuizzes || 0} quizzes completed
+                  {analytics?.totalQuizzes || 0} exams completed
                 </span>
               </div>
             </div>
@@ -156,7 +156,7 @@ const StudentOverview = () => {
                 shadow-[0_8px_30px_-10px_rgba(16,185,129,0.6)]
               "
             >
-              Join Quiz
+              Join Exam
               <span
                 className="
                   flex h-8 w-8 items-center justify-center rounded-full
@@ -176,7 +176,7 @@ const StudentOverview = () => {
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           icon={<Stroke d="M9 11l3 3 7-7 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10" />}
-          label="Quizzes Completed"
+          label="Exams Completed"
           value={analytics?.totalQuizzes || 0}
           color="primary"
         />
@@ -245,7 +245,7 @@ const StudentOverview = () => {
                   <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-ink-50 ring-1 ring-ink-900/5 text-ink-400">
                     <Stroke d="M3 21h18 M6 17V9 M11 17V5 M16 17v-7 M21 17v-3" />
                   </div>
-                  <p className="text-[13px] text-ink-500">Complete quizzes to see your performance trend</p>
+                  <p className="text-[13px] text-ink-500">Complete exams to see your performance trend</p>
                 </div>
               </div>
             )}
@@ -303,7 +303,7 @@ const StudentOverview = () => {
               </ul>
             ) : (
               <p className="mt-4 text-[13px] text-ink-500">
-                No notifications yet. Your teacher will notify you when a new quiz is available.
+                No notifications yet. Your teacher will notify you when a new exam is available.
               </p>
             )}
           </div>
@@ -322,13 +322,13 @@ const StudentOverview = () => {
             {[
               {
                 to: '/dashboard/student/join-quiz',
-                title: 'Join Quiz',
-                desc: 'Enter a code to take a quiz',
+                title: 'Join Exam',
+                desc: 'Enter a code to take an exam',
                 d: 'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h2v2h-2z M18 14h2v2h-2z M14 18h2v2h-2z M18 18h2v2h-2z',
               },
               {
                 to: '/dashboard/student/quiz-history',
-                title: 'Quiz History',
+                title: 'Exam History',
                 desc: 'Review your past attempts',
                 d: 'M3 12a9 9 0 1 0 3-6.7 M3 4v5h5 M12 8v4l3 2',
               },

@@ -4,11 +4,8 @@
  * Uses face-api.js (TinyFaceDetector + 68-point landmarks) running entirely
  * in the browser. No backend calls are needed for detection itself.
  *
- * Key fixes applied:
- *  - Detection loop uses recursive setTimeout (not setInterval) so slow ML
- *    inference on low-end devices never queues up concurrent detections.
- *  - Camera-blocked states fire continuous no_face violations so students
- *    cannot bypass proctoring by denying camera mid-exam.
+ * Green is shown only after a successful, sufficiently confident detector
+ * result. Camera/model failures are operational states, not violations.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,17 +13,30 @@ import * as faceapi from 'face-api.js';
 
 /* ---------- configurable constants --------- */
 const DETECTION_INTERVAL_MS  = 500;
+// Face-api's detection score must meet this threshold before the UI can turn green.
+const DETECTION_CONFIDENCE_THRESHOLD = 0.6;
 const YAW_THRESHOLD           = 30;
 const PITCH_THRESHOLD         = 25;
 const SMOOTHING_WINDOW        = 5;
 const SMOOTHING_MAJORITY      = 3;
 const GRACE_PERIOD_MS         = 2_000;
 const AWAY_LIMIT_SEC          = 60;
-const CAMERA_BLOCKED_PING_MS  = 10_000; // fire no_face every 10 s when camera is blocked
 const MODEL_URL = `${import.meta.env.BASE_URL}models`;
 
 /* ---------- types ---------- */
-export type FaceStatus = 'loading' | 'looking' | 'away' | 'no_face' | 'error' | 'permission_denied';
+export type FaceStatus =
+  | 'model_loading'
+  | 'model_load_failed'
+  | 'camera_starting'
+  | 'camera_ready'
+  | 'camera_unavailable'
+  | 'permission_denied'
+  | 'inference_error'
+  | 'looking'
+  | 'away'
+  | 'no_face';
+
+type DetectionKind = 'valid' | 'away' | 'no_face';
 
 export interface FaceDetectionCallbacks {
   onViolation?: (kind: 'face_away' | 'no_face') => void;
@@ -79,12 +89,16 @@ export function useFaceDetection(
   const videoRef        = useRef<HTMLVideoElement>(null!);
   const streamRef       = useRef<MediaStream | null>(null);
   const timerRef        = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const awayStartRef    = useRef<number | null>(null);
-  const lastStatusRef   = useRef<'looking' | 'away'>('looking');
-  const smoothingBuffer = useRef<boolean[]>([]);
+  const validFaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastValidDetectionRef = useRef<number | null>(null);
+  const episodeStartRef = useRef<number | null>(null);
+  const episodeKindRef = useRef<Exclude<DetectionKind, 'valid'> | null>(null);
+  const violationEmittedRef = useRef(false);
+  const autoSubmittedRef = useRef(false);
+  const smoothingBuffer = useRef<DetectionKind[]>([]);
   const isDetecting     = useRef(false); // prevents concurrent ML calls
 
-  const [status,        setStatus]        = useState<FaceStatus>('loading');
+  const [status,        setStatus]        = useState<FaceStatus>('model_loading');
   const [awaySeconds,   setAwaySeconds]   = useState(0);
   const [violationCount,setViolationCount]= useState(0);
   const [modelsLoaded,  setModelsLoaded]  = useState(false);
@@ -93,10 +107,25 @@ export function useFaceDetection(
   const cbRef = useRef(callbacks);
   cbRef.current = callbacks;
 
+  const clearDetectionState = useCallback((nextStatus: FaceStatus = 'camera_ready') => {
+    if (validFaceTimerRef.current) clearTimeout(validFaceTimerRef.current);
+    validFaceTimerRef.current = null;
+    lastValidDetectionRef.current = null;
+    smoothingBuffer.current = [];
+    episodeStartRef.current = null;
+    episodeKindRef.current = null;
+    violationEmittedRef.current = false;
+    autoSubmittedRef.current = false;
+    setAwaySeconds(0);
+    setStatus(nextStatus);
+  }, []);
+
   /* ---- 1. Load face-api models ---- */
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    setStatus('model_loading');
+    setModelsLoaded(false);
 
     (async () => {
       try {
@@ -104,7 +133,7 @@ export function useFaceDetection(
         await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
         if (!cancelled) setModelsLoaded(true);
       } catch {
-        if (!cancelled) setStatus('error');
+        if (!cancelled) setStatus('model_load_failed');
       }
     })();
 
@@ -113,11 +142,12 @@ export function useFaceDetection(
 
   /* ---- 2. Start camera ---- */
   const startCamera = useCallback(async () => {
+    clearDetectionState('camera_starting');
     try {
       if (navigator.permissions?.query) {
         const permResult = await navigator.permissions.query({ name: 'camera' as PermissionName });
         if (permResult.state === 'denied') {
-          setStatus('permission_denied');
+          clearDetectionState('permission_denied');
           return null;
         }
       }
@@ -129,30 +159,38 @@ export function useFaceDetection(
         audio: false,
       });
       streamRef.current = stream;
+      stream.getTracks().forEach(track => {
+        track.addEventListener('ended', () => {
+          if (streamRef.current === stream) {
+            streamRef.current = null;
+            clearDetectionState('camera_unavailable');
+          }
+        });
+      });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-      setStatus('looking');
+      // A stream is merely ready; only detector evidence may mark it "looking".
+      clearDetectionState('camera_ready');
       return stream;
-    } catch (err: any) {
-      if (err.name === 'NotAllowedError') {
-        setStatus('permission_denied');
-      } else {
-        setStatus('error');
-      }
+    } catch (err: unknown) {
+      const errorName = err instanceof DOMException ? err.name : '';
+      clearDetectionState(errorName === 'NotAllowedError' || errorName === 'SecurityError'
+        ? 'permission_denied'
+        : 'camera_unavailable');
       return null;
     }
-  }, []);
+  }, [clearDetectionState]);
 
   const retryCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-    setStatus('loading');
+    clearDetectionState(modelsLoaded ? 'camera_starting' : 'model_loading');
     setCameraRetryCount(c => c + 1);
-  }, []);
+  }, [clearDetectionState, modelsLoaded]);
 
   useEffect(() => {
     if (!enabled || !modelsLoaded) return;
@@ -169,53 +207,74 @@ export function useFaceDetection(
         streamRef.current.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       }
+      clearDetectionState('camera_unavailable');
     };
-  }, [enabled, modelsLoaded, cameraRetryCount, startCamera]);
+  }, [enabled, modelsLoaded, cameraRetryCount, startCamera, clearDetectionState]);
 
   /* ---- helper: process a single detection result ---- */
-  const processDetection = useCallback((isLooking: boolean) => {
-    const buf = smoothingBuffer.current;
-    buf.push(isLooking);
-    if (buf.length > SMOOTHING_WINDOW) buf.shift();
-
-    const smoothedLooking = buf.filter(Boolean).length >= SMOOTHING_MAJORITY;
+  const processDetection = useCallback((kind: DetectionKind) => {
     const now = Date.now();
+    if (kind === 'valid') {
+      const buffer = smoothingBuffer.current;
+      buffer.push(kind);
+      if (buffer.length > SMOOTHING_WINDOW) buffer.shift();
+      if (buffer.filter(value => value === 'valid').length >= SMOOTHING_MAJORITY) {
+        episodeStartRef.current = null;
+        episodeKindRef.current = null;
+        violationEmittedRef.current = false;
+        autoSubmittedRef.current = false;
+        setAwaySeconds(0);
+        setStatus('looking');
+        lastValidDetectionRef.current = now;
+        if (validFaceTimerRef.current) clearTimeout(validFaceTimerRef.current);
+        // Do not leave a green badge visible when detection is paused or throttled.
+        validFaceTimerRef.current = setTimeout(() => {
+          if (lastValidDetectionRef.current && Date.now() - lastValidDetectionRef.current >= GRACE_PERIOD_MS) {
+            smoothingBuffer.current = [];
+            setStatus('camera_ready');
+          }
+        }, GRACE_PERIOD_MS);
+      } else {
+        setStatus('camera_ready');
+      }
+      return;
+    }
 
-    if (smoothedLooking) {
-      lastStatusRef.current = 'looking';
-      awayStartRef.current  = null;
-      setStatus('looking');
+    // Empty frames clear earlier successes immediately; no stale green state.
+    if (validFaceTimerRef.current) clearTimeout(validFaceTimerRef.current);
+    validFaceTimerRef.current = null;
+    lastValidDetectionRef.current = null;
+    smoothingBuffer.current = [];
+    if (episodeKindRef.current !== kind) {
+      episodeKindRef.current = kind;
+      episodeStartRef.current = now;
+      violationEmittedRef.current = false;
+      autoSubmittedRef.current = false;
+    }
+    const elapsedMs = now - (episodeStartRef.current ?? now);
+    if (elapsedMs < GRACE_PERIOD_MS) {
       setAwaySeconds(0);
-    } else {
-      if (lastStatusRef.current === 'looking') {
-        awayStartRef.current = now;
-        lastStatusRef.current = 'away';
-      }
+      setStatus('camera_ready');
+      return;
+    }
 
-      const awayStart  = awayStartRef.current!;
-      const elapsedMs  = now - awayStart;
-
-      if (elapsedMs < GRACE_PERIOD_MS) return;
-
-      const elapsedSec = Math.round(elapsedMs / 1000);
-      setAwaySeconds(elapsedSec);
-      setStatus(buf.some(b => !b) ? 'away' : 'no_face');
-
-      // Fire violation once per grace-period crossing
-      if (elapsedMs >= GRACE_PERIOD_MS && elapsedMs < GRACE_PERIOD_MS + DETECTION_INTERVAL_MS + 100) {
-        setViolationCount(c => c + 1);
-        cbRef.current.onViolation?.(isLooking ? 'face_away' : 'no_face');
-      }
-
-      if (elapsedSec >= AWAY_LIMIT_SEC) {
-        cbRef.current.onAutoSubmit?.();
-      }
+    const elapsedSec = Math.floor(elapsedMs / 1000);
+    setAwaySeconds(elapsedSec);
+    setStatus(kind === 'away' ? 'away' : 'no_face');
+    if (!violationEmittedRef.current) {
+      violationEmittedRef.current = true;
+      setViolationCount(c => c + 1);
+      cbRef.current.onViolation?.(kind === 'away' ? 'face_away' : 'no_face');
+    }
+    if (elapsedSec >= AWAY_LIMIT_SEC && !autoSubmittedRef.current) {
+      autoSubmittedRef.current = true;
+      cbRef.current.onAutoSubmit?.();
     }
   }, []);
 
   /* ---- 3. Detection loop — recursive setTimeout prevents queued-up calls ---- */
   useEffect(() => {
-    if (!enabled || !modelsLoaded || status === 'error' || status === 'permission_denied') return;
+    if (!enabled || !modelsLoaded || status === 'model_loading' || status === 'camera_starting' || status === 'permission_denied' || status === 'camera_unavailable' || status === 'model_load_failed') return;
 
     const video = videoRef.current;
     if (!video) return;
@@ -225,23 +284,29 @@ export function useFaceDetection(
     const runDetection = async () => {
       if (cancelled) return;
 
-      if (!isDetecting.current && !video.paused && !video.ended && video.readyState >= 2) {
+      const streamIsLive = streamRef.current?.getVideoTracks().some(track => track.readyState === 'live');
+      if (!streamIsLive) {
+        clearDetectionState('camera_unavailable');
+      } else if (!isDetecting.current && !video.paused && !video.ended && video.readyState >= 2) {
         isDetecting.current = true;
         try {
           const detection = await faceapi
-            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.45 }))
+            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: DETECTION_CONFIDENCE_THRESHOLD }))
             .withFaceLandmarks();
 
           if (!cancelled) {
-            if (!detection) {
-              processDetection(false);
+            if (!detection || detection.detection.score < DETECTION_CONFIDENCE_THRESHOLD) {
+              processDetection('no_face');
             } else {
               const { yaw, pitch } = estimateHeadPose(detection.landmarks);
-              processDetection(Math.abs(yaw) <= YAW_THRESHOLD && Math.abs(pitch) <= PITCH_THRESHOLD);
+              processDetection(Math.abs(yaw) <= YAW_THRESHOLD && Math.abs(pitch) <= PITCH_THRESHOLD ? 'valid' : 'away');
             }
           }
-        } catch { /* skip frame silently */ }
-        isDetecting.current = false;
+        } catch {
+          if (!cancelled) clearDetectionState('inference_error');
+        } finally {
+          isDetecting.current = false;
+        }
       }
 
       if (!cancelled) {
@@ -255,26 +320,15 @@ export function useFaceDetection(
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [enabled, modelsLoaded, status, processDetection]);
+  }, [enabled, modelsLoaded, status, processDetection, clearDetectionState]);
 
   /* ---- 4. Camera-blocked ping — fire no_face violations so students cannot
-            bypass proctoring by denying camera access mid-exam ---- */
-  useEffect(() => {
-    if (!enabled) return;
-    if (status !== 'permission_denied' && status !== 'error') return;
-
-    const interval = setInterval(() => {
-      setViolationCount(c => c + 1);
-      cbRef.current.onViolation?.('no_face');
-    }, CAMERA_BLOCKED_PING_MS);
-
-    return () => clearInterval(interval);
-  }, [status, enabled]);
-
+            bypass proctoring by denying camera access mid-quiz ---- */
   /* ---- Cleanup on unmount ---- */
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (validFaceTimerRef.current) clearTimeout(validFaceTimerRef.current);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
       }

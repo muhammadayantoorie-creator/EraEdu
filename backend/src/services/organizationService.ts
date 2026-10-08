@@ -32,9 +32,13 @@ export const organizationService = {
       .select('id, name, owner_id, seat_limit, created_at')
       .in('id', ids);
     if (organizationError) throw organizationError;
+    const { data: allMembers, error: membersError } = await supabase.from('organization_members').select('organization_id').in('organization_id', ids);
+    if (membersError) throw membersError;
     return (organizations || []).map((organization: any) => ({
       ...organization,
       role: memberships?.find((item: any) => item.organization_id === organization.id)?.role,
+      used_seats: (allMembers || []).filter((member: any) => member.organization_id === organization.id).length,
+      remaining_seats: Math.max(0, Number(organization.seat_limit) - (allMembers || []).filter((member: any) => member.organization_id === organization.id).length),
     }));
   },
 
@@ -78,15 +82,12 @@ export const organizationService = {
     if (userError) throw userError;
     if (!user || user.role !== 'teacher') throw fail('A registered teacher account is required before it can be added.', 404);
 
-    const existing = await getMembership(organizationId, user.id);
-    if (existing) return { alreadyMember: true };
-    const { data: organization, error: organizationError } = await supabase.from('organizations').select('seat_limit').eq('id', organizationId).single();
-    if (organizationError || !organization) throw organizationError || fail('Organization not found.', 404);
-    const { count, error: countError } = await supabase.from('organization_members').select('*', { count: 'exact', head: true }).eq('organization_id', organizationId);
-    if (countError) throw countError;
-    if ((count || 0) >= organization.seat_limit) throw fail('This organization has reached its teacher-seat limit.', 409);
-    const { error } = await supabase.from('organization_members').insert({ organization_id: organizationId, user_id: user.id, role: 'teacher' });
-    if (error) throw error;
-    return { alreadyMember: false };
+    const { data: alreadyMember, error } = await supabase.rpc('add_organization_teacher_atomic', { p_organization_id: organizationId, p_user_id: user.id });
+    if (error) {
+      if (String(error.message).includes('seat limit')) throw fail('This organization has reached its seat limit.', 409);
+      if (String(error.message).includes('function') || String(error.message).includes('schema cache')) throw fail('Organization seat migration required: apply backend/migrations/021_enforce_organization_seats_atomically.sql', 503);
+      throw error;
+    }
+    return { alreadyMember: !!alreadyMember };
   },
 };

@@ -39,6 +39,21 @@ In production, the backend refuses to start if `FRONTEND_URL` is missing, points
 to localhost, or `SUPABASE_SERVICE_KEY` is missing. This prevents an accidental
 development configuration from being exposed publicly.
 
+### Session cookie and payment return check
+
+The API session cookie is `HttpOnly`, `Secure`, and `SameSite=None` in
+production. The browser client sends API requests with credentials, so the
+deployed frontend origin must exactly match `FRONTEND_URL` or be listed in
+`ALLOWED_ORIGINS`; wildcard origins cannot be used with credentialed CORS.
+After a Safepay return, verify `/api/auth/me` still succeeds after a hard
+reload. If it does not, inspect the browser's cookie/CORS diagnostics and the
+exact deployed origins rather than treating a payment cancellation as logout.
+
+Safepay must redirect to the same authenticated frontend origin. A cancellation
+returns to `/profile?payment=cancelled`, which is informational only; plan
+activation occurs solely after the backend verifies `TRACKER_ENDED` with
+Safepay (including via the signed webhook).
+
 Optional integrations: `GEMINI_API_KEY`, `RESEND_API_KEY`.
 
 After deployment, verify `/health`, login, quiz launch, and the admin control center. See `PRE_LAUNCH_CHECKLIST.md` for the complete sign-off process.

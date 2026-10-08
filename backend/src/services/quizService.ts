@@ -42,6 +42,27 @@ function isMissingColumnError(err: any, column: string): boolean {
   );
 }
 
+type PersistedViolation = { type: string; timestamp: string; details?: unknown; eventId?: string; severity?: string; detectionMethod?: string };
+async function persistedViolationsForAttempts(attemptIds: string[]): Promise<Map<string, PersistedViolation[]>> {
+  const result = new Map<string, PersistedViolation[]>();
+  if (!attemptIds.length) return result;
+  const { data, error } = await supabase.from('cheating_violations')
+    .select('quiz_attempt_id, violation_type, timestamp, details, event_id, severity, detection_method')
+    .in('quiz_attempt_id', attemptIds).order('timestamp', { ascending: true });
+  if (error) {
+    if (isMissingColumnError(error, 'event_id')) {
+      throw Object.assign(new Error('Monitoring schema migration required: apply backend/migrations/019_make_cheating_events_authoritative.sql'), { statusCode: 503 });
+    }
+    throw new Error(error.message);
+  }
+  for (const event of data || []) {
+    const events = result.get(event.quiz_attempt_id) || [];
+    events.push({ type: event.violation_type || 'unknown', timestamp: event.timestamp, details: event.details, eventId: event.event_id || undefined, severity: event.severity || 'low', detectionMethod: event.detection_method || 'unknown' });
+    result.set(event.quiz_attempt_id, events);
+  }
+  return result;
+}
+
 const MAX_TITLE_LEN = 200;
 const MAX_DESCRIPTION_LEN = 2000;
 
@@ -65,8 +86,135 @@ function questionOrderForAttempt(questionCount: number, attemptId: string): numb
   return stableShuffle(Array.from({ length: questionCount }, (_, index) => index), `${attemptId}:questions`);
 }
 
-function optionOrderForAttempt(optionCount: number, attemptId: string, questionIndex: number): number[] {
+export function optionOrderForAttempt(optionCount: number, attemptId: string, questionIndex: number): number[] {
   return stableShuffle(Array.from({ length: optionCount }, (_, index) => index), `${attemptId}:question:${questionIndex}:options`);
+}
+
+type SubmittedAttemptAnswer = { questionId: string; selectedAnswer: number | string };
+
+export interface SavedAttemptAnswer {
+  questionId: string;
+  // Multiple-choice answers are always saved as the canonical option index.
+  // Short answers remain text for teacher review.
+  selectedAnswer: number | string | null;
+  isCorrect: boolean;
+  questionType?: 'multipleChoice' | 'shortAnswer';
+  answerVersion: 2;
+}
+
+function submissionError(message: string) {
+  return Object.assign(new Error(message), { statusCode: 400 });
+}
+
+function questionIndexFromId(questionId: unknown, quizId: string): number {
+  if (typeof questionId !== 'string') throw submissionError('Each answer must include a question ID');
+  const marker = questionId.lastIndexOf('-q');
+  if (marker < 1 || questionId.slice(0, marker) !== quizId) {
+    throw submissionError('Answer question ID does not belong to this quiz');
+  }
+  const suffix = questionId.slice(marker + 2);
+  if (!/^\d+$/.test(suffix)) throw submissionError('Answer question ID is invalid');
+  return Number(suffix);
+}
+
+// Convert the browser's displayed option position to the canonical question
+// option index exactly once. The normalized result is used for scoring,
+// persistence, and every review response.
+export function normalizeAttemptAnswers(
+  quizId: string,
+  attemptId: string,
+  questions: QuizQuestion[],
+  submittedAnswers: SubmittedAttemptAnswer[],
+): { answers: SavedAttemptAnswer[]; score: number } {
+  if (!Array.isArray(submittedAnswers)) throw submissionError('Answers must be an array');
+
+  const answeredQuestions = new Set<number>();
+  let score = 0;
+  const answers = submittedAnswers.map((answer) => {
+    if (!answer || typeof answer !== 'object') throw submissionError('Each answer must be an object');
+    const questionIndex = questionIndexFromId(answer.questionId, quizId);
+    const question = questions[questionIndex];
+    if (!question) throw submissionError('Answer references an unknown question');
+    if (answeredQuestions.has(questionIndex)) throw submissionError('Each question can only be answered once');
+    answeredQuestions.add(questionIndex);
+
+    const isShortAnswer = question.questionType === 'shortAnswer' || !question.options || question.options.length === 0;
+    if (isShortAnswer) {
+      if (typeof answer.selectedAnswer !== 'string') {
+        throw submissionError('Short-answer responses must be text');
+      }
+      const submitted = answer.selectedAnswer.trim().toLowerCase();
+      const expected = String(question.answerText ?? '').trim().toLowerCase();
+      const isCorrect = Boolean(submitted && expected && submitted === expected);
+      if (isCorrect) score++;
+      return {
+        questionId: `${quizId}-q${questionIndex}`,
+        selectedAnswer: answer.selectedAnswer,
+        isCorrect,
+        questionType: 'shortAnswer' as const,
+        answerVersion: 2 as const,
+      };
+    }
+
+    const displayedOptionIndex = Number(answer.selectedAnswer);
+    // -1 is the browser's explicit unanswered sentinel. It is retained as a
+    // null canonical answer so review has a row but it never earns a point.
+    if (displayedOptionIndex === -1) {
+      return {
+        questionId: `${quizId}-q${questionIndex}`,
+        selectedAnswer: null,
+        isCorrect: false,
+        questionType: 'multipleChoice' as const,
+        answerVersion: 2 as const,
+      };
+    }
+    if (!Number.isInteger(displayedOptionIndex) || displayedOptionIndex < 0 || displayedOptionIndex >= question.options.length) {
+      throw submissionError('Selected option is out of range');
+    }
+
+    const selectedAnswer = optionOrderForAttempt(question.options.length, attemptId, questionIndex)[displayedOptionIndex];
+    const isCorrect = selectedAnswer === question.correctAnswer;
+    if (isCorrect) score++;
+    return {
+      questionId: `${quizId}-q${questionIndex}`,
+      selectedAnswer,
+      isCorrect,
+      questionType: 'multipleChoice' as const,
+      answerVersion: 2 as const,
+    };
+  });
+
+  return { answers, score };
+}
+
+// Older attempts saved the displayed option position. Normalize them only in
+// review responses so historic teacher views remain accurate without trusting
+// the browser or rewriting assessment records.
+function answersForReview(attempt: { id: string; answers?: any[] }, quiz: { id: string; questions?: QuizQuestion[] }): SavedAttemptAnswer[] {
+  const questions = quiz.questions || [];
+  return (Array.isArray(attempt.answers) ? attempt.answers : []).map((answer: any) => {
+    try {
+      const questionIndex = questionIndexFromId(answer?.questionId, quiz.id);
+      const question = questions[questionIndex];
+      if (!question) throw new Error('Unknown question');
+      if (answer?.answerVersion === 2) return answer as SavedAttemptAnswer;
+
+      const isShortAnswer = question.questionType === 'shortAnswer' || !question.options || question.options.length === 0;
+      if (isShortAnswer) {
+        const submitted = String(answer?.selectedAnswer ?? '').trim().toLowerCase();
+        const expected = String(question.answerText ?? '').trim().toLowerCase();
+        return { questionId: `${quiz.id}-q${questionIndex}`, selectedAnswer: String(answer?.selectedAnswer ?? ''), isCorrect: Boolean(submitted && expected && submitted === expected), questionType: 'shortAnswer', answerVersion: 2 };
+      }
+
+      const displayedOptionIndex = Number(answer?.selectedAnswer);
+      const selectedAnswer = Number.isInteger(displayedOptionIndex) && displayedOptionIndex >= 0 && displayedOptionIndex < question.options.length
+        ? optionOrderForAttempt(question.options.length, attempt.id, questionIndex)[displayedOptionIndex]
+        : null;
+      return { questionId: `${quiz.id}-q${questionIndex}`, selectedAnswer, isCorrect: selectedAnswer === question.correctAnswer, questionType: 'multipleChoice', answerVersion: 2 };
+    } catch {
+      return { questionId: String(answer?.questionId ?? ''), selectedAnswer: null, isCorrect: false, answerVersion: 2 };
+    }
+  });
 }
 const MAX_QUESTIONS = 200;
 const MAX_QUESTION_TEXT_LEN = 2000;
@@ -76,7 +224,7 @@ const MAX_OPTIONS = 10;
 function validateQuizPayload(data: QuizData) {
   const err = (m: string) => Object.assign(new Error(m), { statusCode: 400 });
   if (!data.title || typeof data.title !== 'string' || data.title.trim().length === 0) {
-    throw err('Quiz title is required');
+    throw err('Exam title is required');
   }
   if (data.title.length > MAX_TITLE_LEN) throw err(`Title must be at most ${MAX_TITLE_LEN} characters`);
   if (data.description && data.description.length > MAX_DESCRIPTION_LEN) {
@@ -91,10 +239,10 @@ function validateQuizPayload(data: QuizData) {
     throw err('Violation limit must be a whole number between 1 and 100');
   }
   if (!Array.isArray(data.questions) || data.questions.length === 0) {
-    throw err('Quiz must contain at least one question');
+    throw err('Exam must contain at least one question');
   }
   if (data.questions.length > MAX_QUESTIONS) {
-    throw err(`Quiz cannot have more than ${MAX_QUESTIONS} questions`);
+    throw err(`Exam cannot have more than ${MAX_QUESTIONS} questions`);
   }
   data.questions.forEach((q, i) => {
     if (!q.text || typeof q.text !== 'string' || q.text.trim().length === 0) {
@@ -191,8 +339,8 @@ export const quizService = {
     if (studentIds.length > 0) {
       const notifications = studentIds.map((studentId: string) => ({
         user_id: studentId,
-        title: 'New Quiz Available!',
-        message: `${teacherName} has created a new quiz for ${course?.title || 'your course'}: "${quizTitle}". Code: ${accessCode}.${timeMessage}`,
+        title: 'New Exam Available!',
+        message: `${teacherName} has created a new exam for ${course?.title || 'your course'}: "${quizTitle}". Code: ${accessCode}.${timeMessage}`,
         type: 'quiz',
         quiz_id: quizId,
         quiz_code: accessCode,
@@ -297,7 +445,7 @@ export const quizService = {
     // student-access and integrity rules, so tell the owner exactly which
     // safe migration is needed instead of returning an opaque server error.
     if (insertResult.error && (isMissingColumnError(insertResult.error, 'course_id') || isMissingColumnError(insertResult.error, 'violation_limit'))) {
-      const err: any = new Error('Quiz setup is incomplete. Run migration 016_complete_teacher_quiz_schema.sql in Supabase, then try again.');
+      const err: any = new Error('Exam setup is incomplete. Run migration 016_complete_teacher_quiz_schema.sql in Supabase, then try again.');
       err.statusCode = 400;
       throw err;
     }
@@ -452,7 +600,7 @@ export const quizService = {
       .single();
 
     if (error || !quiz) {
-      throw new Error('Invalid quiz code');
+      throw new Error('Invalid exam code');
     }
 
     // Ensure student is enrolled if this quiz is course-specific
@@ -476,12 +624,12 @@ export const quizService = {
       const scheduledTime = new Date(quiz.scheduled_start);
       const now = new Date();
       if (now < scheduledTime) {
-        throw new Error(`Quiz will start at ${scheduledTime.toLocaleString()}. Please wait.`);
+        throw new Error(`Exam will start at ${scheduledTime.toLocaleString()}. Please wait.`);
       }
     }
 
     if (quiz.is_active === false) {
-      throw new Error('This quiz is no longer accepting attempts.');
+      throw new Error('This exam is no longer accepting attempts.');
     }
 
     // One submitted attempt per student. This is enforced on the server so a
@@ -604,7 +752,19 @@ export const quizService = {
       throw new Error('Unauthorized to view this attempt');
     }
 
+    // Teacher/admin review includes canonical answer keys. Those must remain
+    // unavailable until the student has finished the attempt.
+    if (!isStudentOwner && attempt.status !== 'completed') {
+      throw Object.assign(new Error('Exam attempt is not ready for review'), { statusCode: 403 });
+    }
+
     const isReviewed = attempt.teacher_grade !== null && attempt.teacher_grade !== undefined;
+    const persistedViolations = !isStudentOwner
+      ? (await persistedViolationsForAttempts([attempt.id])).get(attempt.id) || []
+      : [];
+    const { data: attemptStudent } = !isStudentOwner
+      ? await supabase.from('users').select('name, email').eq('id', attempt.user_id).single()
+      : { data: null };
 
     // Students never see violation details — only teachers/admins.
     const showViolations = !isStudentOwner;
@@ -635,11 +795,14 @@ export const quizService = {
       status: attempt.status,
       startedAt: attempt.started_at,
       completedAt: attempt.completed_at,
-      answers: attempt.answers || [],
+      answers: quiz ? answersForReview(attempt, quiz) : [],
       ...(showViolations
         ? {
-            violations: attempt.violations || [],
+            violations: persistedViolations,
+            violationCount: persistedViolations.length,
             submissionReason: attempt.submission_reason,
+            studentName: attemptStudent?.name || 'Unknown student',
+            studentEmail: attemptStudent?.email || '',
           }
         : {}),
       teacherGrade: attempt.teacher_grade,
@@ -661,7 +824,7 @@ export const quizService = {
     // Get all quizzes by this teacher
     const { data: quizzes } = await supabase
       .from('teacher_quizzes')
-      .select('id, title')
+      .select('id, title, questions')
       .eq('teacher_id', teacherId);
 
     if (!quizzes || quizzes.length === 0) return [];
@@ -688,17 +851,10 @@ export const quizService = {
 
     const userMap = new Map(users?.map(u => [u.id, u]) || []);
 
+    const violationsByAttempt = await persistedViolationsForAttempts(attempts.map(attempt => attempt.id));
     return attempts.map(attempt => {
       const user = userMap.get(attempt.user_id) || { name: 'Unknown', email: '' };
-      // Normalize violations to always have a `type` field
-      const rawViolations = attempt.violations || [];
-      const normalizedViolations = Array.isArray(rawViolations) 
-        ? rawViolations.map((v: any) => ({
-            type: v?.type || v?.violation_type || 'unknown',
-            timestamp: v?.timestamp || v?.created_at || new Date().toISOString(),
-            details: v?.details || undefined,
-          }))
-        : [];
+      const normalizedViolations = violationsByAttempt.get(attempt.id) || [];
       return {
         id: attempt.id,
         quizId: attempt.quiz_id,
@@ -714,8 +870,9 @@ export const quizService = {
         completedAt: attempt.completed_at,
         teacherGrade: attempt.teacher_grade,
         teacherFeedback: attempt.teacher_feedback,
-        answers: attempt.answers || [],
+        answers: answersForReview(attempt, quizMap.get(attempt.quiz_id)),
         violations: normalizedViolations,
+        violationCount: normalizedViolations.length,
         autoSubmitted: attempt.auto_submitted,
         submissionReason: attempt.submission_reason,
       };
@@ -732,7 +889,7 @@ export const quizService = {
       .single();
 
     if (error || !quiz) {
-      throw new Error('Quiz not found');
+      throw new Error('Exam not found');
     }
 
     return {
@@ -779,8 +936,8 @@ export const quizService = {
     // Send notification to student
     await supabase.from('notifications').insert([{
       user_id: attempt.user_id,
-      title: 'Quiz Graded!',
-      message: `Your quiz "${quiz.title}" has been graded. Grade: ${grade}%`,
+      title: 'Exam Graded!',
+      message: `Your exam "${quiz.title}" has been graded. Grade: ${grade}%`,
       type: 'grade',
       quiz_id: attempt.quiz_id,
       is_read: false,
@@ -793,7 +950,7 @@ export const quizService = {
   async submitAllAnswers(
     attemptId: string, 
     userId: string, 
-    answers: { questionId: string; selectedAnswer: number | string }[],
+    answers: SubmittedAttemptAnswer[],
     violations?: { type: string; timestamp: string; details?: string }[]
   ) {
     await assertStudentEmailPolicy(userId);
@@ -807,11 +964,12 @@ export const quizService = {
       .single();
 
     if (attemptError || !attempt) {
-      throw new Error('Quiz attempt not found');
+      throw new Error('Exam attempt not found');
     }
 
-    if (attempt.status === 'completed') {
-      throw new Error('Quiz already submitted');
+    const completingViolationAutoSubmit = attempt.status === 'completed' && attempt.submission_reason === 'excessive_violations';
+    if (attempt.status === 'completed' && !completingViolationAutoSubmit) {
+      throw new Error('Exam already submitted');
     }
 
     // Get quiz to calculate score
@@ -822,7 +980,7 @@ export const quizService = {
       .single();
 
     if (quizError || !quiz) {
-      throw new Error('Quiz not found');
+      throw new Error('Exam not found');
     }
 
     const timeLimitMinutes = Number(quiz.time_limit || 0);
@@ -831,52 +989,16 @@ export const quizService = {
       : null;
     const timeExpired = deadline !== null && Date.now() >= deadline;
 
-    // Calculate score
-    let score = 0;
     const questions = quiz.questions || [];
-
-    // Robustly extract the trailing question index from a "<quizId>-q<N>" id.
-    // The previous `split('-q')[1]` was fragile because quiz UUIDs can contain
-    // a literal "-q" segment.
-    const extractQuestionIndex = (qid: string): number => {
-      if (typeof qid !== 'string') return NaN;
-      const m = qid.match(/-q(\d+)$/);
-      return m ? parseInt(m[1], 10) : NaN;
-    };
-
-    answers.forEach((answer) => {
-      const questionIndex = extractQuestionIndex(answer.questionId);
-      if (Number.isNaN(questionIndex)) return;
-      const question = questions[questionIndex];
-      if (!question) return;
-
-      const isShortAnswer = question.questionType === 'shortAnswer' || !question.options || question.options.length === 0;
-      if (isShortAnswer) {
-        const submitted = String(answer.selectedAnswer ?? '').trim().toLowerCase();
-        const expected = String(question.answerText ?? '').trim().toLowerCase();
-        if (submitted && expected && submitted === expected) {
-          score++;
-        }
-      } else {
-        // The browser submits the displayed option position. Convert it back
-        // to the canonical option position with the same server-derived
-        // variant used when this attempt was started.
-        const displayedOptionIndex = Number(answer.selectedAnswer);
-        const originalOptionIndex = optionOrderForAttempt(
-          question.options?.length || 0,
-          attempt.id,
-          questionIndex,
-        )[displayedOptionIndex];
-        if (originalOptionIndex === question.correctAnswer) score++;
-      }
-    });
+    const normalizedSubmission = normalizeAttemptAnswers(quiz.id, attempt.id, questions, answers);
+    const { score, answers: normalizedAnswers } = normalizedSubmission;
 
     // Update the attempt with violations
     const updateData: any = {
       status: 'completed',
       completed_at: new Date(),
       score,
-      answers,
+      answers: normalizedAnswers,
     };
 
     if (timeExpired) {
@@ -884,24 +1006,22 @@ export const quizService = {
       updateData.submission_reason = 'time_expired';
     }
     
-    if (violations && violations.length > 0) {
-      updateData.violations = violations;
-      updateData.violation_count = violations.length;
-    }
+    // Violation events are written through report-violation and are the
+    // authoritative source. Never replace server-recorded events with a
+    // shorter, stale browser-memory list supplied during submission.
 
     // Atomic guard: only the first concurrent submit succeeds. The
     // `.eq('status', 'in-progress')` filter prevents a double-submit from
     // overwriting the original score with a second answer set.
-    let updateResult = await supabase
-      .from('quiz_attempts')
-      .update(updateData)
-      .eq('id', attemptId)
-      .eq('status', 'in-progress')
-      .select('id');
+    let updateQuery = supabase.from('quiz_attempts').update(updateData).eq('id', attemptId);
+    updateQuery = completingViolationAutoSubmit
+      ? updateQuery.eq('status', 'completed').eq('submission_reason', 'excessive_violations')
+      : updateQuery.eq('status', 'in-progress');
+    let updateResult = await updateQuery.select('id');
 
-    // Earlier EraEdu databases may not yet have the optional violation or
-    // auto-submit columns. Do not lose the student's completed submission
-    // because only optional monitoring metadata cannot be stored.
+    // Auto-submit metadata is optional for old schemas, but monitoring event
+    // persistence is not: report-violation returns an actionable migration
+    // error instead of silently dropping an event.
     const missingOptionalSubmissionColumn = (error: any) => {
       const message = String(error?.message || '').toLowerCase();
       return ['violations', 'violation_count', 'auto_submitted', 'submission_reason']
@@ -915,24 +1035,24 @@ export const quizService = {
           status: 'completed',
           completed_at: new Date(),
           score,
-          answers,
+          answers: normalizedAnswers,
         })
         .eq('id', attemptId)
-        .eq('status', 'in-progress')
+        .eq('status', completingViolationAutoSubmit ? 'completed' : 'in-progress')
         .select('id');
     }
 
     const { data: updatedRows, error: updateError } = updateResult;
     if (updateError) throw new Error(updateError.message);
     if (!updatedRows || updatedRows.length === 0) {
-      throw new Error('Quiz already submitted');
+      throw new Error('Exam already submitted');
     }
 
     if (quiz.teacher_id) {
       const { error: notifyError } = await supabase.from('notifications').insert([{
         user_id: quiz.teacher_id,
         title: 'Submission Pending Review',
-        message: 'A student submitted quiz "' + quiz.title + '" and is waiting for your review.',
+        message: 'A student submitted exam "' + quiz.title + '" and is waiting for your review.',
         type: 'submission',
         quiz_id: quiz.id,
         is_read: false,
@@ -947,7 +1067,7 @@ export const quizService = {
       score,
       maxScore: questions.length,
       percentage: questions.length > 0 ? Math.round((score / questions.length) * 100) : 0,
-      violationsCount: violations?.length || 0,
+      violationsCount: (await persistedViolationsForAttempts([attemptId])).get(attemptId)?.length || 0,
     };
   },
 
@@ -1034,7 +1154,7 @@ export const quizService = {
       .eq('id', attemptId)
       .single();
     if (!attempt || attempt.status !== 'in-progress') {
-      throw new Error('Quiz attempt is no longer active');
+      throw new Error('Exam attempt is no longer active');
     }
     if (attempt.user_id !== userId) {
       throw Object.assign(new Error('Not authorized to submit to this attempt'), { statusCode: 403 });
@@ -1057,7 +1177,7 @@ export const quizService = {
           })
           .eq('id', attemptId)
           .eq('status', 'in-progress');
-        throw new Error('Quiz time has expired');
+        throw new Error('Exam time has expired');
       }
     }
 
@@ -1252,7 +1372,7 @@ export const quizService = {
 
     // Performance data for chart (last 6 attempts or weeks)
     const performanceData = attempts.slice(-6).map((a, index) => ({
-      week: `Quiz ${index + 1}`,
+      week: `Exam ${index + 1}`,
       score: a.max_score > 0 ? Math.round((a.score / a.max_score) * 100) : 0,
     }));
 

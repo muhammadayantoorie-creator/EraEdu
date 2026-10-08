@@ -3,9 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import api from '../../../services/api';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../../store/authStore';
 
 const CreateCoursePage = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const coursesPath = user?.role === 'admin'
+    ? '/dashboard/admin/courses'
+    : '/dashboard/teacher/courses';
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -55,7 +60,7 @@ const CreateCoursePage = () => {
         maxStudents: maxStudentsValue,
       });
       toast.success('Course created successfully!');
-      navigate('/dashboard/teacher/courses');
+      navigate(coursesPath);
     } catch (error: any) {
       console.error('Create course error:', error);
       const errorData = error.response?.data;
@@ -74,7 +79,7 @@ const CreateCoursePage = () => {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/dashboard/teacher/courses')}
+          onClick={() => navigate(coursesPath)}
           className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeftIcon className="h-4 w-4 mr-2" />
@@ -168,7 +173,7 @@ const CreateCoursePage = () => {
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
           <button
             type="button"
-            onClick={() => navigate('/dashboard/teacher/courses')}
+            onClick={() => navigate(coursesPath)}
             className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
           >
             Cancel

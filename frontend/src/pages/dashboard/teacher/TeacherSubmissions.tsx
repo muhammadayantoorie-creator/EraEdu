@@ -15,8 +15,29 @@ interface Violation {
   type: string;
   violation_type?: string;
   timestamp: string;
-  details?: string;
+  details?: unknown;
+  severity?: string;
+  detectionMethod?: string;
+  detection_method?: string;
 }
+
+const eventLabel = (event: Violation) => {
+  const type = String(event.type || event.violation_type || 'unknown').toLowerCase();
+  return ({ tab_change: 'Tab change', tab_switch: 'Tab change', no_face: 'No face detected', face_away: 'Face away', focus_loss: 'Focus lost', fullscreen_exit: 'Fullscreen exited', window_resize: 'Window resized' } as Record<string, string>)[type]
+    || type.replace(/[_-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) || 'Unrecognized monitoring event';
+};
+const detailSummary = (details: unknown) => {
+  if (!details) return 'No additional details recorded.';
+  if (typeof details === 'string') {
+    try { return detailSummary(JSON.parse(details)); } catch { return details; }
+  }
+  if (typeof details === 'object') {
+    const value = details as Record<string, unknown>;
+    return String(value.alertMessage || value.focus_state || value.key_name || value.detectionMethod || 'Additional event context recorded.');
+  }
+  return String(details);
+};
+const rawDetails = (details: unknown) => typeof details === 'string' ? details : JSON.stringify(details ?? {}, null, 2);
 
 interface Submission {
   id: string;
@@ -147,7 +168,7 @@ const TeacherSubmissions = () => {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Student Submissions</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Review and grade student quiz submissions
+            Review and grade student exam submissions
           </p>
         </div>
         {pendingCount > 0 && (
@@ -165,7 +186,7 @@ const TeacherSubmissions = () => {
             <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Search by student or quiz..."
+              placeholder="Search by student or exam..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -228,7 +249,7 @@ const TeacherSubmissions = () => {
                   
                   <div className="flex items-center gap-6">
                     <div className="text-center">
-                      <p className="text-sm text-gray-500">Quiz</p>
+                      <p className="text-sm text-gray-500">Exam</p>
                       <p className="font-medium text-gray-900">{submission.quizTitle}</p>
                     </div>
                     
@@ -324,8 +345,9 @@ const TeacherSubmissions = () => {
                       const answer = selectedSubmission.answers.find((a: any) => 
                         a.questionId?.endsWith(`-q${qIndex}`)
                       );
-                      const selectedIndex = answer?.selectedAnswer ?? -1;
-                      const isCorrect = selectedIndex === question.correctAnswer;
+                      const selectedIndex = typeof answer?.selectedAnswer === 'number' ? answer.selectedAnswer : -1;
+                      const isCorrect = answer?.isCorrect === true;
+                      const isShortAnswer = question.questionType === 'shortAnswer' || !question.options?.length;
 
                       return (
                         <div key={qIndex} className="border rounded-lg p-4">
@@ -337,6 +359,14 @@ const TeacherSubmissions = () => {
                             )}
                             <div className="flex-1">
                               <p className="font-medium text-gray-900">Q{qIndex + 1}: {question.text}</p>
+                              {isShortAnswer ? (
+                                <div className="mt-2 rounded bg-gray-50 p-2 text-sm text-gray-700">
+                                  <span className="font-medium">Student response:</span>{' '}
+                                  {typeof answer?.selectedAnswer === 'string' && answer.selectedAnswer.trim()
+                                    ? answer.selectedAnswer
+                                    : 'No response'}
+                                </div>
+                              ) : (
                               <div className="mt-2 space-y-1">
                                 {question.options.map((opt: string, oIndex: number) => (
                                   <div
@@ -355,6 +385,7 @@ const TeacherSubmissions = () => {
                                   </div>
                                 ))}
                               </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -383,7 +414,7 @@ const TeacherSubmissions = () => {
                       <ExclamationTriangleIcon className="h-5 w-5" />
                       <strong className="font-bold">Auto-Submitted! </strong>
                     </div>
-                    <span className="block sm:inline ml-7">This quiz was automatically submitted by the system due to excessive violations (Over 100).</span>
+                    <span className="block sm:inline ml-7">This exam was automatically submitted by the system due to excessive violations (Over 100).</span>
                   </div>
                 )}
 
@@ -408,18 +439,14 @@ const TeacherSubmissions = () => {
                           
                           <div className="flex-1 pb-4">
                             <div className="flex items-center justify-between">
-                              <p className="text-sm font-bold text-gray-900 capitalize">
-                                {(v.type || v.violation_type || 'unknown').replace(/_/g, ' ')}
-                              </p>
+                              <p className="text-sm font-bold text-gray-900">{eventLabel(v)}</p>
                               <span className="text-xs text-gray-500">
                                 {new Date(v.timestamp).toLocaleTimeString()}
                               </span>
                             </div>
-                            {v.details && (
-                              <p className="text-xs text-gray-600 mt-1">
-                                {v.details}
-                              </p>
-                            )}
+                            <p className="text-xs text-gray-600 mt-1">{detailSummary(v.details)}</p>
+                            <p className="text-xs text-gray-500 mt-1">Severity: {v.severity || 'low'} · Detection: {v.detectionMethod || v.detection_method || 'unknown'}</p>
+                            {v.details && <details className="mt-1 text-xs text-gray-500"><summary className="cursor-pointer">Technical event data</summary><pre className="mt-1 whitespace-pre-wrap break-words">{rawDetails(v.details)}</pre></details>}
                           </div>
                         </div>
                       ))}

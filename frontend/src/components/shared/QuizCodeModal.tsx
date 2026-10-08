@@ -97,7 +97,7 @@ const QuizCodeModal = ({ isOpen, onClose, quizId, courseId, quizTitle }: QuizCod
 
         <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Share Quiz: {quizTitle}</h3>
+            <h3 className="text-lg font-medium text-gray-900">Share Exam: {quizTitle}</h3>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
               <FiX className="h-5 w-5" />
             </button>

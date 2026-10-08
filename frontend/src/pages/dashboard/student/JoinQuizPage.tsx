@@ -105,7 +105,7 @@ const JoinQuizPage = () => {
     try {
       const response = await api.get(`/quizzes/access-by-code/${code}`);
       setQuizDetails(response.data.data);
-      toast.success('Quiz found!');
+      toast.success('Exam found!');
     } catch (err: any) {
       const message = err.response?.data?.error?.message || 'Invalid or expired code';
       setError(message);
@@ -125,17 +125,17 @@ const JoinQuizPage = () => {
 
   const handleStartQuiz = () => {
     if (quizDetails?.quiz?.alreadySubmitted) {
-      toast.error('You have already submitted this quiz. Each student has one attempt.');
+      toast.error('You have already submitted this exam. Each student has one attempt.');
       return;
     }
 
     if (isExpired) {
-      toast.error('This quiz has expired and is no longer accessible.');
+      toast.error('This exam has expired and is no longer accessible.');
       return;
     }
 
     if (!canStart) {
-      toast.error('Quiz has not started yet. Please wait.');
+      toast.error('Exam has not started yet. Please wait.');
       return;
     }
 
@@ -165,13 +165,13 @@ const JoinQuizPage = () => {
       
       navigate(`/quiz/take/${attemptId}`);
     } catch (err: any) {
-      const message = err.response?.data?.error?.message || 'Failed to start quiz';
+      const message = err.response?.data?.error?.message || 'Failed to start exam';
       
       // Check if quiz has expired
       if (message === 'QUIZ_EXPIRED' || message.toLowerCase().includes('expired')) {
         setIsExpired(true);
         setCanStart(false);
-        toast.error('This quiz has expired and is no longer accessible.');
+        toast.error('This exam has expired and is no longer accessible.');
       } else {
         toast.error(message);
       }
@@ -200,9 +200,9 @@ const JoinQuizPage = () => {
   return (
     <div className="max-w-2xl mx-auto">
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Join Quiz</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Join Exam</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Enter the quiz code provided by your teacher to start a quiz
+          Enter the exam code provided by your teacher to start an exam
         </p>
       </header>
 
@@ -218,7 +218,7 @@ const JoinQuizPage = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-2 text-center">
-                  Enter Quiz Code
+                  Enter Exam Code
                 </label>
                 <input
                   id="code"
@@ -253,7 +253,7 @@ const JoinQuizPage = () => {
                   <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
                 ) : (
                   <>
-                    Access Quiz
+                    Access Exam
                     <ArrowRightIcon className="ml-2 h-5 w-5" />
                   </>
                 )}
@@ -269,11 +269,11 @@ const JoinQuizPage = () => {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="inline-flex items-center justify-center h-5 w-5 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">2</span>
-                  Enter the code above and click "Access Quiz"
+                  Enter the code above and click "Access Exam"
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="inline-flex items-center justify-center h-5 w-5 bg-primary-100 text-primary-700 rounded-full text-xs font-medium">3</span>
-                  Review quiz details and start when ready
+                  Review exam details and start when ready
                 </li>
               </ul>
             </div>
@@ -284,13 +284,13 @@ const JoinQuizPage = () => {
               <div className="inline-flex items-center justify-center h-16 w-16 bg-green-100 rounded-full mb-4">
                 <DocumentTextIcon className="h-8 w-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900">Quiz Found!</h3>
+              <h3 className="text-xl font-semibold text-gray-900">Exam Found!</h3>
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4 space-y-3">
               <div>
-                <p className="text-sm text-gray-500">Quiz Title</p>
-                <p className="font-medium text-gray-900">{quizDetails.quiz?.title || 'Untitled Quiz'}</p>
+                <p className="text-sm text-gray-500">Exam Title</p>
+                <p className="font-medium text-gray-900">{quizDetails.quiz?.title || 'Untitled Exam'}</p>
               </div>
               {quizDetails.quiz?.description && (
                 <div>
@@ -323,8 +323,8 @@ const JoinQuizPage = () => {
             {quizDetails.quiz?.alreadySubmitted ? (
               <div className="rounded-lg border border-primary-200 bg-primary-50 p-5 text-center">
                 <ExclamationCircleIcon className="mx-auto mb-2 h-12 w-12 text-primary-600" />
-                <p className="text-lg font-semibold text-primary-900">Quiz already submitted</p>
-                <p className="mt-1 text-sm text-primary-700">You have completed your one allowed attempt for this quiz.</p>
+                <p className="text-lg font-semibold text-primary-900">Exam already submitted</p>
+                <p className="mt-1 text-sm text-primary-700">You have completed your one allowed attempt for this exam.</p>
                 {quizDetails.quiz?.completedAttemptId && (
                   <button
                     onClick={() => navigate(`/quiz/teacher-results/${quizDetails.quiz.completedAttemptId}`)}
@@ -337,9 +337,9 @@ const JoinQuizPage = () => {
             ) : isExpired && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
                 <ExclamationCircleIcon className="h-12 w-12 text-red-500 mx-auto mb-2" />
-                <p className="text-lg font-semibold text-red-700">Quiz Has Expired</p>
+                <p className="text-lg font-semibold text-red-700">Exam Has Expired</p>
                 <p className="text-sm text-red-600 mt-1">
-                  This quiz is no longer accessible. The submission window has closed.
+                  This exam is no longer accessible. The submission window has closed.
                 </p>
                 {quizDetails.quiz?.expiresAt && (
                   <p className="text-xs text-red-500 mt-2">
@@ -351,15 +351,15 @@ const JoinQuizPage = () => {
 
             {!quizDetails.quiz?.alreadySubmitted && !isExpired && !canStart && timeUntilStart && (
               <div className="bg-primary-50 rounded-lg p-4 text-center">
-                <p className="text-sm text-primary-800 mb-2">Quiz starts in:</p>
+                <p className="text-sm text-primary-800 mb-2">Exam starts in:</p>
                 <p className="text-3xl font-bold text-primary-700">{timeUntilStart}</p>
               </div>
             )}
 
             {!quizDetails.quiz?.alreadySubmitted && <div className="bg-yellow-50 rounded-lg p-4">
               <p className="text-sm text-yellow-700">
-                <strong>Important:</strong> Once you start the quiz, the timer will begin. 
-                Do not switch tabs or windows during the quiz.
+                <strong>Important:</strong> Once you start the exam, the timer will begin.
+                Do not switch tabs or windows during the exam.
               </p>
             </div>}
 
@@ -386,11 +386,11 @@ const JoinQuizPage = () => {
                     Starting...
                   </span>
                 ) : isExpired ? (
-                  'Quiz Expired'
+                  'Exam Expired'
                 ) : !canStart ? (
                   'Please Wait...'
                 ) : (
-                  'Start Quiz'
+                  'Start Exam'
                 )}
               </button>
             </div>}
@@ -406,14 +406,14 @@ const JoinQuizPage = () => {
             <h2 className="mt-4 text-xl font-semibold text-primary-950">Before you start</h2>
             <p className="mt-2 text-sm leading-relaxed text-gray-600">This assessment records integrity events to help your teacher review the session fairly.</p>
             <ul className="mt-4 space-y-2 rounded-xl bg-primary-50 p-4 text-sm text-primary-950">
-              <li>• Stay on the quiz tab and avoid switching windows.</li>
+              <li>• Stay on the exam tab and avoid switching windows.</li>
               <li>• Do not copy, paste, or use unauthorised assistance.</li>
-              <li>• Follow your teacher’s quiz rules and instructions.</li>
+              <li>• Follow your teacher’s exam rules and instructions.</li>
               <li>• Repeated violations may be recorded and can lead to automatic submission.</li>
             </ul>
             <label className="mt-5 flex cursor-pointer items-start gap-3 text-sm text-gray-700">
               <input type="checkbox" checked={rulesAcknowledged} onChange={(event) => setRulesAcknowledged(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-700 focus:ring-primary-600" />
-              <span>I understand the quiz rules and want to continue.</span>
+              <span>I understand the exam rules and want to continue.</span>
             </label>
             <div className="mt-6 flex gap-3">
               <button type="button" onClick={() => setShowViolationNotice(false)} className="flex-1 rounded-xl border border-primary-200 px-4 py-2.5 text-sm font-semibold text-primary-800 hover:bg-primary-50">Go back</button>

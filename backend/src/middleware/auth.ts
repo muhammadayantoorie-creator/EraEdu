@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
 import { authService } from '../services/authService';
+import { supabase } from '../config/supabase';
 
 // Extend Express Request interface to include user
 declare global {
@@ -25,7 +26,13 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
   if (token) {
     try {
       const decoded = jwt.verify(token, config.jwtSecret) as any;
-      req.user = { _id: decoded.id, role: decoded.role };
+      // Re-check governance state on every authenticated request so an
+      // existing session cannot continue after a manual suspension or role change.
+      const { data: liveUser, error } = await supabase.from('users')
+        .select('id, role, is_suspended').eq('id', decoded.id).single();
+      if (error || !liveUser) return res.status(401).json({ message: 'Not authorized, user unavailable' });
+      if (liveUser.is_suspended) return res.status(403).json({ message: 'This account has been suspended. Please contact support.' });
+      req.user = { _id: liveUser.id, role: liveUser.role };
       return next();
     } catch {
       return res.status(401).json({ message: 'Not authorized, token failed' });

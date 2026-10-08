@@ -45,7 +45,7 @@ const warnings = [
   'Verify every question carefully.',
   'Verify every option.',
   'Ensure the correct answers are marked.',
-  'Check quiz duration.',
+  'Check exam duration.',
   'Verify marks distribution.',
   'Ensure the correct class and section are selected.',
   'Review scheduling settings.',
@@ -134,7 +134,7 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
   };
 
   const facts = quiz ? [
-    ['Quiz title', quiz.title],
+    ['Exam title', quiz.title],
     ['Course', quiz.course || 'General'],
     ['Class', quiz.className || 'Not configured'],
     ['Section', quiz.section || 'Not configured'],
@@ -163,7 +163,7 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
         >
           <motion.button
             type="button"
-            aria-label="Close quiz confirmation"
+            aria-label="Close exam confirmation"
             className="absolute inset-0 cursor-default bg-slate-950/60 backdrop-blur-md"
             onClick={onClose}
           />
@@ -187,8 +187,8 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-300">{isPreparing ? 'Secure launch' : showFinalConfirmation ? 'Final checkpoint' : 'Pre-launch review'}</p>
-                  <h2 id="quiz-preview-title" className="quiz-opening-title mt-1 text-xl font-bold text-slate-950 sm:text-2xl dark:text-white">{isPreparing ? 'Preparing Quiz...' : showFinalConfirmation ? 'Final Confirmation' : 'Quiz Preview'}</h2>
-                  <p className="quiz-opening-subtitle mt-1 text-sm text-slate-500 dark:text-slate-400">{isPreparing ? 'Please wait while EraEdu completes its launch checks.' : showFinalConfirmation ? 'You are about to open this quiz.' : 'Review the assessment before opening it.'}</p>
+                  <h2 id="quiz-preview-title" className="quiz-opening-title mt-1 text-xl font-bold text-slate-950 sm:text-2xl dark:text-white">{isPreparing ? 'Preparing Exam...' : showFinalConfirmation ? 'Final Confirmation' : 'Exam Preview'}</h2>
+                  <p className="quiz-opening-subtitle mt-1 text-sm text-slate-500 dark:text-slate-400">{isPreparing ? 'Please wait while EraEdu completes its launch checks.' : showFinalConfirmation ? 'You are about to open this exam.' : 'Review the assessment before opening it.'}</p>
                 </div>
               </div>
               <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close dialog" className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:hover:bg-white/10 dark:hover:text-white">
@@ -210,7 +210,7 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
                   <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-xl shadow-indigo-500/25">
                     {preparationStep >= 5 ? <CheckCircleIcon className="h-9 w-9" /> : <SparklesIcon className="h-8 w-8 animate-pulse" />}
                   </div>
-                  <h3 className="mt-5 text-center text-xl font-bold text-slate-950 dark:text-white">Preparing Quiz...</h3>
+                  <h3 className="mt-5 text-center text-xl font-bold text-slate-950 dark:text-white">Preparing Exam...</h3>
                   <div className="mt-6 space-y-3">
                     {[
                       'Loading Questions',
@@ -258,12 +258,12 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
                       <ShieldCheckIcon className="h-7 w-7" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-amber-950 dark:text-amber-100">You are about to open this quiz.</h3>
+                      <h3 className="text-lg font-bold text-amber-950 dark:text-amber-100">You are about to open this exam.</h3>
                       <p className="mt-1 text-sm text-amber-900/70 dark:text-amber-100/70">Please ensure:</p>
                     </div>
                   </div>
 
-                  <ul className="mt-6 grid gap-3 sm:grid-cols-2" aria-label="Final quiz checks">
+                  <ul className="mt-6 grid gap-3 sm:grid-cols-2" aria-label="Final exam checks">
                     {[
                       'Questions are correct',
                       'Answers are correct',
@@ -280,7 +280,7 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
                   </ul>
 
                   <div id="final-confirmation-warning" className="mt-6 rounded-2xl border border-rose-200 bg-rose-50/80 p-4 dark:border-rose-400/20 dark:bg-rose-400/[0.08]">
-                    <p className="text-sm font-semibold leading-6 text-rose-900 dark:text-rose-100">Once students begin the quiz, editing may affect their results.</p>
+                    <p className="text-sm font-semibold leading-6 text-rose-900 dark:text-rose-100">Once students begin the exam, editing may affect their results.</p>
                   </div>
                   <p className="mt-6 text-center text-base font-bold text-slate-950 dark:text-white">Are you sure you want to continue?</p>
                 </section>
@@ -288,7 +288,7 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
             ) : (
             <div className="overflow-y-auto px-5 py-5 sm:px-7">
               <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-                <section aria-label="Quiz details" className="rounded-2xl border border-slate-200/80 bg-white/55 p-4 sm:p-5 dark:border-white/10 dark:bg-white/[0.04]">
+                <section aria-label="Exam details" className="rounded-2xl border border-slate-200/80 bg-white/55 p-4 sm:p-5 dark:border-white/10 dark:bg-white/[0.04]">
                   <div className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
                     {facts.map(([label, value]) => (
                       <div key={label} className="flex items-start justify-between gap-4 border-b border-slate-200/70 py-3 last:border-0 sm:block dark:border-white/10">
@@ -326,7 +326,7 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
 
               <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 transition hover:border-indigo-300 dark:border-indigo-400/20 dark:bg-indigo-400/[0.08]">
                 <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5 h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" aria-describedby="confirmation-help" />
-                <span><span className="block text-sm font-semibold text-slate-900 dark:text-white">I have reviewed this quiz and confirm it is ready.</span><span id="confirmation-help" className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Required before the quiz can be opened.</span></span>
+                <span><span className="block text-sm font-semibold text-slate-900 dark:text-white">I have reviewed this exam and confirm it is ready.</span><span id="confirmation-help" className="mt-1 block text-xs text-slate-500 dark:text-slate-400">Required before the exam can be opened.</span></span>
               </label>
             </div>
             )}
@@ -341,9 +341,9 @@ const QuizOpeningConfirmationModal = ({ isOpen, quiz, onClose, onEdit, onOpen }:
               <>
                 <button type="button" onClick={onClose} className="quiz-secondary-action rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-200/70 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:text-slate-300 dark:hover:bg-white/10">Cancel</button>
                 <div className="grid grid-cols-1 gap-2 sm:flex">
-                <button type="button" onClick={onEdit} className="quiz-secondary-action inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white/70 px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-white"><PencilSquareIcon className="h-4 w-4" />Edit Quiz</button>
-                <button type="button" onClick={() => setShowQuestions((value) => !value)} aria-expanded={showQuestions} className="quiz-secondary-action inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white/70 px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-white"><EyeIcon className="h-4 w-4" />{showQuestions ? 'Hide Preview' : 'Preview Quiz'}</button>
-                <button type="button" onClick={handleOpen} disabled={!confirmed} aria-disabled={!confirmed} className="quiz-primary-action inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:hover:translate-y-0 dark:disabled:from-slate-800 dark:disabled:to-slate-800 dark:disabled:text-slate-500"><SparklesIcon className="h-4 w-4" />Open Quiz<ArrowRightIcon className="h-4 w-4" /></button>
+                <button type="button" onClick={onEdit} className="quiz-secondary-action inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white/70 px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-white"><PencilSquareIcon className="h-4 w-4" />Edit Exam</button>
+                <button type="button" onClick={() => setShowQuestions((value) => !value)} aria-expanded={showQuestions} className="quiz-secondary-action inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white/70 px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-white/15 dark:bg-white/[0.06] dark:text-white"><EyeIcon className="h-4 w-4" />{showQuestions ? 'Hide Preview' : 'Preview Exam'}</button>
+                <button type="button" onClick={handleOpen} disabled={!confirmed} aria-disabled={!confirmed} className="quiz-primary-action inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 transition hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 disabled:shadow-none disabled:hover:translate-y-0 dark:disabled:from-slate-800 dark:disabled:to-slate-800 dark:disabled:text-slate-500"><SparklesIcon className="h-4 w-4" />Open Exam<ArrowRightIcon className="h-4 w-4" /></button>
                 </div>
               </>
               )}

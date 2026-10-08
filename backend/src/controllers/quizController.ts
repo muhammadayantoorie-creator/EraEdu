@@ -63,7 +63,7 @@ export const deleteQuiz = asyncHandler(async (req: Request, res: Response) => {
 
   res.status(200).json({
     success: true,
-    message: 'Quiz deleted successfully',
+    message: 'Exam deleted successfully',
   });
 });
 

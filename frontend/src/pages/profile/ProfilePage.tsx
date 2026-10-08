@@ -10,7 +10,10 @@ type Organization = {
   name: string;
   role: 'owner' | 'admin' | 'teacher';
   seat_limit: number;
+  used_seats: number;
+  remaining_seats: number;
 };
+type OrganizationMember = { user_id: string; role: string; user?: { name?: string; email?: string } };
 
 type BillingRecord = {
   plan: string;
@@ -25,11 +28,18 @@ const OrganizationCard = () => {
   const [name, setName] = useState('');
   const [teacherEmail, setTeacherEmail] = useState('');
   const [loading, setLoading] = useState(true);
+  const [members, setMembers] = useState<OrganizationMember[]>([]);
 
   const loadOrganizations = async () => {
     try {
       const response = await api.get('/organizations');
-      setOrganizations(response.data.data);
+      const orgs: Organization[] = response.data.data || [];
+      setOrganizations(orgs);
+      const managed = orgs.find((organization) => organization.role === 'owner' || organization.role === 'admin');
+      if (managed) {
+        const memberResponse = await api.get(`/organizations/${managed.id}/members`);
+        setMembers(memberResponse.data.data || []);
+      } else setMembers([]);
     } catch {
       toast.error('Unable to load organization details.');
     } finally {
@@ -59,6 +69,7 @@ const OrganizationCard = () => {
       const response = await api.post(`/organizations/${ownerOrganization.id}/members`, { email: teacherEmail });
       setTeacherEmail('');
       toast.success(response.data.data.alreadyMember ? 'That teacher is already on your team.' : 'Teacher added to your organization.');
+      await loadOrganizations();
     } catch (error: any) {
       toast.error(error.response?.data?.error?.message || 'Unable to add teacher.');
     }
@@ -79,8 +90,9 @@ const OrganizationCard = () => {
         ) : (
           <>
             <div className="space-y-2">
-              {organizations.map((organization) => <div key={organization.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm"><span className="font-medium text-gray-900">{organization.name}</span><span className="capitalize text-gray-500">{organization.role} · {organization.seat_limit} seats</span></div>)}
+              {organizations.map((organization) => <div key={organization.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm"><span className="font-medium text-gray-900">{organization.name}</span><span className="capitalize text-gray-500">{organization.role} · {organization.used_seats}/{organization.seat_limit} used · {organization.remaining_seats} remaining</span></div>)}
             </div>
+            {ownerOrganization && <div className="rounded-lg border border-gray-100 p-3 text-sm"><p className="mb-2 font-medium text-gray-900">Team members</p>{members.map((member) => <div key={member.user_id} className="flex justify-between py-1"><span>{member.user?.name || 'Unknown member'} <span className="text-gray-500">({member.user?.email || 'No email'})</span></span><span className="capitalize text-gray-500">{member.role}</span></div>)}</div>}
             {ownerOrganization && (
               <form onSubmit={addTeacher} className="flex flex-col gap-3 border-t border-gray-100 pt-5 sm:flex-row">
                 <input type="email" value={teacherEmail} onChange={(event) => setTeacherEmail(event.target.value)} required placeholder="Registered teacher email" className="input-field" />
@@ -97,7 +109,7 @@ const OrganizationCard = () => {
 const ProfilePage: React.FC = () => {
   const { user, logout, updateProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<'checking' | 'paid' | 'pending' | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'checking' | 'paid' | 'pending' | 'failed' | 'cancelled' | null>(null);
   const [billing, setBilling] = useState<BillingRecord | null>(null);
   const [billingLoading, setBillingLoading] = useState(user?.role === 'teacher');
   const { register, handleSubmit, formState: { errors } } = useForm({
@@ -127,7 +139,15 @@ const ProfilePage: React.FC = () => {
   };
 
   useEffect(() => {
-    const tracker = new URLSearchParams(window.location.search).get('tracker');
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'cancelled') {
+      // Keep the benign return marker through a reload so the teacher sees
+      // why checkout returned. It is never sent to the API as entitlement
+      // evidence; the server verifies the tracker independently.
+      if (user?.role === 'teacher') setPaymentStatus('cancelled');
+      return;
+    }
+    const tracker = params.get('tracker');
     if (!tracker || user?.role !== 'teacher') return;
 
     let cancelled = false;
@@ -137,9 +157,15 @@ const ProfilePage: React.FC = () => {
       try {
         const response = await api.get(`/safepay/status/${encodeURIComponent(tracker)}`);
         if (cancelled) return;
-        if (response.data.data.status === 'paid') {
+        const status = response.data.data.status;
+        if (status === 'paid') {
           setPaymentStatus('paid');
           toast.success('Payment confirmed. Your Institution plan is active.');
+          window.history.replaceState({}, '', window.location.pathname);
+          return;
+        }
+        if (status === 'cancelled' || status === 'failed') {
+          setPaymentStatus(status);
           window.history.replaceState({}, '', window.location.pathname);
           return;
         }
@@ -183,9 +209,13 @@ const ProfilePage: React.FC = () => {
   return (
     <div className="max-w-3xl mx-auto">
       {paymentStatus && (
-        <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${paymentStatus === 'paid' ? 'bg-green-50 text-green-800' : 'bg-amber-50 text-amber-800'}`}>
+        <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${paymentStatus === 'paid' ? 'bg-green-50 text-green-800' : paymentStatus === 'cancelled' ? 'bg-gray-50 text-gray-800' : 'bg-amber-50 text-amber-800'}`}>
           {paymentStatus === 'paid'
             ? 'Payment confirmed — your Institution plan is active.'
+            : paymentStatus === 'cancelled'
+              ? 'Payment was cancelled. Your session and Institution plan have not changed.'
+              : paymentStatus === 'failed'
+                ? 'Payment was not completed. Your session and Institution plan have not changed.'
             : paymentStatus === 'checking'
               ? 'Checking your Safepay payment…'
               : 'Your payment is still being confirmed. Please refresh this page in a moment.'}

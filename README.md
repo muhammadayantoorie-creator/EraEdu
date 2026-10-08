@@ -1,21 +1,21 @@
 # EraEdu
 
 EraEdu is a full-stack learning and assessment platform for secure online
-quizzes, course delivery, teacher oversight, and student progress tracking.
+exams, course delivery, teacher oversight, and student progress tracking.
 
 **Live demo:** [era-edu-mtoc.vercel.app](https://era-edu-mtoc.vercel.app/)
 
 It provides role-based access for students, teachers, and administrators;
-face-assisted login; quiz proctoring signals; teacher analytics; quiz access
+face-assisted login; exam proctoring signals; teacher analytics; exam access
 codes; and optional AI-powered question and study assistance.
 
 ## Highlights
 
-- Role-based course, question, quiz, analytics, and administration workflows
+- Role-based course, question, exam, analytics, and administration workflows
 - Password authentication with face-verification support
-- Quiz integrity monitoring for focus changes, tab switches, and violations
-- Secure quiz attempt ownership and controlled question access
-- Teacher quiz creation, assignment, grading, and violation review
+- Exam integrity monitoring for focus changes, tab switches, and violations
+- Secure exam attempt ownership and controlled question access
+- Teacher exam creation, assignment, grading, and violation review
 - Supabase-backed data, storage, and authentication integration
 - Optional Gemini AI assistance and Resend email delivery
 - Security headers, rate limits, validation, strict CORS, and health checks

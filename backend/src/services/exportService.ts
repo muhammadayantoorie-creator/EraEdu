@@ -47,7 +47,7 @@ export const exportService = {
       return {
         studentName: user.name || 'Unknown',
         studentEmail: user.email || '',
-        quizTitle: quizMap.get(attempt.quiz_id) || 'Unknown Quiz',
+        quizTitle: quizMap.get(attempt.quiz_id) || 'Unknown Exam',
         marksObtained: score,
         totalMarks: maxScore,
         percentage: maxScore > 0 ? Math.round((score / maxScore) * 100 * 10) / 10 : 0,
@@ -62,7 +62,7 @@ export const exportService = {
     const headers = [
       'Student Name',
       'Student Email',
-      'Quiz / Test Name',
+      'Exam Name',
       'Marks Obtained',
       'Total Marks',
       'Percentage (%)',

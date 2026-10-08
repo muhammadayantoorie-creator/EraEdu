@@ -175,6 +175,7 @@ function App() {
           <Route index element={<AdminOverview />} />
           <Route path="users" element={<AdminOverview />} />
           <Route path="courses" element={<TeacherCourses />} />
+          <Route path="courses/new" element={<CreateCoursePage />} />
           <Route path="quizzes" element={<TeacherQuizzes />} />
           <Route path="submissions" element={<TeacherSubmissions />} />
           <Route path="analytics" element={<TeacherAnalytics />} />
@@ -214,11 +215,9 @@ function App() {
       } />
 
       {/* Question Creation Route */}
-      <Route path="/dashboard/teacher/courses/:courseId/topics/:topicId/create-question" element={
-        <ProtectedRoute>
-          <CreateQuestionPage />
-        </ProtectedRoute>
-      } />
+      <Route element={<TeacherRoute />}>
+        <Route path="/dashboard/teacher/courses/:courseId/topics/:topicId/create-question" element={<CreateQuestionPage />} />
+      </Route>
       
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />

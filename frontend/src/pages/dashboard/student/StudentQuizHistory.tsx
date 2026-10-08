@@ -120,10 +120,10 @@ const StudentQuizHistory = () => {
   const columns = [
     {
       key: 'quizTitle' as keyof QuizHistoryItem,
-      header: 'Quiz',
+      header: 'Exam',
       render: (attempt: QuizHistoryItem) => (
         <div>
-          <p className="font-medium text-gray-900">{attempt.quizTitle || 'Untitled Quiz'}</p>
+          <p className="font-medium text-gray-900">{attempt.quizTitle || 'Untitled Exam'}</p>
           <p className="text-sm text-gray-500">{attempt.topicTitle}</p>
         </div>
       ),
@@ -225,8 +225,8 @@ const StudentQuizHistory = () => {
     <div className="space-y-6">
       {/* Header */}
       <header>
-        <h1 className="text-2xl font-bold text-gray-900">Quiz History</h1>
-        <p className="text-sm text-gray-500 mt-1">Review your past quiz attempts and track your progress.</p>
+        <h1 className="text-2xl font-bold text-gray-900">Exam History</h1>
+        <p className="text-sm text-gray-500 mt-1">Review your past exam attempts and track your progress.</p>
       </header>
 
       {/* Stats Cards */}
@@ -301,7 +301,7 @@ const StudentQuizHistory = () => {
             columns={columns}
             data={filteredAttempts}
             isLoading={loading}
-            emptyMessage="No quiz attempts found"
+            emptyMessage="No exam attempts found"
           />
         </div>
       </div>

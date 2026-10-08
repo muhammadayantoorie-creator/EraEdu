@@ -416,8 +416,8 @@ const AnimatedQuoteBackground = () => {
 /* ───── FEATURE BENTO (Asymmetrical) ───── */
 const TrustByDesign = () => {
   const principles = [
-    { title: 'Teacher-controlled rules', copy: 'Set quiz availability, assessment rules, and violation limits before a session begins.', icon: 'M5 12h14 M12 5v14' },
-    { title: 'Reviewable activity', copy: 'Keep quiz submissions and integrity events together for clear, informed follow-up.', icon: 'M5 12l4 4L19 6 M5 6h14' },
+    { title: 'Teacher-controlled rules', copy: 'Set exam availability, assessment rules, and violation limits before a session begins.', icon: 'M5 12h14 M12 5v14' },
+    { title: 'Reviewable activity', copy: 'Keep exam submissions and integrity events together for clear, informed follow-up.', icon: 'M5 12l4 4L19 6 M5 6h14' },
     { title: 'A practical way to start', copy: 'Explore the workflow with five free assessment trials before choosing a paid plan.', icon: 'M12 5v14 M5 12h14' },
   ];
   return (
@@ -619,7 +619,7 @@ const HowItWorks = () => {
   const steps = [
     {
       n: '01',
-      t: 'Author a quiz in minutes',
+      t: 'Author an exam in minutes',
       d: 'Build with rich question types — multiple-choice, code blocks, free response. Versioned, branchable, instantly publishable.',
     },
     {
@@ -732,7 +732,7 @@ const IntegritySpotlight = () => (
             {[
               'On-device processing designed to minimise unnecessary data collection',
               'Event-only logs with timestamped rationale',
-              'Configurable strike thresholds per quiz',
+              'Configurable strike thresholds per exam',
               'Auditable trail for every flagged moment',
             ].map((line) => (
               <li key={line} className="flex items-start gap-3 text-white/80">
@@ -803,8 +803,8 @@ const IntegritySpotlight = () => (
 const Metrics = () => {
   const items = [
     { k: 'Privacy-aware', l: 'Designed for responsible assessment workflows' },
-    { k: 'Configurable', l: 'Set rules and violation thresholds per quiz' },
-    { k: 'Actionable', l: 'Review clear integrity events and quiz results' },
+    { k: 'Configurable', l: 'Set rules and violation thresholds per exam' },
+    { k: 'Actionable', l: 'Review clear integrity events and exam results' },
     { k: 'Launch offer', l: 'Start with five free assessment trials' },
   ];
   return (
@@ -832,7 +832,7 @@ const Metrics = () => {
 const Pricing = () => {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const plans = [
-    { name: 'Explore', price: 'Free', description: 'A confident way to see how EraEdu fits your assessment workflow.', features: ['5 free assessment trials', 'AI integrity monitoring', 'Core quiz analytics', 'No credit card required'], cta: 'Start 5 free trials', to: '/register' },
+    { name: 'Explore', price: 'Free', description: 'A confident way to see how EraEdu fits your assessment workflow.', features: ['5 free assessment trials', 'AI integrity monitoring', 'Core exam analytics', 'No credit card required'], cta: 'Start 5 free trials', to: '/register' },
     { name: 'Institution', price: 'PKR 4,999', suffix: '/ month', description: 'One monthly licence for your whole institution, not per teacher.', features: ['Institution workspace', 'Unlimited assessments', 'Detailed integrity reports', 'Priority support'], cta: 'Pay with Safepay', to: '/profile', featured: true },
     { name: 'Enterprise', price: 'Custom', description: 'A tailored rollout for large departments and academic networks.', features: ['Everything in Institution', 'Flexible permissions', 'Institutional analytics', 'Dedicated onboarding'], cta: 'Talk to sales', to: '/contact' },
   ];
@@ -883,7 +883,7 @@ const Testimonials = () => {
     {
       q: 'Give educators practical controls for tab switches, copy-paste behaviour, and automatic submission limits.',
       a: 'Educator control',
-      r: 'Configurable safeguards per quiz',
+      r: 'Configurable safeguards per exam',
     },
     {
       q: 'Build a defensible assessment record without turning a classroom into a surveillance exercise.',
@@ -940,7 +940,7 @@ const FAQ = () => {
   const questions = [
     ['What do the five free trials include?', 'Your institution can create up to five assessments on the free plan. The Institution plan unlocks unlimited assessment creation for its teachers.'],
     ['Is student camera footage stored?', 'EraEdu is designed for on-device face-presence checks. The product records configured integrity events for review, not a video recording of students.'],
-    ['Can teachers control monitoring rules?', 'Yes. Teachers configure quiz timing, availability, course access, violation limits, and supported integrity settings while creating a quiz.'],
+    ['Can teachers control monitoring rules?', 'Yes. Teachers configure exam timing, availability, course access, violation limits, and supported integrity settings while creating an exam.'],
     ['Who should choose the Institution plan?', 'Choose it when your institution needs a shared workspace, multiple teachers, unlimited assessments, and detailed integrity reporting.'],
     ['How does payment work?', 'The Institution plan is a monthly Safepay checkout. The institution owner can activate the plan from their EraEdu profile.'],
   ];
@@ -950,7 +950,7 @@ const FAQ = () => {
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-2xl text-center">
           <span className="eyebrow eyebrow-light">Questions, answered</span>
-          <h2 className="mt-4 font-display text-4xl tracking-tightest text-ink-900 text-balance md:text-6xl">Everything you need before your first quiz.</h2>
+          <h2 className="mt-4 font-display text-4xl tracking-tightest text-ink-900 text-balance md:text-6xl">Everything you need before your first exam.</h2>
           <p className="mt-5 text-lg text-ink-500">Clear expectations for educators, institutions, and students.</p>
         </div>
         <div className="mt-12 space-y-3">

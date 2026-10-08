@@ -28,6 +28,7 @@ interface ViolationInput {
   violationType: ViolationType;
   detectionMethod: string;
   severity?: Severity;
+  eventId?: string;
   details?: {
     windowFocused?: boolean;
     userAgent?: string;
@@ -44,6 +45,25 @@ interface ViolationInput {
   };
 }
 
+const canonicalViolationTypes: Record<string, ViolationType> = {
+  TAB_SWITCH: 'tab_change', tab_switch: 'tab_change', tab_change: 'tab_change',
+  SYSTEM_FOCUS_LOST: 'focus_loss', focus_loss: 'focus_loss',
+  RESTRICTED_KEY: 'keyboard_shortcut', keyboard_shortcut: 'keyboard_shortcut',
+  FACE_AWAY: 'face_away', face_away: 'face_away', NO_FACE: 'no_face', no_face: 'no_face',
+};
+
+export function normalizeViolationType(value: string): ViolationType {
+  return canonicalViolationTypes[value] || (value.toLowerCase() as ViolationType);
+}
+
+function monitoringMigrationRequired(error: any): Error | null {
+  const message = String(error?.message || '').toLowerCase();
+  if (error?.code === '42703' || ['event_id', 'violation_count', 'violations'].some(column => message.includes(column))) {
+    return Object.assign(new Error('Monitoring schema migration required: apply backend/migrations/019_make_cheating_events_authoritative.sql'), { statusCode: 503 });
+  }
+  return null;
+}
+
 export const cheatingViolationService = {
   // Report a new violation
   async reportViolation(input: ViolationInput) {
@@ -54,7 +74,7 @@ export const cheatingViolationService = {
       .eq('user_id', input.studentId)
       .single();
 
-    if (attemptError || !attempt) throw new Error('Quiz attempt not found');
+    if (attemptError || !attempt) throw new Error('Exam attempt not found');
     if (attempt.status !== 'in-progress') {
       return { violationId: null, violationCount: 0, violationLimit: 0, autoSubmitted: false, alreadySubmitted: true };
     }
@@ -66,23 +86,29 @@ export const cheatingViolationService = {
       .single();
     const violationLimit = Math.min(100, Math.max(1, Number(quiz?.violation_limit) || 3));
 
-    const { data: violation, error } = await supabase
+    const normalizedType = normalizeViolationType(input.violationType);
+    const row = {
+      quiz_attempt_id: input.quizAttemptId,
+      student_id: input.studentId,
+      quiz_id: attempt.quiz_id,
+      teacher_id: quiz?.teacher_id || null,
+      violation_type: normalizedType,
+      detection_method: input.detectionMethod,
+      severity: input.severity || 'low',
+      details: input.details || {},
+      timestamp: input.details?.eventTimestamp || new Date().toISOString(),
+      event_id: input.eventId || null,
+    };
+    let { data: violation, error } = await supabase
       .from('cheating_violations')
-      .insert([{
-        quiz_attempt_id: input.quizAttemptId,
-        student_id: input.studentId,
-        quiz_id: attempt.quiz_id,
-        teacher_id: quiz?.teacher_id || null,
-        violation_type: input.violationType,
-        detection_method: input.detectionMethod,
-        severity: input.severity || 'low',
-        details: input.details || {},
-        timestamp: new Date().toISOString()
-      }])
+      .insert([row])
       .select()
       .single();
-
-    if (error) throw new Error(error.message);
+    if (error?.code === '23505' && input.eventId) {
+      ({ data: violation, error } = await supabase.from('cheating_violations')
+        .select('*').eq('quiz_attempt_id', input.quizAttemptId).eq('event_id', input.eventId).single());
+    }
+    if (error) throw monitoringMigrationRequired(error) || new Error(error.message);
 
     // Get updated violation count
     const { count } = await supabase
@@ -90,7 +116,7 @@ export const cheatingViolationService = {
       .select('*', { count: 'exact', head: true })
       .eq('quiz_attempt_id', input.quizAttemptId);
 
-    const currentCount = count || 1;
+    const currentCount = count || 0;
 
     // Update the attempt and auto-submit as soon as the teacher's limit is reached.
     // The status predicate prevents duplicate completion during concurrent reports.
@@ -112,7 +138,7 @@ export const cheatingViolationService = {
       .eq('id', input.quizAttemptId);
     if (shouldAutoSubmit) updateQuery = updateQuery.eq('status', 'in-progress');
     const { error: updateError } = await updateQuery;
-    if (updateError) throw new Error(updateError.message);
+    if (updateError) throw monitoringMigrationRequired(updateError) || new Error(updateError.message);
 
     return {
       violationId: violation.id,
@@ -133,7 +159,7 @@ export const cheatingViolationService = {
       .single();
 
     if (!attempt) {
-      throw new Error('Quiz attempt not found');
+      throw new Error('Exam attempt not found');
     }
 
     if (requesterRole === 'student') {
@@ -264,7 +290,7 @@ export const cheatingViolationService = {
       .select('quiz_id')
       .eq('id', attemptId)
       .single();
-    if (attemptError || !attempt) throw Object.assign(new Error('Quiz attempt not found'), { statusCode: 404 });
+    if (attemptError || !attempt) throw Object.assign(new Error('Exam attempt not found'), { statusCode: 404 });
 
     const { data: quiz } = await supabase
       .from('teacher_quizzes')

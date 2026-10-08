@@ -45,6 +45,7 @@ type ViolationType =
   | 'AUTOMATION_DETECTED';
 
 interface ViolationPayload {
+  event_id: string;
   violation_type: ViolationType;
   alert_message: string;
   event_timestamp: string;
@@ -70,6 +71,7 @@ const QuizTakePage = () => {
   const [submitting,           setSubmitting]           = useState(false);
   const [showWarning,          setShowWarning]          = useState(false);
   const [warningMessage,       setWarningMessage]       = useState('');
+  const [violationWriteError,  setViolationWriteError]  = useState<string | null>(null);
   const [secureModeReady,      setSecureModeReady]      = useState(
     () => typeof document === 'undefined' || !document.documentElement.requestFullscreen || !!document.fullscreenElement,
   );
@@ -82,6 +84,9 @@ const QuizTakePage = () => {
   const lastViolationAtRef     = useRef<Record<string, number>>({});
   const focusLossEpisodeRef    = useRef(false);
   const resizeEpisodeRef       = useRef(false);
+  // Face monitoring can be delivered by a remount or a delayed detector frame;
+  // submit an attempt at most once from that source.
+  const faceAutoSubmitRef      = useRef(false);
   const fullscreenEnteredRef   = useRef(!!document.fullscreenElement);
   const viewportBaselineRef    = useRef({
     width: window.innerWidth,
@@ -96,7 +101,7 @@ const QuizTakePage = () => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!submitting) {
         e.preventDefault();
-        e.returnValue = 'Your quiz is in progress. Leaving will not submit your answers.';
+        e.returnValue = 'Your exam is in progress. Leaving will not submit your answers.';
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -111,6 +116,9 @@ const QuizTakePage = () => {
     alertMessage: string,
     options?: { durationSeconds?: number; keyName?: string; focusState?: string },
   ): ViolationPayload => ({
+    event_id: typeof crypto?.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     violation_type: violationType,
     alert_message: alertMessage,
     event_timestamp: new Date().toISOString(),
@@ -151,7 +159,8 @@ const QuizTakePage = () => {
       'keyboard_shortcut';
 
     try {
-      const response = await api.post(`/quizzes/attempts/${attemptId}/report-violation`, {
+      const requestBody = {
+        event_id: payload.event_id,
         violation_type: backendViolationType,
         violationType:  backendViolationType,
         alert_message:   payload.alert_message,
@@ -163,21 +172,47 @@ const QuizTakePage = () => {
             ? 'camera_face_detection'
             : 'browser_event',
         quizId: quizData?.quiz._id,
-      });
+      };
+      let response: any;
+      let lastError: unknown;
+      for (let retry = 0; retry < 3; retry += 1) {
+        try {
+          response = await api.post(`/quizzes/attempts/${attemptId}/report-violation`, requestBody);
+          break;
+        } catch (error) {
+          lastError = error;
+          if (retry < 2) await new Promise(resolve => setTimeout(resolve, 250 * (retry + 1)));
+        }
+      }
+      if (!response) throw lastError;
+
+      setViolationWriteError(null);
 
       if (response.data?.data?.autoSubmitted) {
         const limit = response.data.data.violationLimit;
+        // The event endpoint closes the attempt at the threshold. Finalize the
+        // current answer snapshot so the authoritative score is not lost.
+        const answers = quizData?.quiz.questions.map((question, index) => ({
+          questionId: question._id,
+          selectedAnswer: selectedAnswers[index] ?? (question.questionType === 'shortAnswer' || !question.options?.length ? '' : -1),
+        })) || [];
+        try {
+          await api.post(`/quizzes/${attemptId}/submit-all`, { answers });
+        } catch {
+          // Keep the attempt/result route available; the server retains the
+          // violation event and the student can retry finalization on reload.
+        }
         sessionStorage.removeItem('currentQuiz');
-        toast.error(`Quiz automatically submitted after reaching the ${limit}-violation limit.`, { duration: 5000 });
+        toast.error(`Exam automatically submitted after reaching the ${limit}-violation limit.`, { duration: 5000 });
         navigate(`/quiz/teacher-results/${attemptId}`);
       } else if (response.data?.data?.remainingViolations !== undefined) {
         const remaining = response.data.data.remainingViolations;
         toast.error(`${remaining} violation${remaining === 1 ? '' : 's'} remaining before automatic submission.`, { duration: 3000 });
       }
     } catch {
-      // Non-critical — violation not saved, but student stays in exam
+      setViolationWriteError('Monitoring event could not be saved. It will not be counted until the connection is restored.');
     }
-  }, [attemptId, navigate, quizData]);
+  }, [attemptId, navigate, quizData, selectedAnswers]);
 
   const enterSecureMode = useCallback(async () => {
     if (typeof document.documentElement.requestFullscreen !== 'function') {
@@ -194,7 +229,7 @@ const QuizTakePage = () => {
       };
       setSecureModeReady(true);
     } catch {
-      toast.error('Secure fullscreen is required to continue this quiz.');
+      toast.error('Secure fullscreen is required to continue this exam.');
     }
   }, []);
 
@@ -209,7 +244,9 @@ const QuizTakePage = () => {
   }, [createViolationPayload, reportViolation]);
 
   const handleFaceAutoSubmit = useCallback(async () => {
-    toast.error('Quiz auto-submitted: You looked away for more than 60 seconds.', { duration: 5000 });
+    if (faceAutoSubmitRef.current) return;
+    faceAutoSubmitRef.current = true;
+    toast.error('Exam auto-submitted: You looked away for more than 60 seconds.', { duration: 5000 });
     const answers = quizData?.quiz.questions.map((q, index) => ({
       questionId: q._id,
       selectedAnswer: selectedAnswers[index] ?? (q.questionType === 'shortAnswer' || !q.options?.length ? '' : -1),
@@ -250,7 +287,7 @@ const QuizTakePage = () => {
       }
     };
 
-    // Window blur — fires when student switches to another app/window
+    // Window blur is a focus signal, not evidence of any particular app.
     // A 300 ms debounce avoids double-counting with visibilitychange
     let blurTimer: ReturnType<typeof setTimeout>;
     const handleBlur = () => {
@@ -260,7 +297,7 @@ const QuizTakePage = () => {
           focusLossEpisodeRef.current = true;
           reportViolation(createViolationPayload(
             'SYSTEM_FOCUS_LOST',
-            'External window or overlay detected',
+            'Browser window focus changed',
             { focusState: 'window_blur' },
           ));
         }
@@ -297,21 +334,6 @@ const QuizTakePage = () => {
       event.preventDefault();
       reportViolation(createViolationPayload('RESTRICTED_KEY', 'Right-click menu blocked', { keyName: 'Context menu' }));
     };
-
-    // Some operating-system overlays do not reliably emit blur. Polling
-    // document.hasFocus closes that gap while recording only one event per episode.
-    const focusHeartbeat = window.setInterval(() => {
-      if (!document.hidden && !document.hasFocus() && !focusLossEpisodeRef.current) {
-        focusLossEpisodeRef.current = true;
-        reportViolation(createViolationPayload(
-          'SYSTEM_FOCUS_LOST',
-          'System overlay or external window detected',
-          { focusState: 'focus_heartbeat' },
-        ));
-      } else if (document.hasFocus()) {
-        focusLossEpisodeRef.current = false;
-      }
-    }, 750);
 
     const handleFullscreenChange = () => {
       if (document.fullscreenElement) {
@@ -357,7 +379,7 @@ const QuizTakePage = () => {
     };
 
     const handlePictureInPicture = () => {
-      reportViolation(createViolationPayload('PICTURE_IN_PICTURE', 'Picture-in-Picture overlay detected'));
+      reportViolation(createViolationPayload('PICTURE_IN_PICTURE', 'Document Picture-in-Picture entered'));
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -392,7 +414,6 @@ const QuizTakePage = () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('enterpictureinpicture', handlePictureInPicture as EventListener);
       window.removeEventListener('resize', handleResize);
-      window.clearInterval(focusHeartbeat);
       clearTimeout(blurTimer);
       clearTimeout(resizeTimer);
     };
@@ -412,7 +433,7 @@ const QuizTakePage = () => {
     }
   }, [createViolationPayload, reportViolation]);
 
-  // Disable text selection during exam
+  // Disable text selection during quiz
   useEffect(() => {
     document.body.style.userSelect = 'none';
     (document.body.style as any).webkitUserSelect = 'none';
@@ -455,14 +476,14 @@ const QuizTakePage = () => {
           };
           setQuizData(recovered);
           setTimeLeft(attempt.quiz.questions[0]?.timeLimit || 60);
-          toast.success('Quiz session recovered. Continue where you left off.');
+          toast.success('Exam session recovered. Continue where you left off.');
         } else {
-          toast.error('This quiz session has already ended.');
+          toast.error('This exam session has already ended.');
           navigate(`/quiz/teacher-results/${attemptId}`);
         }
       })
       .catch(() => {
-        toast.error('Could not load quiz. Please contact your teacher.');
+        toast.error('Could not load exam. Please contact your teacher.');
         navigate('/dashboard/student');
       });
   }, [attemptId, navigate]);
@@ -498,7 +519,7 @@ const QuizTakePage = () => {
     const isShortAnswer  = activeQuestion?.questionType === 'shortAnswer' || !activeQuestion?.options?.length;
 
     if (currentQuestionIndex === quizData.quiz.questions.length - 1) {
-      toast.error('Time is up for the last question! Submitting quiz...', { duration: 3000 });
+      toast.error('Time is up for the last question! Submitting exam...', { duration: 3000 });
       handleSubmitQuiz();
     } else {
       toast.error('Time is up! Moving to next question.', { duration: 2000 });
@@ -574,12 +595,12 @@ const QuizTakePage = () => {
       });
 
       sessionStorage.removeItem('currentQuiz');
-      toast.success('Quiz submitted successfully!');
+      toast.success('Exam submitted successfully!');
       navigate(`/quiz/teacher-results/${attemptId}`);
     } catch (error: any) {
       toast.error(
         error.response?.data?.error?.message ||
-        'Failed to submit quiz. Please try again or contact your teacher.',
+        'Failed to submit exam. Please try again or contact your teacher.',
       );
       // Do NOT navigate — keep student on quiz so they can retry
     } finally {
@@ -592,7 +613,7 @@ const QuizTakePage = () => {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mx-auto" />
-          <p className="mt-4 text-gray-600 text-sm">Loading quiz...</p>
+          <p className="mt-4 text-gray-600 text-sm">Loading exam...</p>
         </div>
       </div>
     );
@@ -610,7 +631,7 @@ const QuizTakePage = () => {
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
               <ShieldCheckIcon className="h-9 w-9" />
             </div>
-            <h2 id="secure-mode-title" className="mt-5 text-2xl font-bold text-slate-950">Secure quiz mode required</h2>
+            <h2 id="secure-mode-title" className="mt-5 text-2xl font-bold text-slate-950">Secure exam mode required</h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
               Continue in fullscreen. Exiting fullscreen, opening system overlays, shrinking the window, or using another app is recorded as a violation.
             </p>
@@ -637,6 +658,11 @@ const QuizTakePage = () => {
         <div className="fixed top-0 left-0 right-0 bg-red-500 text-white py-3 px-4 z-50 flex items-center justify-center gap-2 animate-pulse">
           <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0" />
           <span className="font-medium">{warningMessage}</span>
+        </div>
+      )}
+      {violationWriteError && (
+        <div className="fixed top-14 left-0 right-0 bg-amber-600 text-white py-2 px-4 z-50 text-center text-sm">
+          {violationWriteError}
         </div>
       )}
 
@@ -727,7 +753,7 @@ const QuizTakePage = () => {
         {/* Proctoring notice */}
         <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
           <ExclamationTriangleIcon className="h-4 w-4 inline mr-1" />
-          This quiz is monitored. All violations are recorded and shared with your teacher.
+          This exam is monitored. All violations are recorded and shared with your teacher.
         </div>
 
         {/* Navigation */}

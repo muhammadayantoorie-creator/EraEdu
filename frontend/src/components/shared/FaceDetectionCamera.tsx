@@ -22,11 +22,15 @@ interface FaceDetectionCameraProps {
 }
 
 const statusConfig: Record<FaceStatus, { label: string; color: string; bgColor: string; pulse: boolean }> = {
-  loading:           { label: 'Loading camera…',     color: 'text-blue-700',   bgColor: 'bg-blue-100',   pulse: true  },
+  model_loading:     { label: 'Loading AI models',     color: 'text-blue-700',   bgColor: 'bg-blue-100',   pulse: true  },
+  model_load_failed: { label: 'Model failed to load',  color: 'text-red-700',    bgColor: 'bg-red-100',    pulse: false },
+  camera_starting:   { label: 'Starting camera',       color: 'text-blue-700',   bgColor: 'bg-blue-100',   pulse: true  },
+  camera_ready:      { label: 'Waiting for a face',    color: 'text-yellow-700', bgColor: 'bg-yellow-100', pulse: true  },
+  camera_unavailable:{ label: 'Camera unavailable',    color: 'text-red-700',    bgColor: 'bg-red-100',    pulse: false },
+  inference_error:   { label: 'Detection unavailable', color: 'text-red-700',    bgColor: 'bg-red-100',    pulse: false },
   looking:           { label: 'Face detected ✓',     color: 'text-green-700',  bgColor: 'bg-green-100',  pulse: false },
   away:              { label: 'Face turned away!',   color: 'text-yellow-700', bgColor: 'bg-yellow-100', pulse: true  },
   no_face:           { label: 'No face detected!',   color: 'text-red-700',    bgColor: 'bg-red-100',    pulse: true  },
-  error:             { label: 'Camera error',        color: 'text-red-700',    bgColor: 'bg-red-100',    pulse: false },
   permission_denied: { label: 'Camera blocked',      color: 'text-red-700',    bgColor: 'bg-red-100',    pulse: false },
 };
 
@@ -76,7 +80,7 @@ const FaceDetectionCamera = ({ enabled, onViolation, onAutoSubmit }: FaceDetecti
         <div className={`absolute bottom-1 left-1 right-1 flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold ${cfg.bgColor} ${cfg.color} ${cfg.pulse ? 'animate-pulse' : ''}`}>
           {status === 'looking' ? (
             <VideoCameraIcon className="h-3.5 w-3.5 flex-shrink-0" />
-          ) : status === 'permission_denied' || status === 'error' ? (
+          ) : status === 'permission_denied' || status === 'camera_unavailable' || status === 'model_load_failed' || status === 'inference_error' ? (
             <VideoCameraSlashIcon className="h-3.5 w-3.5 flex-shrink-0" />
           ) : (
             <ExclamationTriangleIcon className="h-3.5 w-3.5 flex-shrink-0" />
@@ -85,7 +89,7 @@ const FaceDetectionCamera = ({ enabled, onViolation, onAutoSubmit }: FaceDetecti
         </div>
 
         {/* Loading overlay */}
-        {(status === 'loading') && (
+        {(status === 'model_loading' || status === 'camera_starting') && (
           <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white text-xs gap-2">
             <div className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full" />
             <span>{modelsLoaded ? 'Starting camera…' : 'Loading AI models…'}</span>
@@ -113,11 +117,11 @@ const FaceDetectionCamera = ({ enabled, onViolation, onAutoSubmit }: FaceDetecti
         )}
 
         {/* Error overlay */}
-        {status === 'error' && (
+        {(status === 'camera_unavailable' || status === 'model_load_failed' || status === 'inference_error') && (
           <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white text-xs gap-2 px-3 text-center">
             <VideoCameraSlashIcon className="h-8 w-8 text-red-400" />
-            <span className="font-semibold">Camera error</span>
-            <span className="text-gray-300 text-[10px]">No camera found or camera is in use by another app.</span>
+            <span className="font-semibold">{status === 'model_load_failed' ? 'Face detection model failed to load' : status === 'inference_error' ? 'Face detection temporarily failed' : 'Camera unavailable'}</span>
+            <span className="text-gray-300 text-[10px]">No valid face has been detected. Check the camera and try again.</span>
             <button
               onClick={retryCamera}
               className="mt-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors"
@@ -145,7 +149,7 @@ const FaceDetectionCamera = ({ enabled, onViolation, onAutoSubmit }: FaceDetecti
           </div>
           {awaySeconds >= 45 && (
             <p className="mt-1 text-[10px] text-red-600 font-medium">
-              ⚠ Quiz will auto-submit at 60 s!
+              ⚠ Exam will auto-submit at 60 s!
             </p>
           )}
         </div>

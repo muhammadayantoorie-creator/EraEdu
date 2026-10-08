@@ -5,7 +5,7 @@ const privacyPoints = [
   {
     title: 'Data we collect',
     description:
-      'EraEdu only stores the account, course, quiz, and verification data needed to authenticate users and protect assessments.',
+      'EraEdu only stores the account, course, exam, and verification data needed to authenticate users and protect assessments.',
   },
   {
     title: 'How we use it',

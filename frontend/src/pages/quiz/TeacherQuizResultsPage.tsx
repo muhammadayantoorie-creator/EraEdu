@@ -7,9 +7,24 @@ import { PostQuizFeedbackModal } from '../../components/shared';
 
 interface Violation {
   type: string;
+  violation_type?: string;
   timestamp: string;
-  details?: string;
+  details?: unknown;
+  severity?: string;
+  detectionMethod?: string;
+  detection_method?: string;
 }
+const eventLabel = (event: Violation) => {
+  const type = String(event.type || event.violation_type || 'unknown').toLowerCase();
+  return ({ tab_change: 'Tab change', tab_switch: 'Tab change', no_face: 'No face detected', face_away: 'Face away', focus_loss: 'Focus lost', fullscreen_exit: 'Fullscreen exited' } as Record<string, string>)[type]
+    || type.replace(/[_-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) || 'Unrecognized monitoring event';
+};
+const detailsText = (details: unknown) => {
+  if (!details) return 'No additional details recorded.';
+  if (typeof details === 'string') { try { return detailsText(JSON.parse(details)); } catch { return details; } }
+  const value = details as Record<string, unknown>;
+  return String(value.alertMessage || value.focus_state || value.key_name || 'Additional event context recorded.');
+};
 
 interface AttemptResult {
   id: string;
@@ -19,7 +34,7 @@ interface AttemptResult {
   status: string;
   startedAt: string;
   completedAt: string;
-  answers: { questionId: string; selectedAnswer: number }[];
+  answers: { questionId: string; selectedAnswer: number | string | null; isCorrect: boolean; questionType?: 'multipleChoice' | 'shortAnswer' }[];
   violations: Violation[];
   reviewPending?: boolean;
   reviewStatus?: 'pending' | 'reviewed';
@@ -31,10 +46,13 @@ interface AttemptResult {
       options: string[];
       correctAnswer: number;
       explanation?: string;
+      questionType?: 'multipleChoice' | 'shortAnswer';
     }[];
   };
   teacherFeedback?: string;
   teacherGrade?: number;
+  studentName?: string;
+  studentEmail?: string;
 }
 
 const TeacherQuizResultsPage = () => {
@@ -97,12 +115,12 @@ const TeacherQuizResultsPage = () => {
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Submission Received</h1>
             <p className="text-gray-600 mb-6">
-              Your quiz has been submitted and sent to your teacher for review.
+              Your exam has been submitted and sent to your teacher for review.
               Your grade will appear once the teacher publishes feedback.
             </p>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-left mb-6">
               <p className="text-sm text-amber-800">
-                <span className="font-medium">Quiz:</span> {result.quiz?.title || 'Quiz'}
+                <span className="font-medium">Exam:</span> {result.quiz?.title || 'Exam'}
               </p>
               <p className="text-sm text-amber-800 mt-1">
                 <span className="font-medium">Submitted at:</span>{' '}
@@ -121,7 +139,7 @@ const TeacherQuizResultsPage = () => {
                 to="/dashboard/student/quiz-history"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
               >
-                View Quiz History
+                View Exam History
               </Link>
             </div>
           </div>
@@ -140,11 +158,11 @@ const TeacherQuizResultsPage = () => {
             <TrophyIcon className="h-10 w-10" />
           </div>
           <h1 className="text-3xl font-bold mb-2">
-            {isPassing ? 'Congratulations!' : 'Quiz Completed!'}
+            {isPassing ? 'Congratulations!' : 'Exam Completed!'}
           </h1>
           <p className="text-white/90">
             {isPassing 
-              ? 'You passed the quiz successfully!' 
+              ? 'You passed the exam successfully!'
               : 'Keep practicing to improve your score!'}
           </p>
         </div>
@@ -152,6 +170,7 @@ const TeacherQuizResultsPage = () => {
         {/* Score Card */}
         <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">{result.quiz.title}</h2>
+          <p className="mb-4 text-sm text-gray-600">Student: {result.studentName || 'Unknown student'}{result.studentEmail ? ` (${result.studentEmail})` : ''} · Assessment: {result.quiz.title}</p>
           
           <div className="grid grid-cols-4 gap-4 mb-6">
             <div className="text-center p-4 bg-indigo-50 rounded-lg">
@@ -181,7 +200,7 @@ const TeacherQuizResultsPage = () => {
           </div>
 
           {/* Violations Section */}
-          {result.violations && result.violations.length > 0 && (
+          {result.violations && result.violations.length > 0 ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
               <h3 className="font-medium text-red-800 mb-3 flex items-center gap-2">
                 <ExclamationTriangleIcon className="h-5 w-5" />
@@ -189,7 +208,7 @@ const TeacherQuizResultsPage = () => {
               </h3>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {result.violations.map((v, i) => (
-                  <div key={i} className="flex items-center justify-between bg-white p-2 rounded text-sm">
+                  <div key={i} className="bg-white p-3 rounded text-sm">
                     <span className={`px-2 py-1 text-xs font-medium rounded ${
                       v.type === 'tab_switch' ? 'bg-orange-100 text-orange-700' :
                       v.type === 'copy_attempt' ? 'bg-red-100 text-red-700' :
@@ -201,14 +220,14 @@ const TeacherQuizResultsPage = () => {
                        v.type === 'paste_attempt' ? 'Paste Attempt' :
                        v.type === 'right_click' ? 'Right Click' : v.type}
                     </span>
-                    <span className="text-xs text-gray-500">
-                      {new Date(v.timestamp).toLocaleTimeString()}
-                    </span>
+                    <span className="text-xs text-gray-500">{new Date(v.timestamp).toLocaleString()} · {v.severity || 'low'} · {v.detectionMethod || v.detection_method || 'unknown'}</span>
+                    <p className="mt-1 text-xs text-gray-600">{detailsText(v.details)}</p>
+                    {v.details && <details className="mt-1 text-xs text-gray-500"><summary className="cursor-pointer">Technical event data</summary><pre className="mt-1 whitespace-pre-wrap break-words">{typeof v.details === 'string' ? v.details : JSON.stringify(v.details, null, 2)}</pre></details>}
                   </div>
                 ))}
               </div>
             </div>
-          )}
+          ) : <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">No monitoring events were recorded for this attempt.</div>}
 
           {/* Teacher Feedback */}
           {result.teacherFeedback && (
@@ -231,8 +250,9 @@ const TeacherQuizResultsPage = () => {
                 a => a.questionId === `${result.id.split('-')[0]}-q${qIndex}` || 
                      a.questionId.endsWith(`-q${qIndex}`)
               );
-              const selectedIndex = userAnswer?.selectedAnswer ?? -1;
-              const isCorrect = selectedIndex === question.correctAnswer;
+              const selectedIndex = typeof userAnswer?.selectedAnswer === 'number' ? userAnswer.selectedAnswer : -1;
+              const isCorrect = userAnswer?.isCorrect === true;
+              const isShortAnswer = question.questionType === 'shortAnswer' || !question.options?.length;
 
               return (
                 <div key={qIndex} className="border rounded-lg p-4">
@@ -248,7 +268,15 @@ const TeacherQuizResultsPage = () => {
                     </div>
                   </div>
 
-                  <div className="ml-9 space-y-2">
+                  {isShortAnswer ? (
+                    <div className="ml-9 rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+                      <span className="font-medium">Student response:</span>{' '}
+                      {typeof userAnswer?.selectedAnswer === 'string' && userAnswer.selectedAnswer.trim()
+                        ? userAnswer.selectedAnswer
+                        : 'No response'}
+                    </div>
+                  ) : (
+                    <div className="ml-9 space-y-2">
                     {question.options.map((option, oIndex) => (
                       <div
                         key={oIndex}
@@ -270,7 +298,8 @@ const TeacherQuizResultsPage = () => {
                         )}
                       </div>
                     ))}
-                  </div>
+                    </div>
+                  )}
 
                   {question.explanation && (
                     <div className="ml-9 mt-3 p-3 bg-blue-50 rounded-lg">
@@ -298,7 +327,7 @@ const TeacherQuizResultsPage = () => {
             to="/dashboard/student/join-quiz"
             className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
           >
-            Take Another Quiz
+            Take Another Exam
           </Link>
         </div>
       </div>

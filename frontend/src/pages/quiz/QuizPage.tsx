@@ -130,7 +130,7 @@ const QuizPage: React.FC = () => {
       <div className="max-w-3xl mx-auto">
         {/* Progress / Header */}
         <div className="mb-8 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-900">Quiz Session</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Exam Session</h2>
           <div className="flex items-center gap-4">
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono font-bold ${
               timeLeft < 10 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-indigo-100 text-indigo-700'

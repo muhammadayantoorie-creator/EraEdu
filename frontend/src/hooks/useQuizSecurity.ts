@@ -22,6 +22,7 @@ export const useQuizSecurity = (options: UseQuizSecurityOptions) => {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [lastViolationType, setLastViolationType] = useState<ViolationType | null>(null);
+  const [writeError, setWriteError] = useState<string | null>(null);
 
   const reportViolation = useCallback(async (type: ViolationType) => {
     const violation: Violation = { type, timestamp: new Date() };
@@ -33,21 +34,30 @@ export const useQuizSecurity = (options: UseQuizSecurityOptions) => {
       setShowWarningModal(true);
     }
 
-    try {
-      const response = await api.post(`/quizzes/attempts/${quizAttemptId}/report-violation`, {
+    const body = {
+        event_id: typeof crypto?.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         violationType: type,
         detectionMethod: 'browser_event',
         timestamp: new Date().toISOString(),
         quizId,
         teacherId
-      });
+      };
+    try {
+      let response: any;
+      let lastError: unknown;
+      for (let retry = 0; retry < 3; retry += 1) {
+        try { response = await api.post(`/quizzes/attempts/${quizAttemptId}/report-violation`, body); break; }
+        catch (error) { lastError = error; if (retry < 2) await new Promise(resolve => setTimeout(resolve, 250 * (retry + 1))); }
+      }
+      if (!response) throw lastError;
+      setWriteError(null);
 
       const count = response.data?.data?.violationCount || 1;
       const isAutoSubmitted = response.data?.data?.autoSubmitted || false;
 
       if (isAutoSubmitted) {
         const limit = response.data?.data?.violationLimit;
-        toast.error(`Quiz automatically submitted after reaching the ${limit}-violation limit.`, {
+        toast.error(`Exam automatically submitted after reaching the ${limit}-violation limit.`, {
           duration: 5000,
           position: 'top-center',
         });
@@ -57,6 +67,7 @@ export const useQuizSecurity = (options: UseQuizSecurityOptions) => {
       onViolation?.(type, count);
     } catch (error) {
       console.error('Failed to report violation:', error);
+      setWriteError('Monitoring event could not be saved; retry when connected.');
     }
   }, [quizAttemptId, quizId, teacherId, onViolation]);
 
@@ -131,6 +142,7 @@ export const useQuizSecurity = (options: UseQuizSecurityOptions) => {
     violationCount: violations.length,
     showWarningModal,
     lastViolationType,
+    writeError,
     dismissWarning,
     reportViolation
   };

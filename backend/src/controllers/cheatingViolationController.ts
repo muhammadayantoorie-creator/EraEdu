@@ -14,6 +14,7 @@ export const reportViolation = asyncHandler(async (req: Request, res: Response) 
     alert_message,
     duration_seconds,
     meta_data,
+    event_id,
     quizId,
     teacherId,
   } = req.body;
@@ -51,6 +52,7 @@ export const reportViolation = asyncHandler(async (req: Request, res: Response) 
       quizId: quizId || '',
       teacherId,
       violationType: normalizedViolationType as ViolationType,
+      eventId: typeof event_id === 'string' ? event_id : undefined,
       detectionMethod: detectionMethod || 'browser_event',
       details: {
         userAgent: req.headers['user-agent'],

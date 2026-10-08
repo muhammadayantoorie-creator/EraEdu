@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { DataTable } from '../../../components/shared';
 import api from '../../../services/api';
 import toast from 'react-hot-toast';
@@ -27,9 +28,12 @@ interface CourseOption {
 }
 
 const TeacherTopics = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [topics, setTopics] = useState<TopicWithCourse[]>([]);
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCourse, setSelectedCourse] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
@@ -47,6 +51,7 @@ const TeacherTopics = () => {
 
   const fetchData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [topicsRes, coursesRes] = await Promise.all([
         api.get('/courses/teacher/topics'),
@@ -56,8 +61,7 @@ const TeacherTopics = () => {
       setCourses(coursesRes.data.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
-      setTopics([]);
-      setCourses([]);
+      setLoadError('Topics could not be loaded. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -96,8 +100,14 @@ const TeacherTopics = () => {
         await api.put(`/courses/topics/${editingTopic._id}`, formData);
         toast.success('Topic updated successfully');
       } else {
-        await api.post('/courses/topics', formData);
+        const response = await api.post('/courses/topics', formData);
         toast.success('Topic created successfully');
+        const returnTo = new URLSearchParams(location.search).get('returnTo');
+        const createdTopicId = response.data?.data?._id;
+        if (returnTo === '/dashboard/teacher/questions' && createdTopicId) {
+          navigate(`${returnTo}?create=1&topicId=${encodeURIComponent(createdTopicId)}`, { replace: true });
+          return;
+        }
       }
       setModalOpen(false);
       fetchData();
@@ -235,7 +245,14 @@ const TeacherTopics = () => {
 
       {/* Topics Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        {courses.length === 0 && !loading ? (
+        {loadError ? (
+          <div className="p-8 text-center">
+            <p className="text-gray-600 mb-4">{loadError}</p>
+            <button onClick={fetchData} className="text-indigo-600 hover:text-indigo-800 font-medium">
+              Retry
+            </button>
+          </div>
+        ) : courses.length === 0 && !loading ? (
           <div className="p-8 text-center">
             <p className="text-gray-500 mb-4">You need to create a course before adding topics.</p>
             <a href="/dashboard/teacher/courses/new" className="text-indigo-600 hover:text-indigo-800 font-medium">

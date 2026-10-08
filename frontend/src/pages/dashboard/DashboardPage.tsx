@@ -61,7 +61,7 @@ const DashboardPage: React.FC = () => {
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Quizzes Completed</dt>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Exams Completed</dt>
                   <dd className="text-lg font-medium text-gray-900">{stats?.quizzesCompleted || 0}</dd>
                 </dl>
               </div>

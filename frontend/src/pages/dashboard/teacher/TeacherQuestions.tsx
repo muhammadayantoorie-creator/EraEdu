@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { DataTable } from '../../../components/shared';
 import api from '../../../services/api';
 import toast from 'react-hot-toast';
@@ -29,9 +30,13 @@ interface TopicOption {
 }
 
 const TeacherQuestions = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const returnHandoffHandled = useRef(false);
   const [questions, setQuestions] = useState<QuestionWithMeta[]>([]);
   const [topics, setTopics] = useState<TopicOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTopic, setSelectedTopic] = useState<string>('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
@@ -52,6 +57,7 @@ const TeacherQuestions = () => {
 
   const fetchData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [questionsRes, topicsRes] = await Promise.all([
         api.get('/courses/teacher/questions'),
@@ -61,16 +67,44 @@ const TeacherQuestions = () => {
       setTopics(topicsRes.data.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
-      setTopics([]);
-      setQuestions([]);
+      setLoadError('Questions and topics could not be loaded. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (loading || returnHandoffHandled.current || params.get('create') !== '1') return;
+
+    const requestedTopic = topics.find((topic) => topic._id === params.get('topicId'));
+    if (!requestedTopic) return;
+
+    returnHandoffHandled.current = true;
+    setEditingQuestion(null);
+    setFormData({
+      text: '',
+      options: ['', '', '', ''],
+      correctAnswer: 0,
+      difficulty: 'Medium',
+      topicId: requestedTopic._id,
+      explanation: '',
+    });
+    setModalOpen(true);
+    params.delete('create');
+    params.delete('topicId');
+    const search = params.toString();
+    navigate({ pathname: location.pathname, search: search ? `?${search}` : '' }, { replace: true });
+  }, [loading, location.pathname, location.search, navigate, topics]);
+
+  const startTopicFirstWorkflow = () => {
+    toast('Create a topic, then you will return here to add its first question.');
+    navigate('/dashboard/teacher/topics?returnTo=/dashboard/teacher/questions');
+  };
+
   const handleOpenModal = (question?: QuestionWithMeta) => {
     if (topics.length === 0) {
-      toast.error('Please create a topic first before adding questions');
+      startTopicFirstWorkflow();
       return;
     }
     
@@ -217,7 +251,7 @@ const TeacherQuestions = () => {
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Questions</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage quiz questions for your topics</p>
+          <p className="text-sm text-gray-500 mt-1">Manage exam questions for your topics</p>
         </div>
         <button
           onClick={() => handleOpenModal()}
@@ -268,12 +302,19 @@ const TeacherQuestions = () => {
 
       {/* Questions Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        {topics.length === 0 && !loading ? (
+        {loadError ? (
+          <div className="p-8 text-center">
+            <p className="text-gray-600 mb-4">{loadError}</p>
+            <button onClick={fetchData} className="text-indigo-600 hover:text-indigo-800 font-medium">
+              Retry
+            </button>
+          </div>
+        ) : topics.length === 0 && !loading ? (
           <div className="p-8 text-center">
             <p className="text-gray-500 mb-4">You need to create topics before adding questions.</p>
-            <a href="/dashboard/teacher/topics" className="text-indigo-600 hover:text-indigo-800 font-medium">
-              Go to Topics →
-            </a>
+            <button onClick={startTopicFirstWorkflow} className="text-indigo-600 hover:text-indigo-800 font-medium">
+              Create a topic, then add a question →
+            </button>
           </div>
         ) : (
           <DataTable

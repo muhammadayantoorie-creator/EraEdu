@@ -34,12 +34,12 @@ export const useQuiz = () => {
         setCurrentQuestion(questionResponse.data.data);
         navigate(`/quiz/${quiz._id}/attempt/${attempt._id}`);
       } else {
-        toast.error('No questions available for this quiz.');
+        toast.error('No questions available for this exam.');
       }
 
       setError(null);
     } catch (err: any) {
-      const msg = err.response?.data?.error?.message || 'Failed to start quiz';
+      const msg = err.response?.data?.error?.message || 'Failed to start exam';
       setError(msg);
       toast.error(msg);
     } finally {
@@ -60,7 +60,7 @@ export const useQuiz = () => {
       
       // If quiz is completed
       if (result.isComplete) {
-        toast.success('Quiz completed!');
+        toast.success('Exam completed!');
         navigate(`/quiz/results/${attemptId}`);
         return null;
       }

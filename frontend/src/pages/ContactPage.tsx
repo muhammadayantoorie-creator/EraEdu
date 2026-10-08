@@ -8,7 +8,7 @@ const contactChannels = [
   },
   {
     title: 'Instructor support',
-    description: 'Teachers can review quiz activity, student status, and proctoring flags from their dashboard.',
+    description: 'Teachers can review exam activity, student status, and proctoring flags from their dashboard.',
   },
   {
     title: 'Account access',

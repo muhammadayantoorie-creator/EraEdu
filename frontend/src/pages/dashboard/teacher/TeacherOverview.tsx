@@ -77,7 +77,7 @@ const TeacherOverview = () => {
       const text = await blob.text();
       const lines = text.trim().split('\n');
       if (lines.length <= 1) {
-        toast('No completed student quizzes to export yet.');
+        toast('No completed student exams to export yet.');
         return;
       }
       // The UTF-8 marker keeps names readable when the file is opened in Excel.
@@ -102,7 +102,7 @@ const TeacherOverview = () => {
         const submissions = fallbackResponse.data?.data || [];
 
         if (submissions.length === 0) {
-          toast('No completed student quizzes to export yet.');
+          toast('No completed student exams to export yet.');
           return;
         }
 
@@ -120,7 +120,7 @@ const TeacherOverview = () => {
           escapeField(submission.completedAt ? new Date(submission.completedAt).toISOString().split('T')[0] : 'N/A'),
         ].join(','));
         const fallbackCsv = [[
-          'Student Name', 'Student Email', 'Quiz / Test Name', 'Marks Obtained',
+          'Student Name', 'Student Email', 'Exam Name', 'Marks Obtained',
           'Total Marks', 'Percentage (%)', 'Submitted Date',
         ].join(','), ...rows].join('\n');
         const fallbackUrl = window.URL.createObjectURL(new Blob([`\uFEFF${fallbackCsv}`], { type: 'text/csv;charset=utf-8' }));
@@ -240,7 +240,7 @@ const TeacherOverview = () => {
                 </span>
               </h1>
               <p className="mt-3 max-w-xl text-[14.5px] leading-relaxed text-white/60">
-                Author quizzes, curate questions, and watch your cohort progress in real time.
+                Author exams, curate questions, and watch your cohort progress in real time.
               </p>
             </div>
 
@@ -307,7 +307,7 @@ const TeacherOverview = () => {
                   shadow-[0_8px_30px_-10px_rgba(16,185,129,0.6)]
                 "
               >
-                New Quiz
+                New Exam
                 <span
                   className="
                     flex h-8 w-8 items-center justify-center rounded-full
@@ -491,7 +491,7 @@ const TeacherOverview = () => {
             <ul className="space-y-2">
               {[
                 { text: 'New student enrolled in JavaScript Basics', time: '2 hours ago' },
-                { text: '15 students completed React Quiz #3', time: '5 hours ago' },
+                { text: '15 students completed React Exam #3', time: '5 hours ago' },
                 { text: 'Python course reached 50 enrollments', time: '1 day ago' },
               ].map((a, i) => (
                 <li
@@ -523,7 +523,7 @@ const TeacherOverview = () => {
               {[
                 {
                   to: '/dashboard/teacher/quizzes',
-                  title: 'Create a Quiz',
+                  title: 'Create a Exam',
                   desc: 'Build assessments with timing & proctoring',
                   d: 'M9 11l3 3 7-7 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10',
                 },

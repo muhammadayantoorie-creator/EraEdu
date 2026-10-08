@@ -60,7 +60,7 @@ const StudentRecommendations = () => {
           type: 'topic',
           title: 'Binary Trees',
           description: 'Master tree traversal algorithms and common operations.',
-          reason: 'Your recent quiz scores show room for improvement in tree-based problems.',
+          reason: 'Your recent exam scores show room for improvement in tree-based problems.',
           priority: 'high',
           actionUrl: '/courses/ds101/topics/binary-trees',
           actionLabel: 'Start Learning',
@@ -77,7 +77,7 @@ const StudentRecommendations = () => {
           reason: 'You haven\'t practiced arrays in a while, and it\'s a foundational concept.',
           priority: 'medium',
           actionUrl: '/quiz/start/arrays',
-          actionLabel: 'Take Quiz',
+          actionLabel: 'Take Exam',
           metadata: {
             estimatedTime: '20 min',
           },
@@ -121,7 +121,7 @@ const StudentRecommendations = () => {
         {
           type: 'weakness',
           title: 'Needs Improvement: Data Structures',
-          description: 'Your scores in data structure quizzes are below average.',
+          description: 'Your scores in data structure exams are below average.',
           topics: ['Trees', 'Graphs', 'Hash Tables'],
         },
         {
@@ -256,7 +256,7 @@ const StudentRecommendations = () => {
               <SparklesIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No recommendations yet</h3>
               <p className="text-gray-500">
-                Complete more quizzes and courses to get personalized AI recommendations.
+                Complete more exams and courses to get personalized AI recommendations.
               </p>
             </div>
           )}
@@ -318,7 +318,7 @@ const StudentRecommendations = () => {
                 className="flex items-center gap-2 p-2 bg-white rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <AcademicCapIcon className="h-5 w-5 text-green-600" />
-                <span className="text-sm font-medium text-gray-700">View Quiz History</span>
+                <span className="text-sm font-medium text-gray-700">View Exam History</span>
               </Link>
             </div>
           </div>

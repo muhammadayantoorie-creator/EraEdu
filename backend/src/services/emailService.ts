@@ -31,7 +31,7 @@ export const emailService = {
             <p>Here are a few things you can do to get started:</p>
             <ul>
               <li>Explore our adaptive courses</li>
-              <li>Take a quiz to test your knowledge</li>
+              <li>Take an exam to test your knowledge</li>
               <li>Check your personalized dashboard</li>
             </ul>
             <p>Happy Learning!</p>

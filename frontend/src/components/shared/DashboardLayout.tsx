@@ -37,14 +37,15 @@ const Stroke = ({ d, size = 18 }: { d: string; size?: number }) => (
 const studentItems: SidebarItem[] = [
   { label: 'Overview', href: '/dashboard/student', icon: <Stroke d="M3 11l9-7 9 7v9a2 2 0 0 1-2 2h-4v-6h-6v6H5a2 2 0 0 1-2-2v-9z" /> },
   { label: 'Courses', href: '/dashboard/student/courses', icon: <Stroke d="M4 5a2 2 0 0 1 2-2h11v17H6a2 2 0 0 1-2-2V5z M9 3v17 M17 7H9 M17 11H9" /> },
-  { label: 'Enter Quiz Code', href: '/dashboard/student/join-quiz', icon: <Stroke d="M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h2v2h-2z M18 14h2v2h-2z M14 18h2v2h-2z M18 18h2v2h-2z" /> },
-  { label: 'Quiz History', href: '/dashboard/student/quiz-history', icon: <Stroke d="M3 12a9 9 0 1 0 3-6.7 M3 4v5h5 M12 8v4l3 2" /> },
+  { label: 'Enter Exam Code', href: '/dashboard/student/join-quiz', icon: <Stroke d="M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h2v2h-2z M18 14h2v2h-2z M14 18h2v2h-2z M18 18h2v2h-2z" /> },
+  { label: 'Exam History', href: '/dashboard/student/quiz-history', icon: <Stroke d="M3 12a9 9 0 1 0 3-6.7 M3 4v5h5 M12 8v4l3 2" /> },
 ];
 
 const teacherItems: SidebarItem[] = [
   { label: 'Overview', href: '/dashboard/teacher', icon: <Stroke d="M3 11l9-7 9 7v9a2 2 0 0 1-2 2h-4v-6h-6v6H5a2 2 0 0 1-2-2v-9z" /> },
   { label: 'Courses', href: '/dashboard/teacher/courses', icon: <Stroke d="M4 5a2 2 0 0 1 2-2h11v17H6a2 2 0 0 1-2-2V5z M9 3v17 M17 7H9 M17 11H9" /> },
-  { label: 'Quizzes', href: '/dashboard/teacher/quizzes', icon: <Stroke d="M9 11l3 3 7-7 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10" /> },
+  { label: 'Topics', href: '/dashboard/teacher/topics', icon: <Stroke d="M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h5" /> },
+  { label: 'Exams', href: '/dashboard/teacher/quizzes', icon: <Stroke d="M9 11l3 3 7-7 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10" /> },
   { label: 'Questions', href: '/dashboard/teacher/questions', icon: <Stroke d="M9 9a3 3 0 1 1 4.3 2.7c-.8.4-1.3 1-1.3 2V14 M12 18h.01 M3 12a9 9 0 1 1 18 0 9 9 0 0 1-18 0z" /> },
   { label: 'Submissions', href: '/dashboard/teacher/submissions', icon: <Stroke d="M9 3h6l2 4H7l2-4z M5 7h14v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7z M9 12h6 M9 16h4" /> },
   { label: 'Analytics', href: '/dashboard/teacher/analytics', icon: <Stroke d="M3 21h18 M6 17V9 M11 17V5 M16 17v-7 M21 17v-3" /> },
@@ -278,7 +279,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
                         onClick={() => setShowNotifications(false)}
                         className="block border-t border-ink-900/5 px-4 py-3 text-center text-sm font-medium text-primary-700 hover:bg-ink-50/60 transition-colors"
                       >
-                        Join a Quiz →
+                        Join a Exam →
                       </Link>
                     )}
                   </div>

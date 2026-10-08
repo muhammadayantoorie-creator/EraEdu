@@ -4,6 +4,7 @@ import Safepay from '@sfpy/node-core';
 import { config } from '../config/environment';
 import { protect, authorize } from '../middleware/auth';
 import { supabase } from '../config/supabase';
+import { paymentStatusFromTrackerState } from '../services/safepayPaymentState';
 
 const router = Router();
 
@@ -36,14 +37,25 @@ const updatePaymentFromTracker = async (trackerToken: string, userId?: string) =
   // The current Reporter endpoint returns the tracker directly under `data`.
   // Keep the nested fallback for older SDK response shapes.
   const tracker = report?.data?.tracker || report?.data;
-  const isPaid = tracker?.state === 'TRACKER_ENDED';
-  if (isPaid && payment.status !== 'paid') {
+  const reportedStatus = paymentStatusFromTrackerState(tracker?.state);
+  // A completed monthly entitlement remains paid in this record. Later
+  // refund/dispute handling is an explicit support policy, not an accidental
+  // downgrade caused by polling a post-payment tracker state.
+  const verifiedStatus = payment.status === 'paid' ? 'paid' : reportedStatus;
+  if (verifiedStatus !== payment.status) {
     const now = new Date().toISOString();
+    const paymentUpdate = verifiedStatus === 'paid'
+      ? { status: 'paid', paid_at: now, updated_at: now }
+      : { status: verifiedStatus, updated_at: now };
     const { error: updateError } = await supabase
       .from('safepay_payments')
-      .update({ status: 'paid', paid_at: now, updated_at: now })
+      .update(paymentUpdate)
       .eq('tracker_token', trackerToken);
     if (updateError) throw updateError;
+  }
+  if (verifiedStatus === 'paid' && payment.status !== 'paid') {
+    // Only Safepay's server-reported TRACKER_ENDED state can activate the
+    // plan. Neither a success nor a cancellation return URL changes access.
     // This checkout records a monthly Institution licence. It is currently a
     // manual monthly renewal, not an automatic recurring charge.
     if (payment.organization_id) {
@@ -58,7 +70,7 @@ const updatePaymentFromTracker = async (trackerToken: string, userId?: string) =
       if (userError) throw userError;
     }
   }
-  return { status: isPaid ? 'paid' : payment.status };
+  return { status: verifiedStatus };
 };
 
 router.post('/checkout', protect, authorize('teacher'), async (req, res) => {
@@ -77,7 +89,8 @@ router.post('/checkout', protect, authorize('teacher'), async (req, res) => {
     // The profile page polls Safepay with the tracker after checkout. Include
     // it in the return URL so a completed payment can activate the educator
     // subscription without relying solely on an asynchronous webhook.
-    const url = client.checkout.createCheckoutUrl({ env, tracker: payment.data.tracker.token, tbt: passport.data, source: 'hosted', redirect_url: `${config.frontendAppUrl}/profile?tracker=${encodeURIComponent(payment.data.tracker.token)}`, cancel_url: `${config.frontendAppUrl}/#pricing` });
+    const tracker = encodeURIComponent(payment.data.tracker.token);
+    const url = client.checkout.createCheckoutUrl({ env, tracker: payment.data.tracker.token, tbt: passport.data, source: 'hosted', redirect_url: `${config.frontendAppUrl}/profile?tracker=${tracker}`, cancel_url: `${config.frontendAppUrl}/profile?payment=cancelled&tracker=${tracker}` });
     const { error: saveError } = await supabase.from('safepay_payments').insert({
       tracker_token: payment.data.tracker.token,
       user_id: req.user!._id,

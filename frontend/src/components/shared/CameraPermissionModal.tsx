@@ -113,12 +113,12 @@ const CameraPermissionModal = ({ isOpen, onAllow, onCancel, quizTitle }: CameraP
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 mb-3">
               <ShieldCheckIcon className="h-7 w-7 text-blue-600" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900">Camera Required for Quiz</h3>
+            <h3 className="text-lg font-bold text-gray-900">Camera Required for Exam</h3>
             {quizTitle && (
               <p className="text-sm text-gray-500 mt-1">"{quizTitle}"</p>
             )}
             <p className="text-sm text-gray-600 mt-2">
-              This quiz uses <strong>face detection proctoring</strong>. Your camera must be enabled to start.
+              This exam uses <strong>face detection proctoring</strong>. Your camera must be enabled to start.
             </p>
           </div>
 
@@ -185,8 +185,8 @@ const CameraPermissionModal = ({ isOpen, onAllow, onCancel, quizTitle }: CameraP
                 <ul className="list-disc pl-4 space-y-0.5">
                   <li>Keep your face visible in the camera at all times</li>
                   <li>Do not look away from the screen for extended periods</li>
-                  <li>Do not switch tabs or windows during the quiz</li>
-                  <li>Quiz will auto-submit if you look away for 60+ seconds</li>
+                  <li>Do not switch tabs or windows during the exam</li>
+                  <li>Exam will auto-submit if you look away for 60+ seconds</li>
                 </ul>
               </div>
             </div>
@@ -207,7 +207,7 @@ const CameraPermissionModal = ({ isOpen, onAllow, onCancel, quizTitle }: CameraP
                 className="flex-1 py-2.5 px-4 border border-transparent rounded-xl text-sm font-bold text-white bg-green-600 hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
               >
                 <VideoCameraIcon className="h-5 w-5" />
-                Start Quiz
+                Start Exam
               </button>
             ) : (
               <button

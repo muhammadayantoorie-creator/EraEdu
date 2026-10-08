@@ -127,8 +127,8 @@ const TeacherQuizzes = () => {
       const response = await api.get('/quizzes/teacher/my-quizzes');
       setQuizzes(response.data.data || []);
     } catch (error: any) {
-      console.error('Error fetching quizzes:', error);
-      const message = error.response?.data?.message || 'Failed to load quizzes';
+      console.error('Error fetching exams:', error);
+      const message = error.response?.data?.message || 'Failed to load exams';
       toast.error(message);
       setQuizzes([]);
     } finally {
@@ -246,7 +246,7 @@ const TeacherQuizzes = () => {
 
   const removeQuestion = (index: number) => {
     if (formData.questions.length <= 1) {
-      toast.error('Quiz must have at least one question');
+      toast.error('Exam must have at least one question');
       return;
     }
     const newQuestions = [...formData.questions];
@@ -350,29 +350,29 @@ const TeacherQuizzes = () => {
     try {
       if (editingQuiz) {
         await api.put(`/quizzes/${editingQuiz._id}`, submitData);
-        toast.success('Quiz updated successfully');
+        toast.success('Exam updated successfully');
       } else {
         await api.post('/quizzes', submitData);
-        toast.success('Quiz created successfully');
+        toast.success('Exam created successfully');
       }
       setModalOpen(false);
       fetchQuizzes();
     } catch (error: any) {
-      console.error('Save Quiz Error:', error);
-      const message = error.response?.data?.message || error.message || 'Failed to save quiz';
+      console.error('Save Exam Error:', error);
+      const message = error.response?.data?.message || error.message || 'Failed to save exam';
       toast.error(message);
     }
   };
 
   const handleDelete = async (quiz: Quiz) => {
-    if (!confirm(`Delete quiz "${quiz.title}"?`)) return;
+    if (!confirm(`Delete exam "${quiz.title}"?`)) return;
 
     try {
       await api.delete(`/quizzes/${quiz._id}`);
-      toast.success('Quiz deleted');
+      toast.success('Exam deleted');
       setQuizzes(quizzes.filter((q) => q._id !== quiz._id));
     } catch (error) {
-      toast.error('Failed to delete quiz');
+      toast.error('Failed to delete exam');
     }
   };
 
@@ -388,7 +388,7 @@ const TeacherQuizzes = () => {
   const columns = [
     {
       key: 'title' as keyof Quiz,
-      header: 'Quiz',
+      header: 'Exam',
       render: (quiz: Quiz) => (
         <div>
           <p className="font-medium text-gray-900">{quiz.title}</p>
@@ -476,15 +476,15 @@ const TeacherQuizzes = () => {
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Quizzes</h1>
-          <p className="text-sm text-gray-500 mt-1">Create quizzes and share them with students via code</p>
+          <h1 className="text-2xl font-bold text-gray-900">My Exams</h1>
+          <p className="text-sm text-gray-500 mt-1">Create exams and share them with students via code</p>
         </div>
         <button
           onClick={() => handleOpenModal()}
           className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
         >
           <PlusIcon className="h-5 w-5" />
-          Create Quiz
+          Create Exam
         </button>
       </header>
 
@@ -493,7 +493,7 @@ const TeacherQuizzes = () => {
           <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search quizzes..."
+            placeholder="Search exams..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
@@ -506,7 +506,7 @@ const TeacherQuizzes = () => {
           columns={columns}
           data={filteredQuizzes}
           isLoading={loading}
-          emptyMessage="No quizzes found. Click 'Create Quiz' to create your first quiz!"
+          emptyMessage="No exams found. Click 'Create Exam' to create your first exam!"
           onRowClick={requestQuizOpen}
         />
       </div>
@@ -543,7 +543,7 @@ const TeacherQuizzes = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
           <div className="bg-white rounded-xl p-6 max-w-3xl w-full mx-4 my-8 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              {editingQuiz ? 'Edit Quiz' : 'Create'}
+              {editingQuiz ? 'Edit Exam' : 'Create'}
             </h3>
 
             {!editingQuiz && (
@@ -555,7 +555,7 @@ const TeacherQuizzes = () => {
                     formMode === 'quiz' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >
-                  Quiz
+                  Exam
                 </button>
                 <button
                   type="button"
@@ -585,13 +585,13 @@ const TeacherQuizzes = () => {
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Quiz Title</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Exam Title</label>
                       <input
                         type="text"
                         value={formData.title}
                         onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Enter quiz title"
+                        placeholder="Enter exam title"
                         required
                       />
                     </div>
@@ -647,7 +647,7 @@ const TeacherQuizzes = () => {
                       </select>
                     </div>
                     <p className="mt-1 text-xs text-gray-500">
-                      Choose a date to schedule the quiz. Time uses 1–12 with AM/PM.
+                      Choose a date to schedule the exam. Time uses 1–12 with AM/PM.
                     </p>
                   </div>
 
@@ -658,7 +658,7 @@ const TeacherQuizzes = () => {
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       rows={2}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      placeholder="Brief description of the quiz"
+                      placeholder="Brief description of the exam"
                     />
                   </div>
 
@@ -673,7 +673,7 @@ const TeacherQuizzes = () => {
                     <label htmlFor="cameraMonitoring" className="text-sm text-gray-700 cursor-pointer">
                       <span className="font-medium">Require camera monitoring</span>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        When ON, students must enable their webcam to take this quiz. When OFF, no camera is required.
+                        When ON, students must enable their webcam to take this exam. When OFF, no camera is required.
                       </p>
                     </label>
                   </div>
@@ -693,7 +693,7 @@ const TeacherQuizzes = () => {
                       />
                       <span className="text-sm text-red-800">violations</span>
                     </div>
-                    <p className="mt-2 text-xs leading-5 text-red-700">The student's quiz is automatically submitted immediately when this number of violations is reached.</p>
+                    <p className="mt-2 text-xs leading-5 text-red-700">The student's exam is automatically submitted immediately when this number of violations is reached.</p>
                   </div>
                 </>
               )}
@@ -879,7 +879,7 @@ const TeacherQuizzes = () => {
                   type="submit"
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700"
                 >
-                  {editingQuiz ? 'Update Quiz' : formMode === 'quiz' ? 'Create Quiz' : 'Create Question'}
+                  {editingQuiz ? 'Update Exam' : formMode === 'quiz' ? 'Create Exam' : 'Create Question'}
                 </button>
               </div>
             </form>
