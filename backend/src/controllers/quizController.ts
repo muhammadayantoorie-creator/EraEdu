@@ -162,8 +162,12 @@ export const getStudentAnalytics = asyncHandler(async (req: Request, res: Respon
 });
 
 export const getQuizForTopic = asyncHandler(async (req: Request, res: Response) => {
-  const { topicId } = req.params;
-  const { difficulty } = req.query;
+  const topicId = req.params.topicId || req.body?.topicId;
+  const difficulty = req.body?.difficulty || req.query.difficulty;
+  if (typeof topicId !== 'string' || !topicId) {
+    res.status(400).json({ success: false, message: 'Topic ID is required' });
+    return;
+  }
   
   const result = await quizService.getQuizForTopic(
     topicId,
@@ -177,14 +181,19 @@ export const getQuizForTopic = asyncHandler(async (req: Request, res: Response) 
   });
 });
 
+export const getCurrentTopicQuestion = asyncHandler(async (req: Request, res: Response) => {
+  const result = await quizService.getCurrentTopicQuestion(req.params.attemptId, req.user!._id.toString());
+  res.status(200).json({ success: true, data: result });
+});
+
 export const submitAnswer = asyncHandler(async (req: Request, res: Response) => {
-  const { attemptId, questionId } = req.params;
-  const { answer } = req.body;
+  const { attemptId } = req.params;
+  const { questionId, selectedAnswer } = req.body;
   
   const result = await quizService.submitAnswer(
     attemptId,
     questionId,
-    answer,
+    selectedAnswer,
     req.user!._id,
   );
   

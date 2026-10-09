@@ -1,6 +1,6 @@
 import express from 'express';
 import { 
-  getQuizForTopic, submitAnswer, getHint, getQuizHistory,
+  getQuizForTopic, getCurrentTopicQuestion, submitAnswer, getHint, getQuizHistory,
   createQuiz, getTeacherQuizzes, updateQuiz, deleteQuiz, startQuizByCode, submitAllAnswers,
   getAttemptResults, getTeacherSubmissions, getTeacherQuizDetails, gradeSubmission,
   getTeacherAnalytics, getStudentAnalytics
@@ -53,11 +53,10 @@ router.get('/violations/summary', authorize('teacher', 'admin'), getViolationSum
 router.post('/attempts/:attemptId/flag', authorize('teacher', 'admin'), flagAttempt);
 router.post('/attempts/:attemptId/invalidate', authorize('teacher', 'admin'), invalidateAttempt);
 
-// Get quiz for a topic (starts a session essentially)
-router.get('/topic/:topicId', authorize('student'), getQuizForTopic);
+// Topic exams have their own attempt/question lifecycle, separate from code exams.
+router.get('/topic-attempt/:attemptId/current', authorize('student'), getCurrentTopicQuestion);
+router.post('/topic-attempt/:attemptId/answer', authorize('student'), submitAnswer);
 
-// Submit single answer
-router.post('/:attemptId/question/:questionId/submit', authorize('student'), submitAnswer);
 
 // Get hint
 router.get('/question/:questionId/hint', getHint);

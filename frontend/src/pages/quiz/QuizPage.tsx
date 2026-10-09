@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuiz } from '../../hooks/useQuiz';
-import { useQuizSecurity } from '../../hooks/useQuizSecurity';
 import { LightBulbIcon, ClockIcon } from '@heroicons/react/24/outline';
 
 const QuizPage: React.FC = () => {
@@ -12,37 +11,40 @@ const QuizPage: React.FC = () => {
     loading, 
     error, 
     submitAnswer, 
-    getHint 
+    getHint,
+    getCurrentTopicQuestion,
   } = useQuiz();
-
-  // Security hook
-  useQuizSecurity({
-    quizAttemptId: attemptId || '',
-    quizId: quizId || '',
-  });
-
-  const [selectedAnswer, setSelectedAnswer] = useState<string>('');
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const timeoutSent = useRef(false);
   const [hint, setHint] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number>(60); // Default 60s if not specified
 
+  useEffect(() => {
+    if (attemptId) void getCurrentTopicQuestion(attemptId);
+  }, [attemptId, getCurrentTopicQuestion]);
+
   // Handle Question Timer
   useEffect(() => {
     if (currentQuestion) {
+      timeoutSent.current = false;
       // Set time to question's limit or default 60s
-      setTimeLeft(currentQuestion.timeLimit || 60);
+      setTimeLeft(currentQuestion.remainingSeconds ?? currentQuestion.timeLimit ?? 60);
     }
   }, [currentQuestion]);
 
   const handleSubmit = useCallback(async (force = false) => {
     if (!quizId || !attemptId || !currentQuestion) return;
-    if (!force && !selectedAnswer) return;
+    if (!force && selectedAnswer === null) return;
+    if (force && timeoutSent.current) return;
+    if (force) timeoutSent.current = true;
 
-    // Use currently selected answer, or empty string if time is up
-    await submitAnswer(quizId, attemptId, currentQuestion._id, selectedAnswer || '');
-    setSelectedAnswer('');
-    setHint(null);
-    setShowHint(false);
+    const result = await submitAnswer(quizId, attemptId, currentQuestion._id, force ? -1 : selectedAnswer ?? -1);
+    if (result) {
+      setSelectedAnswer(null);
+      setHint(null);
+      setShowHint(false);
+    }
   }, [quizId, attemptId, currentQuestion, selectedAnswer, submitAnswer]);
 
   useEffect(() => {
@@ -64,23 +66,8 @@ const QuizPage: React.FC = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // If we don't have a current question but have IDs, we might need to re-fetch or handle state
-  // Ideally, the hook or a parent component manages the flow. 
-  // For simplicity, we assume the user lands here after 'startQuiz' or is redirected.
-  // If currentQuestion is null, we might need to fetch the 'next' question again or check status.
-  // However, useQuiz is designed to hold state. If page refresh happens, state is lost.
-  // A more robust app would fetch current state on mount.
-  
-  // For this demo, if no question is present, we redirect to dashboard or show error
-  useEffect(() => {
-    if (!currentQuestion && !loading && !error) {
-       // In a real app, we'd try to recover the session here
-       // navigate('/dashboard');
-    }
-  }, [currentQuestion, loading, error, navigate]);
-
-  const handleOptionSelect = (option: string) => {
-    setSelectedAnswer(option);
+  const handleOptionSelect = (index: number) => {
+    setSelectedAnswer(index);
   };
 
   const handleRequestHint = async () => {
@@ -155,16 +142,16 @@ const QuizPage: React.FC = () => {
               {currentQuestion.options.map((option, idx) => (
                 <div 
                   key={idx}
-                  onClick={() => handleOptionSelect(option)}
+                  onClick={() => handleOptionSelect(idx)}
                   className={`relative border rounded-lg p-4 cursor-pointer flex items-center transition-colors
-                    ${selectedAnswer === option 
+                    ${selectedAnswer === idx
                       ? 'border-indigo-500 ring-2 ring-indigo-500 bg-indigo-50' 
                       : 'border-gray-300 hover:border-indigo-400 hover:bg-gray-50'
                     }`}
                 >
                   <div className={`h-4 w-4 rounded-full border flex items-center justify-center mr-3
-                    ${selectedAnswer === option ? 'border-indigo-600' : 'border-gray-400'}`}>
-                    {selectedAnswer === option && (
+                    ${selectedAnswer === idx ? 'border-indigo-600' : 'border-gray-400'}`}>
+                    {selectedAnswer === idx && (
                       <div className="h-2 w-2 rounded-full bg-indigo-600" />
                     )}
                   </div>
@@ -187,9 +174,9 @@ const QuizPage: React.FC = () => {
             <button
               type="button"
               onClick={() => handleSubmit()}
-              disabled={!selectedAnswer || loading}
+              disabled={selectedAnswer === null || loading}
               className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white 
-                ${!selectedAnswer || loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}`}
+                ${selectedAnswer === null || loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}`}
             >
               {loading ? 'Submitting...' : 'Submit Answer'}
             </button>

@@ -1,57 +1,61 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import api from '../services/api';
-import { Quiz, QuizAttempt, Question } from '../types';
+import { QuizAttempt, Question } from '../types';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
 export const useQuiz = () => {
-  const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
   const [currentAttempt, setCurrentAttempt] = useState<QuizAttempt | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const starting = useRef(false);
+  const submitting = useRef(false);
 
   const startQuiz = useCallback(async (topicId: string) => {
+    if (starting.current) return;
+    starting.current = true;
     setLoading(true);
     try {
-      // 1. Generate or fetch a quiz for the topic
-      const quizResponse = await api.post('/quizzes/generate', { topicId });
-      const quiz = quizResponse.data.data;
-      setCurrentQuiz(quiz);
-
-      // 2. Start an attempt
-      const attemptResponse = await api.post(`/quizzes/${quiz._id}/attempt`);
-      const attempt = attemptResponse.data.data;
-      setCurrentAttempt(attempt);
-
-      // 3. Get the first question (adaptive)
-      const questionResponse = await api.get(`/quizzes/${quiz._id}/next-question`, {
-        params: { attemptId: attempt._id }
-      });
-      
-      if (questionResponse.data.data) {
-        setCurrentQuestion(questionResponse.data.data);
-        navigate(`/quiz/${quiz._id}/attempt/${attempt._id}`);
-      } else {
-        toast.error('No questions available for this exam.');
-      }
+      const response = await api.post('/quizzes/generate', { topicId });
+      const { quizId, attemptId, question } = response.data.data;
+      if (!quizId || !attemptId || !question) throw new Error('No questions are available for this topic exam');
+      navigate(`/quiz/${quizId}/attempt/${attemptId}`);
 
       setError(null);
     } catch (err: any) {
-      const msg = err.response?.data?.error?.message || 'Failed to start exam';
+      const msg = err.response?.data?.error?.message || err.message || 'Failed to start exam';
       setError(msg);
-      toast.error(msg);
+    } finally {
+      setLoading(false);
+      starting.current = false;
+    }
+  }, [navigate]);
+
+  const getCurrentTopicQuestion = useCallback(async (attemptId: string) => {
+    setLoading(true);
+    try {
+      const response = await api.get(`/quizzes/topic-attempt/${attemptId}/current`);
+      if (response.data.data.isComplete) {
+        navigate(`/quiz/results/${attemptId}`);
+      } else {
+        setCurrentQuestion(response.data.data.question);
+      }
+      setError(null);
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to load exam question');
     } finally {
       setLoading(false);
     }
   }, [navigate]);
 
-  const submitAnswer = useCallback(async (quizId: string, attemptId: string, questionId: string, answer: string) => {
+  const submitAnswer = useCallback(async (_quizId: string, attemptId: string, questionId: string, answer: number) => {
+    if (submitting.current) return null;
+    submitting.current = true;
     setLoading(true);
     try {
-      const response = await api.post(`/quizzes/${quizId}/submit-answer`, {
-        attemptId,
+      const response = await api.post(`/quizzes/topic-attempt/${attemptId}/answer`, {
         questionId,
         selectedAnswer: answer
       });
@@ -66,16 +70,9 @@ export const useQuiz = () => {
       }
 
       // If not complete, fetch next question
-      const nextQResponse = await api.get(`/quizzes/${quizId}/next-question`, {
-        params: { attemptId }
-      });
-      
-      if (nextQResponse.data.data) {
-        setCurrentQuestion(nextQResponse.data.data);
-      } else {
-        // Fallback if no next question but not marked complete (shouldn't happen often)
-        navigate(`/quiz/results/${attemptId}`);
-      }
+      const nextQResponse = await api.get(`/quizzes/topic-attempt/${attemptId}/current`);
+      if (nextQResponse.data.data.question) setCurrentQuestion(nextQResponse.data.data.question);
+      else if (nextQResponse.data.data.isComplete) navigate(`/quiz/results/${attemptId}`);
 
       return result; // Return result for immediate feedback if needed
     } catch (err: any) {
@@ -85,6 +82,7 @@ export const useQuiz = () => {
       return null;
     } finally {
       setLoading(false);
+      submitting.current = false;
     }
   }, [navigate]);
 
@@ -117,12 +115,12 @@ export const useQuiz = () => {
   }, []);
 
   return {
-    currentQuiz,
     currentAttempt,
     currentQuestion,
     loading,
     error,
     startQuiz,
+    getCurrentTopicQuestion,
     submitAnswer,
     getAttemptResults,
     getHint

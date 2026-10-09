@@ -52,6 +52,7 @@ export interface Question {
   explanation?: string; // Hidden from student during quiz
   difficulty: 'Easy' | 'Medium' | 'Hard';
   timeLimit?: number; // per-question limit in seconds
+  remainingSeconds?: number; // server-calculated time left on topic exam refresh
 }
 
 export interface Quiz {

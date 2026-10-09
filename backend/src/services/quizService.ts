@@ -247,6 +247,49 @@ export function snapshotBankQuestion(row: any): QuizQuestion {
   };
 }
 
+type TopicSnapshotQuestion = {
+  id: string;
+  text: string;
+  options: string[];
+  correctAnswer: number;
+  difficulty: string;
+  timeLimit: number;
+};
+
+function topicSnapshotQuestion(row: any): TopicSnapshotQuestion {
+  if (!row?.id || typeof (row.content || row.question_text) !== 'string' || !(row.content || row.question_text).trim()) {
+    throw submissionError('Topic question has no usable text');
+  }
+  const question = snapshotBankQuestion(row);
+  if (question.questionType !== 'multipleChoice') throw submissionError('Topic exam requires multiple-choice questions');
+  return {
+    id: row.id,
+    text: question.text,
+    options: question.options,
+    correctAnswer: question.correctAnswer,
+    difficulty: question.difficulty,
+    timeLimit: question.timeLimit || 60,
+  };
+}
+
+function topicRemainingSeconds(attempt: { started_at: string; answers?: any[] }, question: TopicSnapshotQuestion, overallMinutes?: number | null) {
+  const lastAnswer = Array.isArray(attempt.answers) ? attempt.answers[attempt.answers.length - 1] : null;
+  const activatedAt = new Date(lastAnswer?.answeredAt || attempt.started_at).getTime();
+  const questionDeadline = activatedAt + question.timeLimit * 1000;
+  const overallDeadline = overallMinutes && overallMinutes > 0
+    ? new Date(attempt.started_at).getTime() + overallMinutes * 60_000
+    : Infinity;
+  return Math.max(0, Math.ceil((Math.min(questionDeadline, overallDeadline) - Date.now()) / 1000));
+}
+
+function publicTopicQuestion(question: TopicSnapshotQuestion, remainingSeconds: number) {
+  return { _id: question.id, content: question.text, options: question.options, difficulty: question.difficulty, timeLimit: question.timeLimit, remainingSeconds };
+}
+
+function topicError(message: string, statusCode: number) {
+  return Object.assign(new Error(message), { statusCode });
+}
+
 function validateQuizPayload(data: QuizData) {
   const err = (m: string) => Object.assign(new Error(m), { statusCode: 400 });
   if (!data.title || typeof data.title !== 'string' || data.title.trim().length === 0) {
@@ -787,6 +830,26 @@ export const quizService = {
       throw new Error('Attempt not found');
     }
 
+    if (attempt.topic_id) {
+      if (attempt.user_id !== userId && userRole !== 'admin') throw topicError('Unauthorized to view this attempt', 403);
+      if (attempt.status !== 'completed') throw topicError('Exam attempt is not ready for results', 403);
+      const snapshot = attempt.topic_question_snapshot as TopicSnapshotQuestion[] | null;
+      if (!Array.isArray(snapshot) || !snapshot.length) throw topicError('Topic attempt is missing its question snapshot; contact support', 503);
+      const { data: topicQuiz, error: topicQuizError } = await supabase.from('quizzes')
+        .select('title, description').eq('id', attempt.quiz_id).maybeSingle();
+      if (topicQuizError) throw new Error(topicQuizError.message);
+      return {
+        id: attempt.id, score: attempt.score, maxScore: snapshot.length, isTopicExam: true,
+        percentage: Math.round((Number(attempt.score || 0) / snapshot.length) * 100),
+        status: attempt.status, startedAt: attempt.started_at, completedAt: attempt.completed_at,
+        answers: attempt.answers || [], reviewPending: false, reviewStatus: 'reviewed',
+        quiz: {
+          title: topicQuiz?.title || 'Topic exam', description: topicQuiz?.description || '',
+          questions: snapshot.map(question => publicTopicQuestion(question, 0)),
+        },
+      };
+    }
+
     // Get quiz details
     const { data: quiz } = await supabase
       .from('teacher_quizzes')
@@ -1121,139 +1184,140 @@ export const quizService = {
   },
 
   async getQuizForTopic(topicId: string, userId: string, difficulty?: string) {
-    // 1. Determine difficulty (simplified logic)
-    let targetDifficulty = difficulty || 'Medium';
+    await assertStudentEmailPolicy(userId);
+    if (difficulty && !['Easy', 'Medium', 'Hard'].includes(difficulty)) {
+      throw topicError('Difficulty must be Easy, Medium, or Hard', 400);
+    }
+    const targetDifficulty = difficulty || 'Medium';
+    const { data: topic, error: topicLookupError } = await supabase.from('topics')
+      .select('id, title, course_id').eq('id', topicId).maybeSingle();
+    if (topicLookupError?.code === '22P02') throw topicError('Topic not found', 404);
+    if (topicLookupError) throw new Error(topicLookupError.message);
+    if (!topic) throw topicError('Topic not found', 404);
 
-    // 2. Fetch questions from Supabase
-    // Assuming we have a 'questions' table
-    const { data: questions, error } = await supabase
-      .from('questions')
-      .select('*')
-      .eq('topic_id', topicId)
-      .eq('difficulty', targetDifficulty)
-      .limit(5);
+    const { data: course, error: courseError } = await supabase.from('courses')
+      .select('id, is_published').eq('id', topic.course_id).maybeSingle();
+    if (courseError) throw new Error(courseError.message);
+    if (!course || course.is_published !== true) throw topicError('This topic is not published for exams', 403);
 
-    if (error) throw new Error(error.message);
+    const { data: enrollment, error: enrollmentError } = await supabase.from('enrollments')
+      .select('id').eq('user_id', userId).eq('course_id', course.id).maybeSingle();
+    if (enrollmentError) throw new Error(enrollmentError.message);
+    if (!enrollment) throw topicError('You are not enrolled in this course', 403);
 
-    // 3. If not enough questions, generate via AI (mocked or real)
-    let finalQuestions = questions || [];
-    if (finalQuestions.length < 5) {
-       try {
-         const generated = await aiService.generateQuestions(topicId, targetDifficulty, 5 - finalQuestions.length);
-         // Save generated questions to DB
-         if (generated && generated.length > 0) {
-            const { data: savedQuestions } = await supabase
-              .from('questions')
-              .insert(generated.map((q: any) => ({ 
-                content: q.content,
-                options: q.options,
-                correct_answer: q.correct_answer_index,
-                explanation: q.explanation,
-                topic_id: topicId, 
-                difficulty: targetDifficulty 
-              })))
-              .select();
-            
-            if (savedQuestions) {
-                finalQuestions = [...finalQuestions, ...savedQuestions];
-            }
-         }
-       } catch (err) {
-         console.error("AI Generation failed", err);
-       }
+    const { data: published, error: publicationError } = await supabase.from('quizzes')
+      .select('id, title, topic_id, time_limit').eq('topic_id', topicId).eq('is_published', true)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (publicationError) throw new Error(publicationError.message);
+    if (!published) throw topicError('No published exam is available for this topic', 403);
+
+    const { data: existing, error: existingError } = await supabase.from('quiz_attempts')
+      .select('id, started_at, answers, topic_question_snapshot').eq('user_id', userId).eq('quiz_id', published.id)
+      .eq('status', 'in-progress').order('started_at', { ascending: false }).limit(1);
+    if (existingError) throw new Error(existingError.message);
+    if (existing?.length) {
+      const attempt = existing[0];
+      const snapshot = attempt.topic_question_snapshot as TopicSnapshotQuestion[] | null;
+      if (!Array.isArray(snapshot) || !snapshot.length) throw topicError('Topic attempt is missing its question snapshot; contact support', 503);
+      const nextIndex = Array.isArray(attempt.answers) ? attempt.answers.length : 0;
+      return { quizId: published.id, attemptId: attempt.id, question: snapshot[nextIndex] ? publicTopicQuestion(snapshot[nextIndex], topicRemainingSeconds(attempt, snapshot[nextIndex], published.time_limit)) : null, isComplete: nextIndex >= snapshot.length };
     }
 
-    // Create a quiz attempt record
-    const { data: attempt, error: attemptError } = await supabase
-      .from('quiz_attempts')
-      .insert([{ 
-          user_id: userId, 
-          topic_id: topicId, 
-          difficulty: targetDifficulty,
-          started_at: new Date(),
-          status: 'in-progress',
-          max_score: finalQuestions.length
-      }])
-      .select()
-      .single();
-
-    if (attemptError) throw new Error(attemptError.message);
-
-    return {
-      quizId: topicId, // Using topicId as quizId for simplicity in this context
-      attemptId: attempt.id,
-      // Never send answer keys or authoring metadata to a student client.
-      questions: finalQuestions.map(q => ({
-        _id: q.id,
-        text: q.content,
-        options: q.options || [],
-        difficulty: q.difficulty,
-      })),
-      difficulty: targetDifficulty
-    };
-  },
-
-  async submitAnswer(attemptId: string, questionId: string, answer: string, userId: string) {
-    // Enforce the same server-side deadline for the per-question endpoint.
-    // This prevents clients from bypassing the timer by calling this route
-    // directly after the UI countdown has ended.
-    const { data: attempt } = await supabase
-      .from('quiz_attempts')
-      .select('quiz_id, started_at, status, user_id')
-      .eq('id', attemptId)
-      .single();
-    if (!attempt || attempt.status !== 'in-progress') {
-      throw new Error('Exam attempt is no longer active');
+    let questionQuery = supabase.from('questions').select('*').eq('topic_id', topicId);
+    if (difficulty) questionQuery = questionQuery.eq('difficulty', difficulty);
+    const { data: rows, error: questionError } = await questionQuery.limit(5);
+    if (questionError) throw new Error(questionError.message);
+    const snapshot: TopicSnapshotQuestion[] = [];
+    for (const row of rows || []) {
+      try { snapshot.push(topicSnapshotQuestion(row)); } catch { /* Skip unsupported bank question types. */ }
     }
-    if (attempt.user_id !== userId) {
-      throw Object.assign(new Error('Not authorized to submit to this attempt'), { statusCode: 403 });
-    }
-    const { data: quiz } = await supabase
-      .from('teacher_quizzes')
-      .select('time_limit')
-      .eq('id', attempt.quiz_id)
-      .single();
-    if (quiz?.time_limit && attempt.started_at) {
-      const deadline = new Date(attempt.started_at).getTime() + Number(quiz.time_limit) * 60_000;
-      if (Date.now() >= deadline) {
-        await supabase
-          .from('quiz_attempts')
-          .update({
-            status: 'completed',
-            completed_at: new Date(),
-            auto_submitted: true,
-            submission_reason: 'time_expired',
-          })
-          .eq('id', attemptId)
-          .eq('status', 'in-progress');
-        throw new Error('Exam time has expired');
+
+    if (snapshot.length < 5) {
+      try {
+        const generated = await aiService.generateQuestions(topic.title, targetDifficulty, 5 - snapshot.length);
+        for (const item of Array.isArray(generated) ? generated : []) {
+          try {
+            snapshot.push(topicSnapshotQuestion({ ...item, id: crypto.randomUUID(), question_type: 'multipleChoice', correct_answer: item.correct_answer_index, difficulty: targetDifficulty }));
+          } catch { /* Invalid AI output must not enter an attempt. */ }
+          if (snapshot.length === 5) break;
+        }
+      } catch (error) {
+        console.warn('Topic exam AI generation unavailable:', error);
       }
     }
+    if (!snapshot.length) throw topicError('No usable questions are available for this topic, and AI generation is unavailable', 422);
 
-    // Fetch question to check answer
-    const { data: question } = await supabase
-      .from('questions')
-      .select('correct_answer')
-      .eq('id', questionId)
-      .single();
+    const startedAt = new Date();
+    const { data: created, error: attemptError } = await supabase.from('quiz_attempts').insert([{
+      user_id: userId, quiz_id: published.id, topic_id: topicId, difficulty: targetDifficulty,
+      started_at: startedAt, status: 'in-progress', score: 0, max_score: snapshot.length,
+      total_questions: snapshot.length, answers: [], topic_question_snapshot: snapshot,
+    }]).select('id').single();
+    if (attemptError) {
+      if (isMissingColumnError(attemptError, 'topic_question_snapshot')) {
+        throw topicError('Topic exam setup is incomplete. Apply backend/migrations/022_topic_exam_attempt_snapshots.sql', 503);
+      }
+      if (attemptError.code === '23505') {
+        const { data: raced } = await supabase.from('quiz_attempts').select('id, started_at, answers, topic_question_snapshot')
+          .eq('user_id', userId).eq('quiz_id', published.id).eq('status', 'in-progress').limit(1);
+        if (raced?.length && Array.isArray(raced[0].topic_question_snapshot)) {
+          const current = raced[0];
+          const index = Array.isArray(current.answers) ? current.answers.length : 0;
+          return { quizId: published.id, attemptId: current.id, question: current.topic_question_snapshot[index] ? publicTopicQuestion(current.topic_question_snapshot[index], topicRemainingSeconds(current, current.topic_question_snapshot[index], published.time_limit)) : null, isComplete: false };
+        }
+      }
+      throw new Error(attemptError.message);
+    }
+    return { quizId: published.id, attemptId: created.id, question: publicTopicQuestion(snapshot[0], topicRemainingSeconds({ started_at: startedAt.toISOString(), answers: [] }, snapshot[0], published.time_limit)), isComplete: false };
+  },
 
-    if (!question) throw new Error('Question not found');
-
-    const isCorrect = question.correct_answer === answer;
-
-    // Record answer
-    const { error } = await supabase
-      .from('quiz_answers')
-      .insert([{
-        attempt_id: attemptId,
-        question_id: questionId,
-        selected_answer: answer,
-        is_correct: isCorrect
-      }]);
-
+  async getCurrentTopicQuestion(attemptId: string, userId: string) {
+    const { data: attempt, error } = await supabase.from('quiz_attempts').select('id, user_id, quiz_id, topic_id, started_at, status, answers, topic_question_snapshot')
+      .eq('id', attemptId).maybeSingle();
     if (error) throw new Error(error.message);
+    if (!attempt || !attempt.topic_id) throw topicError('Topic attempt not found', 404);
+    if (attempt.user_id !== userId) throw topicError('Not authorized to access this attempt', 403);
+    if (attempt.status === 'completed') return { isComplete: true, question: null };
+    if (attempt.status !== 'in-progress') throw topicError('Exam attempt is no longer active', 409);
+    const snapshot = attempt.topic_question_snapshot as TopicSnapshotQuestion[] | null;
+    if (!Array.isArray(snapshot) || !snapshot.length) throw topicError('Topic attempt is missing its question snapshot; contact support', 503);
+    const index = Array.isArray(attempt.answers) ? attempt.answers.length : 0;
+    const { data: quiz, error: quizError } = await supabase.from('quizzes').select('time_limit').eq('id', attempt.quiz_id).maybeSingle();
+    if (quizError) throw new Error(quizError.message);
+    return { isComplete: index >= snapshot.length, question: snapshot[index] ? publicTopicQuestion(snapshot[index], topicRemainingSeconds(attempt, snapshot[index], quiz?.time_limit)) : null };
+  },
 
-    return { isCorrect };
+  async submitAnswer(attemptId: string, questionId: string, answer: number, userId: string) {
+    const { data: attempt, error: lookupError } = await supabase.from('quiz_attempts')
+      .select('id, user_id, quiz_id, topic_id, started_at, status, answers, score, topic_question_snapshot')
+      .eq('id', attemptId).maybeSingle();
+    if (lookupError) throw new Error(lookupError.message);
+    if (!attempt || !attempt.topic_id) throw topicError('Topic attempt not found', 404);
+    if (attempt.user_id !== userId) throw topicError('Not authorized to submit to this attempt', 403);
+    if (attempt.status !== 'in-progress') throw topicError('Exam attempt is no longer active', 409);
+    const snapshot = attempt.topic_question_snapshot as TopicSnapshotQuestion[] | null;
+    const savedAnswers = attempt.answers;
+    if (!Array.isArray(snapshot) || !Array.isArray(savedAnswers)) throw topicError('Topic attempt is missing its question snapshot; contact support', 503);
+    const question = snapshot[savedAnswers.length];
+    if (!question || question.id !== questionId) throw topicError('Answer does not match the current question', 400);
+    if (!Number.isInteger(answer) || answer < -1 || answer >= question.options.length) throw topicError('Selected option is out of range', 400);
+    const { data: quiz, error: quizError } = await supabase.from('quizzes').select('time_limit').eq('id', attempt.quiz_id).maybeSingle();
+    if (quizError) throw new Error(quizError.message);
+    if (topicRemainingSeconds(attempt, question, quiz?.time_limit) === 0 && answer !== -1) {
+      throw topicError('Question time has expired; submit it unanswered', 409);
+    }
+    const isCorrect = answer === question.correctAnswer;
+    const nextAnswers = [...savedAnswers, { questionId, selectedAnswer: answer === -1 ? null : answer, isCorrect, answeredAt: new Date().toISOString() }];
+    const isComplete = nextAnswers.length === snapshot.length;
+    const update = supabase.from('quiz_attempts').update({
+      answers: nextAnswers, score: Number(attempt.score || 0) + (isCorrect ? 1 : 0),
+      ...(isComplete ? { status: 'completed', completed_at: new Date() } : {}),
+    }).eq('id', attemptId).eq('user_id', userId).eq('status', 'in-progress')
+      .eq('answers', JSON.stringify(savedAnswers));
+    const { data: updated, error: updateError } = await update.select('id');
+    if (updateError) throw new Error(updateError.message);
+    if (!updated?.length) throw topicError('This answer was already submitted or the attempt changed. Refresh and try again', 409);
+    return { isCorrect, isComplete };
   },
 
   // Get teacher analytics
@@ -1477,16 +1541,21 @@ export const quizService = {
       if (!attempts || attempts.length === 0) return [];
 
       // Get quiz titles
-      const quizIds = [...new Set(attempts.map(a => a.quiz_id))];
-      const { data: quizzes } = await supabase
-        .from('teacher_quizzes')
-        .select('id, title')
-        .in('id', quizIds);
-
-      const quizMap = new Map(quizzes?.map(q => [q.id, q.title]) || []);
+      const teacherIds = [...new Set(attempts.filter(a => !a.topic_id).map(a => a.quiz_id).filter(Boolean))];
+      const topicIds = [...new Set(attempts.filter(a => a.topic_id).map(a => a.quiz_id).filter(Boolean))];
+      const { data: teacherQuizzes, error: teacherError } = teacherIds.length
+        ? await supabase.from('teacher_quizzes').select('id, title').in('id', teacherIds)
+        : { data: [], error: null };
+      if (teacherError) throw new Error(teacherError.message);
+      const { data: topicQuizzes, error: topicError } = topicIds.length
+        ? await supabase.from('quizzes').select('id, title').in('id', topicIds)
+        : { data: [], error: null };
+      if (topicError) throw new Error(topicError.message);
+      const quizMap = new Map([...(teacherQuizzes || []), ...(topicQuizzes || [])].map(q => [q.id, q.title]));
 
       return attempts.map(attempt => {
-        const reviewed = attempt.teacher_grade !== null && attempt.teacher_grade !== undefined;
+        const reviewed = (!!attempt.topic_id && attempt.status === 'completed')
+          || (!attempt.topic_id && attempt.teacher_grade !== null && attempt.teacher_grade !== undefined);
         return {
         _id: attempt.id,
         quizId: attempt.quiz_id,
