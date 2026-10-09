@@ -4,6 +4,7 @@ import { DataTable } from '../../../components/shared';
 import api from '../../../services/api';
 import { useAuthStore } from '../../../store/authStore';
 import toast from 'react-hot-toast';
+import { parseCourseCapacity } from '../../../utils/courseCapacity';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -46,6 +47,7 @@ const TeacherCourses = () => {
     : '/dashboard/teacher/courses';
   const [courses, setCourses] = useState<TeacherCourse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<TeacherCourse | null>(null);
@@ -61,14 +63,15 @@ const TeacherCourses = () => {
 
   const fetchCourses = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // Teacher endpoint returns enrollmentCount + maxStudents for the
       // signed-in teacher's own courses; the public list does not.
       const response = await api.get('/courses/teacher/my-courses');
       setCourses(response.data.data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching courses:', error);
-      setCourses([]);
+      setLoadError(error.response?.data?.error?.message || 'Failed to load courses. Please retry.');
     } finally {
       setLoading(false);
     }
@@ -92,14 +95,12 @@ const TeacherCourses = () => {
       toast.error('Title is required');
       return;
     }
-    let maxStudentsValue: number | null = null;
-    if (editForm.maxStudents.trim() !== '') {
-      const n = Number(editForm.maxStudents);
-      if (!Number.isFinite(n) || n < 1) {
-        toast.error('Max students must be a positive number, or leave blank for unlimited.');
-        return;
-      }
-      maxStudentsValue = Math.floor(n);
+    let maxStudentsValue: number | null;
+    try {
+      maxStudentsValue = parseCourseCapacity(editForm.maxStudents);
+    } catch (error) {
+      toast.error((error as Error).message);
+      return;
     }
     setSavingEdit(true);
     try {
@@ -313,12 +314,19 @@ const TeacherCourses = () => {
 
       {/* Courses Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <DataTable
-          columns={columns}
-          data={filteredCourses}
-          isLoading={loading}
-          emptyMessage="No courses found. Create your first course to get started!"
-        />
+        {loadError ? (
+          <div role="alert" className="p-6 text-sm text-red-700">
+            <p>{loadError}</p>
+            <button type="button" onClick={() => void fetchCourses()} className="mt-2 font-medium underline">Retry</button>
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filteredCourses}
+            isLoading={loading}
+            emptyMessage="No courses found. Create your first course to get started!"
+          />
+        )}
       </div>
 
       {/* Edit Course Modal */}
@@ -377,8 +385,8 @@ const TeacherCourses = () => {
                 <span className="text-gray-400 font-normal ml-1">(blank = unlimited)</span>
               </label>
               <input
-                type="number"
-                min="1"
+                type="text"
+                inputMode="numeric"
                 value={editForm.maxStudents}
                 onChange={(e) => setEditForm({ ...editForm, maxStudents: e.target.value })}
                 placeholder="e.g. 50"

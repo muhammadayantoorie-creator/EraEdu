@@ -4,6 +4,7 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import api from '../../../services/api';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../../store/authStore';
+import { parseCourseCapacity } from '../../../utils/courseCapacity';
 
 const CreateCoursePage = () => {
   const navigate = useNavigate();
@@ -43,14 +44,12 @@ const CreateCoursePage = () => {
       return;
     }
 
-    let maxStudentsValue: number | null = null;
-    if (formData.maxStudents.trim() !== '') {
-      const n = Number(formData.maxStudents);
-      if (!Number.isFinite(n) || n < 1) {
-        toast.error('Max students must be a positive number, or leave blank for unlimited.');
-        return;
-      }
-      maxStudentsValue = Math.floor(n);
+    let maxStudentsValue: number | null;
+    try {
+      maxStudentsValue = parseCourseCapacity(formData.maxStudents);
+    } catch (error) {
+      toast.error((error as Error).message);
+      return;
     }
 
     setLoading(true);
@@ -70,7 +69,7 @@ const CreateCoursePage = () => {
       const message = errorData?.message || errorData?.error?.message || errorData?.error || 'Failed to create course';
       
       console.error('Course creation failed:', { status, errorData });
-      toast.error(status === 500 ? 'Unable to create the course right now. Please try again shortly.' : message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -183,8 +182,8 @@ const CreateCoursePage = () => {
             Max Students <span className="text-gray-400 font-normal">(optional — blank = unlimited)</span>
           </label>
           <input
-            type="number"
-            min="1"
+            type="text"
+            inputMode="numeric"
             value={formData.maxStudents}
             onChange={(e) => setFormData({ ...formData, maxStudents: e.target.value })}
             placeholder="e.g. 50"

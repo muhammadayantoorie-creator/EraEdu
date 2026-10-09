@@ -12,6 +12,13 @@ const SAFE_400_MESSAGES = new Set<string>([
   'User not found',
 ]);
 
+const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
+  'Course capacity schema is missing. Apply migrations 006_add_course_capacity.sql and 023_enforce_course_capacity_atomically.sql.',
+  'Atomic enrollment is unavailable. Apply migration 023_enforce_course_capacity_atomically.sql.',
+  'Course code schema is missing. Apply migration 015_add_course_code.sql.',
+  'Invalid course capacity. Correct max_students before enrollment.',
+]);
+
 export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
   console.warn(`[404] Route not found: ${req.method} ${req.originalUrl}`);
   const error: any = new Error(`Not Found - ${req.originalUrl}`);
@@ -46,7 +53,7 @@ export const errorHandler = (err: any, req: Request, res: Response, _next: NextF
 
   // In production, never echo raw 500 messages — they often contain DB
   // internals (constraint names, query fragments).
-  if (statusCode >= 500 && isProd) {
+  if (statusCode >= 500 && isProd && !SAFE_OPERATIONAL_MESSAGES.has(message)) {
     message = 'Server error';
   } else if (statusCode >= 400 && statusCode < 500 && isProd) {
     // 4xx is generally safe, but redact anything that looks like a stack frame

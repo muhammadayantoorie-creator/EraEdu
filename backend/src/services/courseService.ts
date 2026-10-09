@@ -4,7 +4,7 @@ import { emailService } from './emailService';
 function isMissingColumnError(err: any, column: string): boolean {
   if (!err) return false;
   const haystack = `${err.message || ''} ${err.details || ''}`.toLowerCase();
-  return err.code === '42703'
+  return ((err.code === '42703' || err.code === 'PGRST204') && haystack.includes(column.toLowerCase()))
     || haystack.includes(`column "${column}"`)
     || haystack.includes(`column ${column} does not exist`)
     // Supabase/PostgREST schema-cache errors use this wording and code
@@ -13,30 +13,49 @@ function isMissingColumnError(err: any, column: string): boolean {
     || haystack.includes(`could not find the '${column}'`);
 }
 
-// Throws 400 when an enrollment would exceed the teacher-defined cap.
-// If migration 006 hasn't run, the column is missing — treat as uncapped.
-async function assertCourseHasCapacity(courseId: string): Promise<void> {
-  const { data: course, error } = await supabase
-    .from('courses')
-    .select('max_students')
-    .eq('id', courseId)
-    .single();
+function courseError(message: string, statusCode: number): Error {
+  return Object.assign(new Error(message), { statusCode });
+}
+
+export function parseCourseCapacity(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || (typeof value === 'string' && value.trim() === '')) return null;
+  const validString = typeof value === 'string' && /^[0-9]+$/.test(value.trim());
+  if (typeof value !== 'number' && !validString) {
+    throw courseError('Max students must be a positive whole number, or blank for unlimited.', 400);
+  }
+  const capacity = Number(value);
+  if (!Number.isSafeInteger(capacity) || capacity < 1 || capacity > 2147483647) {
+    throw courseError('Max students must be a positive whole number, or blank for unlimited.', 400);
+  }
+  return capacity;
+}
+
+function requireCapacityColumn(course: any): void {
+  if (course && course.max_students === undefined) {
+    throw courseError('Course capacity schema is missing. Apply migrations 006_add_course_capacity.sql and 023_enforce_course_capacity_atomically.sql.', 503);
+  }
+}
+
+async function enrollCourseAtomically(courseId: string, userId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('enroll_course_with_capacity', {
+    p_course_id: courseId,
+    p_user_id: userId,
+  });
   if (error) {
-    if (isMissingColumnError(error, 'max_students')) return;
-    return;
-  }
-  const cap = course?.max_students;
-  if (typeof cap === 'number' && cap > 0) {
-    const { count } = await supabase
-      .from('enrollments')
-      .select('*', { count: 'exact', head: true })
-      .eq('course_id', courseId);
-    if ((count || 0) >= cap) {
-      const e: any = new Error('This course is full. Please contact your teacher.');
-      e.statusCode = 400;
-      throw e;
+    if (isMissingColumnError(error, 'max_students')) {
+      throw courseError('Course capacity schema is missing. Apply migrations 006_add_course_capacity.sql and 023_enforce_course_capacity_atomically.sql.', 503);
     }
+    if (error.code === 'PGRST202' || error.code === '42883') {
+      throw courseError('Atomic enrollment is unavailable. Apply migration 023_enforce_course_capacity_atomically.sql.', 503);
+    }
+    if (error.message === 'Course not found') throw courseError(error.message, 404);
+    if (error.message === 'This course is full. Please contact your teacher.') throw courseError(error.message, 409);
+    if (error.message.startsWith('Invalid course capacity.')) throw courseError(error.message, 503);
+    throw new Error(error.message);
   }
+  if (typeof data !== 'boolean') throw new Error('Atomic enrollment returned an invalid result');
+  return data;
 }
 
 export const courseService = {
@@ -65,6 +84,7 @@ export const courseService = {
           .from('enrollments')
           .select('*', { count: 'exact', head: true })
           .eq('course_id', course.id);
+        requireCapacityColumn(course);
         return {
           ...course,
           _id: course.id,
@@ -86,31 +106,13 @@ export const courseService = {
       throw new Error('Course not found');
     }
 
-    return { ...course, _id: course.id };
+    requireCapacityColumn(course);
+    return { ...course, _id: course.id, maxStudents: course.max_students };
   },
 
   async enrollCourse(userId: string, courseId: string) {
-    // Check if already enrolled
-    const { data: existing } = await supabase
-      .from('enrollments')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('course_id', courseId)
-      .single();
-
-    if (existing) {
-      return { message: 'Already enrolled' };
-    }
-
-    await assertCourseHasCapacity(courseId);
-
-    const { error } = await supabase
-      .from('enrollments')
-      .insert([{ user_id: userId, course_id: courseId, enrolled_at: new Date() }]);
-
-    if (error) {
-      throw new Error(error.message);
-    }
+    const created = await enrollCourseAtomically(courseId, userId);
+    if (!created) return { message: 'Already enrolled' };
 
     // Fetch user and course details for email
     const { data: user } = await supabase.from('users').select('email, name').eq('id', userId).single();
@@ -170,26 +172,9 @@ export const courseService = {
       throw new Error('Invalid course code. Please check and try again.');
     }
 
-    // Check if already enrolled
-    const { data: existing } = await supabase
-      .from('enrollments')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('course_id', course.id)
-      .single();
-
-    if (existing) {
+    const created = await enrollCourseAtomically(course.id, userId);
+    if (!created) {
       return { message: 'Already enrolled in this course', course: { _id: course.id, title: course.title } };
-    }
-
-    await assertCourseHasCapacity(course.id);
-
-    const { error } = await supabase
-      .from('enrollments')
-      .insert([{ user_id: userId, course_id: course.id, enrolled_at: new Date() }]);
-
-    if (error) {
-      throw new Error(error.message);
     }
 
     // Send enrollment email
@@ -202,6 +187,7 @@ export const courseService = {
   },
 
   async createCourse(teacherId: string, courseData: any) {
+    const capacity = parseCourseCapacity(courseData.maxStudents) ?? null;
     const courseCode = await this.generateUniqueCourseCode();
 
     const insertData: any = {
@@ -212,10 +198,7 @@ export const courseService = {
       created_by: teacherId,
       course_code: courseCode,
     };
-    if (courseData.maxStudents !== undefined && courseData.maxStudents !== null && courseData.maxStudents !== '') {
-      const n = Number(courseData.maxStudents);
-      if (Number.isFinite(n) && n > 0) insertData.max_students = Math.floor(n);
-    }
+    insertData.max_students = capacity;
 
     let insertResult: any = await supabase
       .from('courses')
@@ -224,25 +207,11 @@ export const courseService = {
       .single();
 
     if (insertResult.error && isMissingColumnError(insertResult.error, 'max_students')) {
-      console.warn('courses.max_students missing — run migration 006. Falling back without it.');
-      const { max_students, ...fallback } = insertData;
-      insertResult = await supabase
-        .from('courses')
-        .insert([fallback])
-        .select()
-        .single();
+      throw courseError('Course capacity schema is missing. Apply migrations 006_add_course_capacity.sql and 023_enforce_course_capacity_atomically.sql.', 503);
     }
 
-    // Databases created before course codes existed can still create courses.
-    // Migration 015 adds this optional field back for join-by-code support.
     if (insertResult.error && isMissingColumnError(insertResult.error, 'course_code')) {
-      console.warn('courses.course_code is missing; creating the course without a join code.');
-      const { course_code, max_students, ...fallback } = insertData;
-      insertResult = await supabase
-        .from('courses')
-        .insert([fallback])
-        .select()
-        .single();
+      throw courseError('Course code schema is missing. Apply migration 015_add_course_code.sql.', 503);
     }
 
     const { data: course, error } = insertResult;
@@ -251,7 +220,8 @@ export const courseService = {
       throw new Error(error.message);
     }
 
-    return { ...course, _id: course.id, createdBy: course.created_by, courseCode: course.course_code || null };
+    requireCapacityColumn(course);
+    return { ...course, _id: course.id, createdBy: course.created_by, courseCode: course.course_code || null, maxStudents: course.max_students };
   },
 
   async updateCourse(teacherId: string, courseId: string, courseData: any) {
@@ -272,12 +242,8 @@ export const courseService = {
       category: courseData.category,
       difficulty: courseData.difficulty,
     };
-    if (courseData.maxStudents === null || courseData.maxStudents === '') {
-      updatePayload.max_students = null;
-    } else if (courseData.maxStudents !== undefined) {
-      const n = Number(courseData.maxStudents);
-      if (Number.isFinite(n) && n > 0) updatePayload.max_students = Math.floor(n);
-    }
+    const capacity = parseCourseCapacity(courseData.maxStudents);
+    if (capacity !== undefined) updatePayload.max_students = capacity;
 
     let updateResult = await supabase
       .from('courses')
@@ -287,14 +253,7 @@ export const courseService = {
       .single();
 
     if (updateResult.error && isMissingColumnError(updateResult.error, 'max_students')) {
-      console.warn('courses.max_students missing — run migration 006. Falling back without it.');
-      const { max_students, ...fallback } = updatePayload;
-      updateResult = await supabase
-        .from('courses')
-        .update(fallback)
-        .eq('id', courseId)
-        .select()
-        .single();
+      throw courseError('Course capacity schema is missing. Apply migrations 006_add_course_capacity.sql and 023_enforce_course_capacity_atomically.sql.', 503);
     }
 
     const { data: course, error } = updateResult;
@@ -302,6 +261,7 @@ export const courseService = {
       throw new Error(error.message);
     }
 
+    requireCapacityColumn(course);
     return { ...course, _id: course.id, createdBy: course.created_by, maxStudents: course.max_students };
   },
 
@@ -733,6 +693,7 @@ export const courseService = {
       // Add enrollment count and topic count for each course
       const coursesWithStats = await Promise.all(
         (courses || []).map(async (course: any) => {
+          requireCapacityColumn(course);
           const { count: enrollmentCount } = await supabase
             .from('enrollments')
             .select('*', { count: 'exact', head: true })
@@ -762,7 +723,7 @@ export const courseService = {
       return coursesWithStats;
     } catch (e) {
       console.error('Error fetching teacher courses:', e);
-      return [];
+      throw e;
     }
   },
 
