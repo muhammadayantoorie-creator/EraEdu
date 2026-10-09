@@ -12,10 +12,11 @@ const CreateCoursePage = () => {
     ? '/dashboard/admin/courses'
     : '/dashboard/teacher/courses';
   const [loading, setLoading] = useState(false);
+  const [showSuggestedCategories, setShowSuggestedCategories] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    category: 'Web Development',
+    category: '',
     difficulty: 'Beginner',
     maxStudents: '',
   });
@@ -56,6 +57,7 @@ const CreateCoursePage = () => {
     try {
       await api.post('/courses', {
         ...formData,
+        category: formData.category.trim() || 'Other',
         description: formData.description || `Learn ${formData.title}`,
         maxStudents: maxStudentsValue,
       });
@@ -100,7 +102,7 @@ const CreateCoursePage = () => {
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-            placeholder="e.g., JavaScript Fundamentals"
+            placeholder="Enter your course title"
             required
             autoFocus
           />
@@ -126,17 +128,38 @@ const CreateCoursePage = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Category
             </label>
-            <select
+            <input
+              type="text"
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="Enter your own category (optional)"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSuggestedCategories((show) => !show)}
+              aria-expanded={showSuggestedCategories}
+              className="mt-2 text-sm text-indigo-600 hover:text-indigo-800"
             >
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+              {showSuggestedCategories ? 'Hide category suggestions' : 'Show category suggestions'}
+            </button>
+            {showSuggestedCategories && (
+              <div className="mt-2 flex flex-wrap gap-2" aria-label="Suggested categories">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setFormData((current) => ({ ...current, category: cat }));
+                      setShowSuggestedCategories(false);
+                    }}
+                    className="rounded-full border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:border-indigo-500 hover:text-indigo-700"
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
