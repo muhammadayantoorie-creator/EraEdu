@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { DataTable, QuizOpeningConfirmationModal } from '../../../components/shared';
 import api from '../../../services/api';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../../store/authStore';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -43,6 +44,17 @@ interface TeacherCourse {
   title: string;
 }
 
+interface BankQuestion {
+  _id: string;
+  text: string;
+  questionType: string;
+  topicId: string | null;
+  topicName: string;
+  courseId: string | null;
+  createdBy: string;
+  timeLimit: number;
+}
+
 interface QuestionItem {
   text: string;
   options: string[];
@@ -81,8 +93,14 @@ const scheduleToIso = (date: string, hour: string, minute: string, period: 'AM' 
 };
 
 const TeacherQuizzes = () => {
+  const user = useAuthStore((state) => state.user);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourse[]>([]);
+  const [bankQuestions, setBankQuestions] = useState<BankQuestion[]>([]);
+  const [bankError, setBankError] = useState<string | null>(null);
+  const [bankLoading, setBankLoading] = useState(false);
+  const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
+  const [bankTopicId, setBankTopicId] = useState('all');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -110,16 +128,41 @@ const TeacherQuizzes = () => {
   useEffect(() => {
     fetchQuizzes();
     fetchTeacherCourses();
+    fetchBankQuestions();
   }, []);
 
   // Calculate total time whenever questions change
   useEffect(() => {
-    const totalSeconds = formData.questions.reduce((sum, q) => sum + (q.timeLimit || 0), 0);
+    const totalSeconds = formData.questions.reduce((sum, q) => sum + (q.timeLimit || 0), 0) + bankQuestions.filter((question) => selectedBankIds.includes(question._id)).reduce((sum, question) => sum + (question.timeLimit || 60), 0);
     const totalMinutes = Math.ceil(totalSeconds / 60);
     if (formData.timeLimit !== totalMinutes) {
       setFormData(prev => ({ ...prev, timeLimit: totalMinutes }));
     }
-  }, [formData.questions]);
+  }, [formData.questions, selectedBankIds, bankQuestions]);
+
+  const fetchBankQuestions = async () => {
+    setBankLoading(true);
+    try {
+      const response = await api.get('/courses/teacher/questions');
+      setBankQuestions(response.data.data || []);
+      setBankError(null);
+    } catch {
+      setBankError('Question bank could not be loaded. Please try again.');
+    } finally {
+      setBankLoading(false);
+    }
+  };
+
+  const toggleBankQuestion = (id: string) => {
+    const adding = !selectedBankIds.includes(id);
+    const next = adding ? [...selectedBankIds, id] : selectedBankIds.filter((selected) => selected !== id);
+    setSelectedBankIds(next);
+    if (adding && formData.questions.length === 1 && !formData.questions[0].text.trim() && formData.questions[0].options.every((option) => !option.trim())) {
+      setFormData((current) => ({ ...current, questions: [] }));
+    } else if (!next.length && !formData.questions.length) {
+      setFormData((current) => ({ ...current, questions: [{ text: '', options: ['', '', '', ''], correctAnswer: 0, difficulty: 'Medium', explanation: '', timeLimit: 60, answerText: '' }] }));
+    }
+  };
 
   const fetchQuizzes = async () => {
     setLoading(true);
@@ -176,6 +219,9 @@ const TeacherQuizzes = () => {
   };
 
   const handleOpenModal = (quiz?: Quiz) => {
+    setSelectedBankIds([]);
+    setBankTopicId('all');
+    fetchBankQuestions();
     if (quiz) {
       setFormMode('quiz');
       setEditingQuiz(quiz);
@@ -245,7 +291,7 @@ const TeacherQuizzes = () => {
   };
 
   const removeQuestion = (index: number) => {
-    if (formData.questions.length <= 1) {
+    if (formData.questions.length <= 1 && !selectedBankIds.length) {
       toast.error('Exam must have at least one question');
       return;
     }
@@ -324,6 +370,10 @@ const TeacherQuizzes = () => {
       return;
     }
 
+    if (!formData.questions.length && !selectedBankIds.length) {
+      toast.error('Add a question or select one from the bank');
+      return;
+    }
     for (const q of formData.questions) {
       if (!q.text.trim()) {
         toast.error('All questions must have text');
@@ -343,8 +393,10 @@ const TeacherQuizzes = () => {
     // Convert the teacher's explicit 12-hour local time to the ISO value the API stores.
     const submitData = {
       ...formData,
+      timeLimit: Math.max(1, Math.ceil((formData.questions.reduce((sum, question) => sum + (question.timeLimit || 60), 0) + bankQuestions.filter((question) => selectedBankIds.includes(question._id)).reduce((sum, question) => sum + (question.timeLimit || 60), 0)) / 60)),
       scheduledStart: scheduleToIso(formData.scheduledDate, formData.scheduledHour, formData.scheduledMinute, formData.scheduledPeriod),
       cameraMonitoring: formData.cameraMonitoring,
+      bankQuestionIds: editingQuiz ? undefined : selectedBankIds,
     };
 
     try {
@@ -359,7 +411,7 @@ const TeacherQuizzes = () => {
       fetchQuizzes();
     } catch (error: any) {
       console.error('Save Exam Error:', error);
-      const message = error.response?.data?.message || error.message || 'Failed to save exam';
+      const message = error.response?.data?.error?.message || error.response?.data?.message || error.message || 'Failed to save exam';
       toast.error(message);
     }
   };
@@ -599,7 +651,11 @@ const TeacherQuizzes = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
                       <select
                         value={formData.courseId}
-                        onChange={(e) => setFormData({ ...formData, courseId: e.target.value })}
+                        onChange={(e) => {
+                          setFormData({ ...formData, courseId: e.target.value });
+                          setSelectedBankIds([]);
+                          setBankTopicId('all');
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                         required
                       >
@@ -769,6 +825,45 @@ const TeacherQuizzes = () => {
                     Add Question
                   </button>
                 </div>
+
+                {formMode === 'quiz' && !editingQuiz && (
+                  <div className="mb-5 rounded-lg border border-gray-200 p-4">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <h5 className="text-sm font-semibold text-gray-900">Add from question bank</h5>
+                      <button type="button" onClick={fetchBankQuestions} className="text-xs font-medium text-indigo-700 hover:text-indigo-900">Refresh bank</button>
+                    </div>
+                    {!formData.courseId ? (
+                      <p className="text-sm text-gray-500">Select a course to see its bank questions.</p>
+                    ) : bankLoading ? (
+                      <p className="text-sm text-gray-500">Loading question bank…</p>
+                    ) : bankError ? (
+                      <p role="alert" className="text-sm text-red-700">{bankError}</p>
+                    ) : (
+                      <>
+                        <label htmlFor="bank-topic" className="block text-xs font-medium text-gray-600">Topic</label>
+                        <select id="bank-topic" value={bankTopicId} onChange={(event) => setBankTopicId(event.target.value)} className="mt-1 mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                          <option value="all">All topics</option>
+                          {[...new Map(bankQuestions.filter((question) => question.courseId === formData.courseId && question.createdBy === user?._id && question.topicId).map((question) => [question.topicId, question.topicName])).entries()].map(([id, name]) => (
+                            <option key={id} value={id || ''}>{name}</option>
+                          ))}
+                        </select>
+                        {bankQuestions.filter((question) => question.courseId === formData.courseId && question.createdBy === user?._id && question.topicId && (bankTopicId === 'all' || question.topicId === bankTopicId)).length === 0 ? (
+                          <p className="text-sm text-gray-500">No bank questions in this course/topic yet. You can still write questions below.</p>
+                        ) : (
+                          <div className="max-h-48 space-y-2 overflow-y-auto">
+                            {bankQuestions.filter((question) => question.courseId === formData.courseId && question.createdBy === user?._id && question.topicId && (bankTopicId === 'all' || question.topicId === bankTopicId)).map((question) => (
+                              <label key={question._id} className="flex items-start gap-2 rounded border border-gray-200 p-2 text-sm">
+                                <input type="checkbox" checked={selectedBankIds.includes(question._id)} onChange={() => toggleBankQuestion(question._id)} disabled={!['multipleChoice', 'shortAnswer'].includes(question.questionType)} className="mt-1" />
+                                <span><span className="font-medium">{question.text}</span><span className="block text-xs text-gray-500">{question.topicName} · {question.questionType === 'shortAnswer' ? 'Short answer' : question.questionType === 'multipleChoice' ? 'Multiple choice' : 'Unsupported type'} · {question.timeLimit || 60} seconds</span></span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        {selectedBankIds.length > 0 && <p className="mt-2 text-xs text-indigo-700">{selectedBankIds.length} bank question{selectedBankIds.length === 1 ? '' : 's'} selected. A snapshot is saved when you create the exam.</p>}
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-6">
                   {formData.questions.map((question, qIndex) => (

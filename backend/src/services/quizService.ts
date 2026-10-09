@@ -21,6 +21,7 @@ interface QuizData {
   scheduledStart?: string;
   courseId?: string;
   questions: QuizQuestion[];
+  bankQuestionIds?: string[];
   cameraMonitoring?: boolean;
   violationLimit?: number;
 }
@@ -221,6 +222,31 @@ const MAX_QUESTION_TEXT_LEN = 2000;
 const MAX_OPTION_LEN = 500;
 const MAX_OPTIONS = 10;
 
+export function snapshotBankQuestion(row: any): QuizQuestion {
+  const questionType = row.question_type || 'multipleChoice';
+  if (questionType !== 'multipleChoice' && questionType !== 'shortAnswer') {
+    throw submissionError('Selected bank question has an unsupported type');
+  }
+  const options = row.options;
+  if (questionType === 'multipleChoice' && (
+    !Array.isArray(options) || options.length < 2 || options.length > MAX_OPTIONS ||
+    options.some((option: unknown) => typeof option !== 'string' || !option.trim()) ||
+    !Number.isInteger(row.correct_answer) || row.correct_answer < 0 || row.correct_answer >= options.length
+  )) {
+    throw submissionError('Selected bank question has incompatible options or answer');
+  }
+  return {
+    text: row.content || row.question_text,
+    options: questionType === 'shortAnswer' ? [] : [...options],
+    correctAnswer: questionType === 'shortAnswer' ? -1 : row.correct_answer,
+    questionType,
+    answerText: questionType === 'shortAnswer' ? String(row.correct_answers?.[0] || '') : undefined,
+    difficulty: row.difficulty || 'Medium',
+    explanation: row.explanation || row.hint || '',
+    timeLimit: Number.isInteger(row.time_limit) && row.time_limit > 0 ? row.time_limit : 60,
+  };
+}
+
 function validateQuizPayload(data: QuizData) {
   const err = (m: string) => Object.assign(new Error(m), { statusCode: 400 });
   if (!data.title || typeof data.title !== 'string' || data.title.trim().length === 0) {
@@ -356,7 +382,11 @@ export const quizService = {
     if (!data.courseId) {
       throw new Error('Course is required to create a quiz');
     }
-    validateQuizPayload(data);
+    const bankIds = data.bankQuestionIds === undefined ? [] : data.bankQuestionIds;
+    if (!Array.isArray(bankIds) || bankIds.some((id) => typeof id !== 'string' || !id.trim()) || new Set(bankIds).size !== bankIds.length) {
+      throw submissionError('Selected bank question IDs must be unique and valid');
+    }
+    if (bankIds.length > MAX_QUESTIONS) throw submissionError(`Exam cannot have more than ${MAX_QUESTIONS} questions`);
 
     const { data: courseOwner } = await supabase
       .from('courses')
@@ -367,6 +397,25 @@ export const quizService = {
     if (!courseOwner || courseOwner.created_by !== teacherId) {
       throw new Error('You can only create quizzes for your own courses');
     }
+
+    let bankQuestions: QuizQuestion[] = [];
+    if (bankIds.length) {
+      const { data: rows, error: bankError } = await supabase.from('questions').select('*').in('id', bankIds);
+      if (bankError) throw new Error(bankError.message);
+      if (!rows || rows.length !== bankIds.length || rows.some((row: any) => row.created_by !== teacherId || !row.topic_id)) {
+        throw Object.assign(new Error('Selected bank questions must belong to you and this course'), { statusCode: 403 });
+      }
+      const topicIds = [...new Set(rows.map((row: any) => row.topic_id))];
+      const { data: topics, error: topicError } = await supabase.from('topics').select('id, course_id').in('id', topicIds);
+      if (topicError) throw new Error(topicError.message);
+      if (!topics || topics.length !== topicIds.length || topics.some((topic: any) => topic.course_id !== data.courseId)) {
+        throw Object.assign(new Error('Selected bank questions must belong to you and this course'), { statusCode: 403 });
+      }
+      const byId = new Map(rows.map((row: any) => [row.id, row]));
+      bankQuestions = bankIds.map((id) => snapshotBankQuestion(byId.get(id)));
+    }
+    const questions = [...(Array.isArray(data.questions) ? data.questions : []), ...bankQuestions];
+    validateQuizPayload({ ...data, questions });
 
     // An institution's teachers share one five-quiz free allowance. The
     // database trigger (migration 018) is the authority and also protects
@@ -408,7 +457,7 @@ export const quizService = {
       description: data.description || '',
       course_id: data.courseId,
       time_limit: data.timeLimit,
-      questions: data.questions,
+      questions,
       access_code: accessCode,
       scheduled_start: data.scheduledStart || null,
       is_active: true,

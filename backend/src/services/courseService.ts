@@ -772,7 +772,7 @@ export const courseService = {
       return topicsWithStats;
     } catch (e) {
       console.error('Error fetching teacher topics:', e);
-      return [];
+      throw e;
     }
   },
 
@@ -781,7 +781,7 @@ export const courseService = {
       // Get teacher's topics first
       const topics = await this.getTeacherTopics(teacherId);
       const topicIds = topics.map((t: any) => t._id);
-      const topicMap = new Map(topics.map((t: any) => [t._id, { name: t.title, course: t.courseName }]));
+      const topicMap = new Map(topics.map((t: any) => [t._id, { name: t.title, course: t.courseName, courseId: t.courseId }]));
 
       let topicQuestions: any[] = [];
       if (topicIds.length > 0) {
@@ -813,15 +813,19 @@ export const courseService = {
         options: q.options || [],
         correctAnswer: q.correct_answer,
         answerText: q.correct_answers?.[0] || '',
+        questionType: q.question_type || 'multipleChoice',
+        createdBy: q.created_by,
+        timeLimit: Number.isInteger(q.time_limit) && q.time_limit > 0 ? q.time_limit : 60,
         difficulty: q.difficulty,
         topicId: q.topic_id,
+        courseId: q.topic_id ? topicMap.get(q.topic_id)?.courseId : null,
         explanation: q.explanation,
         topicName: q.topic_id ? (topicMap.get(q.topic_id)?.name || 'Unknown') : 'Standalone',
         courseName: q.topic_id ? (topicMap.get(q.topic_id)?.course || 'Unknown') : 'Direct Question',
       }));
     } catch (e) {
       console.error('Error fetching teacher questions:', e);
-      return [];
+      throw e;
     }
   },
 };
