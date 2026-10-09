@@ -96,6 +96,16 @@ export const getTopicsByCourse = asyncHandler(async (req: Request, res: Response
   });
 });
 
+export const getTopicById = asyncHandler(async (req: Request, res: Response) => {
+  const topic = await courseService.getTopicById(
+    req.params.courseId,
+    req.params.topicId,
+    req.user!._id.toString(),
+    req.user!.role
+  );
+  res.status(200).json({ success: true, data: topic });
+});
+
 export const createTopic = asyncHandler(async (req: Request, res: Response) => {
   const topic = await courseService.createTopic(req.user!._id.toString(), req.body);
   

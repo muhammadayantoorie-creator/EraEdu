@@ -1,5 +1,8 @@
 import axios from 'axios';
 
+export const SESSION_EXPIRED_EVENT = 'eraedu:session-expired';
+let sessionExpiryNotified = false;
+
 const normalizeApiBaseUrl = (value?: string) => {
   if (!value) return value;
   const trimmed = value.replace(/\/$/, '');
@@ -32,15 +35,21 @@ api.interceptors.request.use(
 
 // Add a response interceptor to handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.config.url?.includes('/auth/login') || response.config.url?.includes('/auth/me')) {
+      sessionExpiryNotified = false;
+    }
+    return response;
+  },
   (error) => {
     // Redirect to login on 401 for protected API calls only
     // — skip auth endpoints where 401 is expected (check-auth, login, register)
     if (error.response && error.response.status === 401) {
       const url: string = error.config?.url ?? '';
       const isAuthEndpoint = url.includes('/auth/me') || url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/verify-student-otp');
-      if (!isAuthEndpoint) {
-        window.location.href = `${import.meta.env.BASE_URL}login`;
+      if (!isAuthEndpoint && !sessionExpiryNotified) {
+        sessionExpiryNotified = true;
+        window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
       }
     }
     return Promise.reject(error);

@@ -34,7 +34,7 @@ export interface Topic {
   courseId: string;
   title: string;
   description: string;
-  content: string;
+  content?: string;
   order: number;
   difficulty?: string; // Added to match usage
   createdAt: string;

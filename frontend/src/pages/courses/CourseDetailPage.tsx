@@ -2,9 +2,11 @@ import React, { useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useCourses } from '../../hooks/useCourses';
 import { BookOpenIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { useAuthStore } from '../../store/authStore';
 
 const CourseDetailPage: React.FC = () => {
   const { courseId: id } = useParams<{ courseId: string }>();
+  const role = useAuthStore(state => state.user?.role);
   const { 
     currentCourse, 
     topics, 
@@ -20,7 +22,7 @@ const CourseDetailPage: React.FC = () => {
     }
   }, [id, fetchCourseById]);
 
-  if (loading) {
+  if (loading || (id && !currentCourse && !error)) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
@@ -33,8 +35,8 @@ const CourseDetailPage: React.FC = () => {
       <div className="bg-red-50 border-l-4 border-red-400 p-4">
         <div className="flex">
           <div className="ml-3">
-            <p className="text-sm text-red-700">{error || 'Course not found'}</p>
-            <Link to="/courses" className="text-sm font-medium text-red-700 hover:text-red-600 mt-2 inline-block">
+            <p className="text-sm text-red-700">{error || (id ? 'Course not found' : 'A course ID is required.')}</p>
+            <Link to={`/dashboard/${role || 'student'}/courses`} className="text-sm font-medium text-red-700 hover:text-red-600 mt-2 inline-block">
               &larr; Back to Courses
             </Link>
           </div>

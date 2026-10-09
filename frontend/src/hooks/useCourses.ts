@@ -32,6 +32,9 @@ export const useCourses = () => {
 
   const fetchCourseById = useCallback(async (id: string) => {
     setLoading(true);
+    setError(null);
+    setCurrentCourse(null);
+    setTopics([]);
     try {
       const response = await api.get(`/courses/${id}`);
       setCurrentCourse(response.data.data);

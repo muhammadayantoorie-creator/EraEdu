@@ -3,29 +3,44 @@ import { useParams, Link } from 'react-router-dom';
 import api from '../../services/api';
 import { Topic } from '../../types';
 import { CheckCircleIcon } from '@heroicons/react/24/outline';
+import { useAuthStore } from '../../store/authStore';
 
 const TopicPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { courseId, topicId } = useParams<{ courseId: string; topicId: string }>();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const role = useAuthStore(state => state.user?.role);
+  const coursesPath = `/dashboard/${role || 'student'}/courses`;
 
   useEffect(() => {
+    if (!courseId || !topicId) {
+      setError('A course and topic are required to open study material.');
+      setLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    setTopic(null);
     const fetchTopic = async () => {
       try {
-        const response = await api.get(`/topics/${id}`);
+        const response = await api.get(`/courses/${courseId}/topics/${topicId}`, { signal: controller.signal });
         setTopic(response.data.data);
       } catch (err: any) {
-        setError(err.response?.data?.error?.message || 'Failed to fetch topic');
+        if (controller.signal.aborted) return;
+        const status = err.response?.status;
+        setError(status === 404 ? 'This topic was not found in the course.'
+          : status === 403 ? 'You do not have access to this topic. Enroll in the course or contact your teacher.'
+          : err.response?.data?.error?.message || 'Failed to load study material. Please try again.');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     };
 
-    if (id) {
-      fetchTopic();
-    }
-  }, [id]);
+    void fetchTopic();
+    return () => controller.abort();
+  }, [courseId, topicId]);
 
   if (loading) {
     return (
@@ -41,8 +56,8 @@ const TopicPage: React.FC = () => {
         <div className="flex">
           <div className="ml-3">
             <p className="text-sm text-red-700">{error || 'Topic not found'}</p>
-            <Link to="/courses" className="text-sm font-medium text-red-700 hover:text-red-600 mt-2 inline-block">
-              &larr; Back to Courses
+            <Link to={courseId ? `/courses/${courseId}` : coursesPath} className="text-sm font-medium text-red-700 hover:text-red-600 mt-2 inline-block">
+              &larr; Back to {courseId ? 'Course' : 'Courses'}
             </Link>
           </div>
         </div>
@@ -55,14 +70,14 @@ const TopicPage: React.FC = () => {
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
           <h1 className="text-3xl font-bold text-gray-900">{topic.title}</h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+          {topic.difficulty && <p className="mt-1 max-w-2xl text-sm text-gray-500">
             Difficulty: <span className="font-medium text-indigo-600">{topic.difficulty}</span>
-          </p>
+          </p>}
         </div>
         
         <div className="px-4 py-5 sm:px-6 prose prose-indigo max-w-none">
           <div className="text-gray-700 whitespace-pre-wrap">
-            {topic.content}
+            {topic.content || topic.description || 'No study material has been added to this topic yet.'}
           </div>
         </div>
 

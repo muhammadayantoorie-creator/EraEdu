@@ -14,6 +14,7 @@ interface AuthState {
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
   logout: () => void;
+  expireSession: () => void;
   checkAuth: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
 }
@@ -105,6 +106,10 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
 
   logout: () => {
     void api.post('/auth/logout').catch(() => undefined);
+    set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false });
+  },
+
+  expireSession: () => {
     set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false });
   },
 

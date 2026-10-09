@@ -1,6 +1,7 @@
 import { useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { SESSION_EXPIRED_EVENT } from './services/api';
 
 // Layouts
 import MainLayout from './components/layout/MainLayout';
@@ -101,12 +102,15 @@ const DashboardRedirect = () => {
 };
 
 function App() {
-  const { checkAuth } = useAuthStore();
+  const { checkAuth, expireSession } = useAuthStore();
 
   // Check auth on app mount
   useEffect(() => {
-    checkAuth();
-  }, []);
+    const onSessionExpired = () => expireSession();
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+    void checkAuth();
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+  }, [checkAuth, expireSession]);
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading page...</div>}>

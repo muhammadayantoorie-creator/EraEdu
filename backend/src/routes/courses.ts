@@ -2,7 +2,7 @@ import express from 'express';
 import { 
   getCourses, getCourseById, enrollInCourse, getEnrolledCourses,
   createCourse, updateCourse, deleteCourse,
-  getTopicsByCourse, createTopic, updateTopic, deleteTopic,
+  getTopicsByCourse, getTopicById, createTopic, updateTopic, deleteTopic,
   getQuestionsByTopic, createQuestion, updateQuestion, deleteQuestion,
   getTeacherCourses, getTeacherTopics, getTeacherQuestions,
   enrollByCourseCode
@@ -33,6 +33,7 @@ router.delete('/:id', authorize('teacher', 'admin'), deleteCourse);
 
 // Topics
 router.get('/:courseId/topics', getTopicsByCourse);
+router.get('/:courseId/topics/:topicId', getTopicById);
 router.post('/topics', authorize('teacher', 'admin'), createTopic);
 router.put('/topics/:id', authorize('teacher', 'admin'), updateTopic);
 router.delete('/topics/:id', authorize('teacher', 'admin'), deleteTopic);

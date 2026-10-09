@@ -331,6 +331,45 @@ export const courseService = {
 
   // ============ Topic Management ============
 
+  async getTopicById(courseId: string, topicId: string, userId: string, role: string) {
+    const fail = (message: string, statusCode: number): never => {
+      const error: any = new Error(message);
+      error.statusCode = statusCode;
+      throw error;
+    };
+
+    const { data: topic, error: topicError } = await supabase
+      .from('topics')
+      .select('*')
+      .eq('id', topicId)
+      .eq('course_id', courseId)
+      .maybeSingle();
+    if (topicError) throw new Error(topicError.message);
+    if (!topic) return fail('Topic not found in this course', 404);
+
+    const { data: course, error: courseError } = await supabase
+      .from('courses')
+      .select('created_by')
+      .eq('id', courseId)
+      .maybeSingle();
+    if (courseError) throw new Error(courseError.message);
+    if (!course) return fail('Course not found', 404);
+
+    if (role !== 'admin' && course.created_by !== userId) {
+      if (role !== 'student') return fail('Not authorized to study this topic', 403);
+      const { data: enrollment, error: enrollmentError } = await supabase
+        .from('enrollments')
+        .select('course_id')
+        .eq('course_id', courseId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (enrollmentError) throw new Error(enrollmentError.message);
+      if (!enrollment) return fail('Enroll in this course to study its topics', 403);
+    }
+
+    return { ...topic, _id: topic.id, courseId: topic.course_id };
+  },
+
   async getTopicsByCourse(courseId: string) {
     const { data: topics, error } = await supabase
       .from('topics')
