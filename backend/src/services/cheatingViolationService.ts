@@ -195,26 +195,32 @@ export const cheatingViolationService = {
 
   // Get violation summary for teacher dashboard
   async getViolationSummary(teacherId: string, quizId?: string) {
-    let query = supabase
-      .from('cheating_violations')
-      .select(`
-        *,
-        quiz_attempts:quiz_attempt_id (
-          user_id,
-          topic_id,
-          score,
-          max_score
-        )
-      `)
+    // Event.teacher_id records who managed the exam at detection time. Access
+    // follows the exam's current manager after a course reassignment.
+    const { data: ownedQuizzes, error: quizError } = await supabase
+      .from('teacher_quizzes')
+      .select('id')
       .eq('teacher_id', teacherId);
-
-    if (quizId) {
-      query = query.eq('quiz_id', quizId);
+    if (quizError) throw new Error(quizError.message);
+    const ownedIds = (ownedQuizzes || []).map((quiz: any) => quiz.id);
+    let data: any[] = [];
+    if (ownedIds.length && (!quizId || ownedIds.includes(quizId))) {
+      const result = await supabase
+        .from('cheating_violations')
+        .select(`
+          *,
+          quiz_attempts:quiz_attempt_id (
+            user_id,
+            topic_id,
+            score,
+            max_score
+          )
+        `)
+        .in('quiz_id', quizId ? [quizId] : ownedIds)
+        .order('timestamp', { ascending: false });
+      if (result.error) throw new Error(result.error.message);
+      data = result.data || [];
     }
-
-    const { data, error } = await query.order('timestamp', { ascending: false });
-
-    if (error) throw new Error(error.message);
 
     // Group by attempt and calculate stats
     const attemptViolations: Record<string, any> = {};

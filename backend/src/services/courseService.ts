@@ -233,7 +233,7 @@ export const courseService = {
       .single();
 
     if (!existing || existing.created_by !== teacherId) {
-      throw new Error('Not authorized to update this course');
+      throw courseError('Not authorized to update this course', 403);
     }
 
     const updatePayload: any = {
@@ -274,7 +274,7 @@ export const courseService = {
       .single();
 
     if (!existing || existing.created_by !== teacherId) {
-      throw new Error('Not authorized to delete this course');
+      throw courseError('Not authorized to delete this course', 403);
     }
 
     const { error } = await supabase
@@ -353,7 +353,7 @@ export const courseService = {
       .single();
 
     if (!course || course.created_by !== teacherId) {
-      throw new Error('Not authorized to add topics to this course');
+      throw courseError('Not authorized to add topics to this course', 403);
     }
 
     // Get next order number
@@ -404,7 +404,7 @@ export const courseService = {
       .single();
 
     if (!course || course.created_by !== teacherId) {
-      throw new Error('Not authorized to update this topic');
+      throw courseError('Not authorized to update this topic', 403);
     }
 
     const { data: updated, error } = await supabase
@@ -445,7 +445,7 @@ export const courseService = {
       .single();
 
     if (!course || course.created_by !== teacherId) {
-      throw new Error('Not authorized to delete this topic');
+      throw courseError('Not authorized to delete this topic', 403);
     }
 
     const { error } = await supabase
@@ -523,7 +523,7 @@ export const courseService = {
         .single();
 
       if (!course || course.created_by !== teacherId) {
-        throw new Error('Not authorized to add questions to this topic');
+        throw courseError('Not authorized to add questions to this topic', 403);
       }
     }
 
@@ -591,10 +591,10 @@ export const courseService = {
         .single();
 
       if (!course || course.created_by !== teacherId) {
-        throw new Error('Not authorized to update this question');
+        throw courseError('Not authorized to update this question', 403);
       }
     } else if (question.created_by !== teacherId) {
-      throw new Error('Not authorized to update this question');
+      throw courseError('Not authorized to update this question', 403);
     }
 
     const { data: updated, error } = await supabase
@@ -660,10 +660,10 @@ export const courseService = {
         .single();
 
       if (!course || course.created_by !== teacherId) {
-        throw new Error('Not authorized to delete this question');
+        throw courseError('Not authorized to delete this question', 403);
       }
     } else if (question.created_by !== teacherId) {
-      throw new Error('Not authorized to delete this question');
+      throw courseError('Not authorized to delete this question', 403);
     }
 
     const { error } = await supabase

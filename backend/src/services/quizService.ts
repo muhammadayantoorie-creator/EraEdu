@@ -438,21 +438,21 @@ export const quizService = {
       .single();
 
     if (!courseOwner || courseOwner.created_by !== teacherId) {
-      throw new Error('You can only create quizzes for your own courses');
+      throw Object.assign(new Error('You can only create exams for your assigned courses'), { statusCode: 403 });
     }
 
     let bankQuestions: QuizQuestion[] = [];
     if (bankIds.length) {
       const { data: rows, error: bankError } = await supabase.from('questions').select('*').in('id', bankIds);
       if (bankError) throw new Error(bankError.message);
-      if (!rows || rows.length !== bankIds.length || rows.some((row: any) => row.created_by !== teacherId || !row.topic_id)) {
-        throw Object.assign(new Error('Selected bank questions must belong to you and this course'), { statusCode: 403 });
+      if (!rows || rows.length !== bankIds.length || rows.some((row: any) => !row.topic_id)) {
+        throw Object.assign(new Error('Selected bank questions must belong to this course'), { statusCode: 403 });
       }
       const topicIds = [...new Set(rows.map((row: any) => row.topic_id))];
       const { data: topics, error: topicError } = await supabase.from('topics').select('id, course_id').in('id', topicIds);
       if (topicError) throw new Error(topicError.message);
       if (!topics || topics.length !== topicIds.length || topics.some((topic: any) => topic.course_id !== data.courseId)) {
-        throw Object.assign(new Error('Selected bank questions must belong to you and this course'), { statusCode: 403 });
+        throw Object.assign(new Error('Selected bank questions must belong to this course'), { statusCode: 403 });
       }
       const byId = new Map(rows.map((row: any) => [row.id, row]));
       bankQuestions = bankIds.map((id) => snapshotBankQuestion(byId.get(id)));

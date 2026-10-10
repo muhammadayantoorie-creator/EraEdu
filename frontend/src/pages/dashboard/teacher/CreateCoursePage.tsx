@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import api from '../../../services/api';
@@ -13,6 +13,13 @@ const CreateCoursePage = () => {
     ? '/dashboard/admin/courses'
     : '/dashboard/teacher/courses';
   const [loading, setLoading] = useState(false);
+  const [assignmentOptions, setAssignmentOptions] = useState<{
+    organizations: Array<{ id: string; name: string }>;
+    teachers: Array<{ id: string; name: string; email: string; organizationIds: string[] }>;
+  }>({ organizations: [], teachers: [] });
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [organizationId, setOrganizationId] = useState('');
+  const [teacherId, setTeacherId] = useState('');
   const [showSuggestedCategories, setShowSuggestedCategories] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -36,11 +43,27 @@ const CreateCoursePage = () => {
     'Other',
   ];
 
+  const loadAssignmentOptions = async () => {
+    setOptionsError(null);
+    try {
+      const { data } = await api.get('/admin/course-options');
+      setAssignmentOptions(data.data);
+    } catch (error: any) {
+      setOptionsError(error.response?.data?.error?.message || 'Could not load eligible teachers and institutions.');
+    }
+  };
+
+  useEffect(() => { if (user?.role === 'admin') void loadAssignmentOptions(); }, [user?.role]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.title.trim()) {
       toast.error('Please enter a course title');
+      return;
+    }
+    if (user?.role === 'admin' && (!organizationId || !teacherId)) {
+      toast.error('Select an institution and registered teacher.');
       return;
     }
 
@@ -54,11 +77,12 @@ const CreateCoursePage = () => {
 
     setLoading(true);
     try {
-      await api.post('/courses', {
+      await api.post(user?.role === 'admin' ? '/admin/courses' : '/courses', {
         ...formData,
         category: formData.category.trim() || 'Other',
         description: formData.description || `Learn ${formData.title}`,
         maxStudents: maxStudentsValue,
+        ...(user?.role === 'admin' ? { organizationId, teacherId } : {}),
       });
       toast.success('Course created successfully!');
       navigate(coursesPath);
@@ -91,6 +115,13 @@ const CreateCoursePage = () => {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
+        {user?.role === 'admin' && <div className="space-y-4 rounded-lg border border-primary-100 bg-primary-50/50 p-4">
+          <p className="text-sm font-medium text-gray-800">Assign this course to a teacher</p>
+          {optionsError && <div role="alert" className="text-sm text-red-700">{optionsError} <button type="button" onClick={() => void loadAssignmentOptions()} className="underline">Retry</button></div>}
+          <label className="block text-sm">Institution<select value={organizationId} onChange={event => { setOrganizationId(event.target.value); setTeacherId(''); }} className="mt-1 w-full rounded-lg border border-gray-300 p-2"><option value="">Select institution</option>{assignmentOptions.organizations.map(organization => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
+          <label className="block text-sm">Registered teacher<select value={teacherId} onChange={event => setTeacherId(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 p-2"><option value="">Select teacher</option>{assignmentOptions.teachers.filter(teacher => teacher.organizationIds.includes(organizationId)).map(teacher => <option key={teacher.id} value={teacher.id}>{teacher.name} ({teacher.email})</option>)}</select></label>
+          {organizationId && !assignmentOptions.teachers.some(teacher => teacher.organizationIds.includes(organizationId)) && <p className="text-sm text-amber-700">No active registered teachers belong to this institution.</p>}
+        </div>}
         {/* Title */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">

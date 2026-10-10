@@ -72,13 +72,20 @@ describe('bank questions in teacher exams', () => {
     expect(saved().map((question) => question.text)).toEqual(['Manual', 'Question 1']);
   });
 
-  it('rejects duplicate IDs, foreign owners and topics from another course', async () => {
+  it('denies an unrelated teacher creating an exam in the assigned course', async () => {
+    setupBank();
+    await expect(quizService.createQuiz('teacher-2', {
+      title: 'Unauthorized', courseId: 'course-1', timeLimit: 3, questions: [], bankQuestionIds: ['bank-0'],
+    })).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('rejects duplicate IDs and topics from another course while preserving prior question authorship', async () => {
     setupBank();
     await expect(create(['bank-0', 'bank-0'])).rejects.toThrow('unique');
     setupBank([{ ...bankRows[0], created_by: 'teacher-2' }]);
-    await expect(create(['bank-0'])).rejects.toThrow('must belong to you');
+    await expect(create(['bank-0'])).resolves.toMatchObject({ _id: 'quiz-1' });
     setupBank([bankRows[0]], 'course-2');
-    await expect(create(['bank-0'])).rejects.toThrow('must belong to you');
+    await expect(create(['bank-0'])).rejects.toThrow('must belong to this course');
   });
 
   it('rejects unsupported or malformed bank questions', () => {

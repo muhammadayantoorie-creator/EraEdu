@@ -17,6 +17,7 @@ const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
   'Atomic enrollment is unavailable. Apply migration 023_enforce_course_capacity_atomically.sql.',
   'Course code schema is missing. Apply migration 015_add_course_code.sql.',
   'Invalid course capacity. Correct max_students before enrollment.',
+  'Course assignment setup is incomplete. Apply backend/migrations/024_assign_courses_to_teachers.sql.',
 ]);
 
 export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
