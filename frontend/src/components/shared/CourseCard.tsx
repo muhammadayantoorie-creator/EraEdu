@@ -75,7 +75,7 @@ const CourseCard: React.FC<CourseCardProps> = ({
       <div className="flex items-center text-sm text-gray-500 mb-4 space-x-4">
         <span className="flex items-center">
           <BookOpenIcon className="h-4 w-4 mr-1" />
-          {course.topics?.length || 0} topics
+          {course.topicsCount ?? course.topics?.length ?? 0} topics
         </span>
         {enrolledCount !== undefined && (
           <span className="flex items-center">

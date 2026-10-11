@@ -11,10 +11,10 @@ import { courseService } from '../services/courseService';
 
 const topic = { id: 'topic-1', course_id: 'course-1', title: 'Introduction', description: 'Study notes' };
 
-function mockStudyRows(options: { topic?: typeof topic | null; course?: { created_by: string } | null; enrolled?: boolean; errorTable?: string } = {}) {
+function mockStudyRows(options: { topic?: typeof topic | null; course?: { created_by: string; is_published: boolean } | null; enrolled?: boolean; errorTable?: string } = {}) {
   const rows: Record<string, any> = {
     topics: options.topic === undefined ? topic : options.topic,
-    courses: options.course === undefined ? { created_by: 'teacher-1' } : options.course,
+    courses: options.course === undefined ? { created_by: 'teacher-1', is_published: true } : options.course,
     enrollments: options.enrolled ? { course_id: 'course-1' } : null,
   };
   mockFrom.mockImplementation((table: string) => {

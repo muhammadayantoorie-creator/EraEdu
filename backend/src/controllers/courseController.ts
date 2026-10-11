@@ -88,7 +88,7 @@ export const deleteCourse = asyncHandler(async (req: Request, res: Response) => 
 // ============ Topic Controllers (Teacher) ============
 
 export const getTopicsByCourse = asyncHandler(async (req: Request, res: Response) => {
-  const topics = await courseService.getTopicsByCourse(req.params.courseId);
+  const topics = await courseService.getTopicsByCourse(req.params.courseId, req.user!._id.toString(), req.user!.role);
   
   res.status(200).json({
     success: true,

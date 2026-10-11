@@ -69,13 +69,19 @@ export const useCourses = () => {
 
   const fetchEnrolledCourses = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await api.get('/courses/my/enrolled');
-      setCourses(response.data.data);
+      const rows: Course[] = response.data.data;
+      if (!Array.isArray(rows) || rows.some(row => !Number.isSafeInteger(row.topicsCount) || row.topicsCount! < 0)) {
+        throw new Error('The enrolled-course response is missing topic counts. Please retry.');
+      }
+      setCourses(rows);
       setPagination(response.data.pagination);
       setError(null);
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Failed to fetch enrolled courses');
+      setCourses([]);
+      setError(err.response?.data?.message || err.response?.data?.error?.message || err.message || 'Failed to fetch enrolled courses');
     } finally {
       setLoading(false);
     }

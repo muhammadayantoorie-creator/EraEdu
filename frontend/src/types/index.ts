@@ -24,6 +24,7 @@ export interface Course {
   isPublic: boolean;
   enrolledStudents: string[];
   topics: string[];
+  topicsCount?: number; // Enrolled-course API: topics currently visible to this student.
   thumbnail?: string;
   createdAt: string;
   updatedAt: string;

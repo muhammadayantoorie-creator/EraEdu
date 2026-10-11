@@ -16,7 +16,7 @@ import {
 
 const StudentCourses = () => {
   const navigate = useNavigate();
-  const { courses: enrolledCourses, loading, fetchEnrolledCourses } = useCourses();
+  const { courses: enrolledCourses, loading, error, fetchEnrolledCourses } = useCourses();
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'all' | 'in-progress' | 'completed'>('all');
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([]);
@@ -153,13 +153,20 @@ const StudentCourses = () => {
         </div>
       </div>
 
+      {error && (
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <p>{error}</p>
+          <button className="mt-2 font-medium underline" onClick={() => fetchEnrolledCourses()}>Retry</button>
+        </div>
+      )}
+
       {/* Enrolled Courses heading */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Enrolled Courses</h2>
       </div>
 
       {/* Course Grid */}
-      {filteredCourses.length > 0 ? (
+      {error ? null : filteredCourses.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCourses.map((course) => (
             <CourseCard

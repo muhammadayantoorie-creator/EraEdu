@@ -138,7 +138,33 @@ export const courseService = {
       throw new Error(error.message);
     }
 
-    return enrollments.map((e: any) => ({ ...e.courses, _id: e.courses.id }));
+    const courses = (enrollments || []).map((e: any) => {
+      if (!e.courses) throw new Error(`Enrollment references a missing course: ${e.course_id}`);
+      return e.courses;
+    });
+    const visibleIds = courses.filter((course: any) => course.is_published === true).map((course: any) => course.id);
+    const topicCounts = new Map<string, number>();
+    // Fetch topic IDs in batches, not once per course. Range through PostgREST's
+    // default row cap so large courses cannot silently undercount.
+    for (let offset = 0; offset < visibleIds.length; offset += 100) {
+      const batch = visibleIds.slice(offset, offset + 100);
+      for (let start = 0; ;) {
+        const { data: topics, error: topicsError, count } = await supabase
+          .from('topics').select('course_id', { count: 'exact' }).in('course_id', batch).order('course_id').order('id')
+          .range(start, start + 999);
+        if (topicsError) throw new Error(topicsError.message);
+        if (count === null || count === undefined || !topics) throw new Error('Could not count course topics');
+        for (const topic of topics || []) {
+          topicCounts.set(topic.course_id, (topicCounts.get(topic.course_id) || 0) + 1);
+        }
+        start += topics.length;
+        if (start >= count) break;
+        if (topics.length === 0) throw new Error('Course topic query returned an incomplete page');
+      }
+    }
+    return courses.map((course: any) => ({
+      ...course, _id: course.id, topicsCount: topicCounts.get(course.id) || 0,
+    }));
   },
 
   // ============ Teacher Course Management ============
@@ -317,14 +343,15 @@ export const courseService = {
 
     const { data: course, error: courseError } = await supabase
       .from('courses')
-      .select('created_by')
+      .select('created_by, is_published')
       .eq('id', courseId)
       .maybeSingle();
     if (courseError) throw new Error(courseError.message);
     if (!course) return fail('Course not found', 404);
 
-    if (role !== 'admin' && course.created_by !== userId) {
+    if (role !== 'admin' && !(role === 'teacher' && course.created_by === userId)) {
       if (role !== 'student') return fail('Not authorized to study this topic', 403);
+      if (course.is_published !== true) return fail('This course is not published', 403);
       const { data: enrollment, error: enrollmentError } = await supabase
         .from('enrollments')
         .select('course_id')
@@ -338,18 +365,32 @@ export const courseService = {
     return { ...topic, _id: topic.id, courseId: topic.course_id };
   },
 
-  async getTopicsByCourse(courseId: string) {
-    const { data: topics, error } = await supabase
-      .from('topics')
-      .select('*')
-      .eq('course_id', courseId)
-      .order('order', { ascending: true });
-
-    if (error) {
-      throw new Error(error.message);
+  async getTopicsByCourse(courseId: string, userId: string, role: string) {
+    const { data: course, error: lookupError } = await supabase
+      .from('courses').select('created_by, is_published').eq('id', courseId).maybeSingle();
+    if (lookupError) throw new Error(lookupError.message);
+    if (!course) throw courseError('Course not found', 404);
+    if (role !== 'admin' && !(role === 'teacher' && course.created_by === userId)) {
+      if (role !== 'student') throw courseError('Not authorized to view these topics', 403);
+      const { data: enrollment, error: enrollmentError } = await supabase
+        .from('enrollments').select('course_id').eq('course_id', courseId).eq('user_id', userId).maybeSingle();
+      if (enrollmentError) throw new Error(enrollmentError.message);
+      if (!enrollment) throw courseError('Enroll in this course to view its topics', 403);
+      if (course.is_published !== true) return [];
     }
-
-    return topics.map(t => ({ ...t, _id: t.id }));
+    const visibleTopics: any[] = [];
+    for (let start = 0; ;) {
+      const { data: topics, error, count } = await supabase
+        .from('topics').select('*', { count: 'exact' }).eq('course_id', courseId)
+        .order('order', { ascending: true }).order('id').range(start, start + 999);
+      if (error) throw new Error(error.message);
+      if (count === null || count === undefined || !topics) throw new Error('Could not load course topics');
+      visibleTopics.push(...topics);
+      start += topics.length;
+      if (start >= count) break;
+      if (topics.length === 0) throw new Error('Course topic query returned an incomplete page');
+    }
+    return visibleTopics.map(t => ({ ...t, _id: t.id }));
   },
 
   async createTopic(teacherId: string, topicData: any) {
