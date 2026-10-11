@@ -123,8 +123,8 @@ const TeacherTopics = () => {
       await api.delete(`/courses/topics/${topic._id}`);
       toast.success('Topic deleted');
       setTopics(topics.filter((t) => t._id !== topic._id));
-    } catch (error) {
-      toast.error('Failed to delete topic');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error?.message || 'Failed to delete topic');
     }
   };
 

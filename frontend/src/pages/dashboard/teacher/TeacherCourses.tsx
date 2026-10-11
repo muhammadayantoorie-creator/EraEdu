@@ -38,6 +38,7 @@ interface EditForm {
   category: string;
   difficulty: string;
   maxStudents: string;
+  isPublished: boolean;
 }
 
 const TeacherCourses = () => {
@@ -54,7 +55,7 @@ const TeacherCourses = () => {
   const [courseToDelete, setCourseToDelete] = useState<TeacherCourse | null>(null);
   const [editingCourse, setEditingCourse] = useState<TeacherCourse | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({
-    title: '', description: '', category: 'Other', difficulty: 'Beginner', maxStudents: '',
+    title: '', description: '', category: 'Other', difficulty: 'Beginner', maxStudents: '', isPublished: false,
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -86,6 +87,7 @@ const TeacherCourses = () => {
       category: course.category || '',
       difficulty: course.difficulty || 'Beginner',
       maxStudents: course.maxStudents != null ? String(course.maxStudents) : '',
+      isPublished: course.isPublished === true,
     });
   };
 
@@ -113,6 +115,7 @@ const TeacherCourses = () => {
         category,
         difficulty: editForm.difficulty,
         maxStudents: maxStudentsValue,
+        isPublished: editForm.isPublished,
       });
       toast.success('Course updated');
       setEditingCourse(null);
@@ -136,8 +139,8 @@ const TeacherCourses = () => {
       await api.delete(`/courses/${courseToDelete._id}`);
       toast.success('Course deleted successfully');
       setCourses(courses.filter((c) => c._id !== courseToDelete._id));
-    } catch (error) {
-      toast.error('Failed to delete course');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error?.message || 'Failed to delete course');
     } finally {
       setDeleteModalOpen(false);
       setCourseToDelete(null);
@@ -402,6 +405,10 @@ const TeacherCourses = () => {
                 Currently enrolled: {editingCourse.enrollmentCount || 0}
               </p>
             </div>
+            <label className="flex items-start gap-3 rounded-lg border border-gray-200 p-3 text-sm text-gray-700">
+              <input type="checkbox" checked={editForm.isPublished} onChange={(event) => setEditForm({ ...editForm, isPublished: event.target.checked })} className="mt-1" />
+              <span><span className="block font-medium">Published course</span>Unpublishing blocks new course-based exam starts and keeps existing attempts and results.</span>
+            </label>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"

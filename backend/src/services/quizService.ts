@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { supabase } from '../config/supabase';
+import { explainProtectedDelete, requireAssessmentHistoryProtection } from './assessmentHistoryPolicy';
 import { assertStudentEmailPolicy } from './authService';
 import { aiService } from './aiService';
 
@@ -670,13 +671,19 @@ export const quizService = {
   },
 
   async deleteQuiz(quizId: string, teacherId: string) {
+    const { data: quiz, error: lookupError } = await supabase.from('teacher_quizzes')
+      .select('teacher_id').eq('id', quizId).maybeSingle();
+    if (lookupError) throw new Error(lookupError.message);
+    if (!quiz) throw Object.assign(new Error('Exam not found'), { statusCode: 404 });
+    if (quiz.teacher_id !== teacherId) throw Object.assign(new Error('Not authorized to delete this exam'), { statusCode: 403 });
+    await requireAssessmentHistoryProtection();
     const { error } = await supabase
       .from('teacher_quizzes')
       .delete()
       .eq('id', quizId)
       .eq('teacher_id', teacherId);
 
-    if (error) throw new Error(error.message);
+    if (error) explainProtectedDelete(error);
     return { success: true };
   },
 
@@ -697,6 +704,12 @@ export const quizService = {
 
     // Ensure student is enrolled if this quiz is course-specific
     if (quiz.course_id) {
+      const { data: course, error: courseError } = await supabase.from('courses')
+        .select('id, is_published').eq('id', quiz.course_id).maybeSingle();
+      if (courseError) throw new Error(courseError.message);
+      if (!course || course.is_published !== true) {
+        throw Object.assign(new Error('This course is not published for exams.'), { statusCode: 403 });
+      }
       const { data: enrollment } = await supabase
         .from('enrollments')
         .select('id')

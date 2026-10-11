@@ -7,6 +7,9 @@ import { courseAssignmentService } from '../services/courseAssignmentService';
 export const getAdminOverview = asyncHandler(async (_req: Request, res: Response) => {
   res.json({ success: true, data: await adminService.getOverview() });
 });
+export const getAdminAttempts = asyncHandler(async (req: Request, res: Response) => {
+  res.json({ success: true, ...await adminService.getAttempts(Number(req.query.page || 1), Number(req.query.limit || 50)) });
+});
 export const getAdminUsers = asyncHandler(async (req: Request, res: Response) => {
   const result = await adminService.getUsers(String(req.query.search || ''), Number(req.query.page || 1), Number(req.query.limit || 50));
   res.json({ success: true, ...result });

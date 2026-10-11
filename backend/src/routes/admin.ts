@@ -1,10 +1,11 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth';
-import { assignAdminCourse, createAdminCourse, getAdminCourseOptions, getAdminCourses, getAdminFeedback, getAdminIntegrityEvents, getAdminOverview, getAdminUsers, updateAdminUser } from '../controllers/adminController';
+import { assignAdminCourse, createAdminCourse, getAdminAttempts, getAdminCourseOptions, getAdminCourses, getAdminFeedback, getAdminIntegrityEvents, getAdminOverview, getAdminUsers, updateAdminUser } from '../controllers/adminController';
 
 const router = express.Router();
 router.use(protect, authorize('admin'));
 router.get('/overview', getAdminOverview);
+router.get('/attempts', getAdminAttempts);
 router.get('/users', getAdminUsers);
 router.get('/course-options', getAdminCourseOptions);
 router.get('/courses', getAdminCourses);

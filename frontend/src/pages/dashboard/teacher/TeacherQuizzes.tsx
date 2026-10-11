@@ -424,7 +424,7 @@ const TeacherQuizzes = () => {
       toast.success('Exam deleted');
       setQuizzes(quizzes.filter((q) => q._id !== quiz._id));
     } catch (error) {
-      toast.error('Failed to delete exam');
+      toast.error((error as any).response?.data?.error?.message || 'Failed to delete exam');
     }
   };
 

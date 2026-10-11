@@ -18,6 +18,7 @@ const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
   'Course code schema is missing. Apply migration 015_add_course_code.sql.',
   'Invalid course capacity. Correct max_students before enrollment.',
   'Course assignment setup is incomplete. Apply backend/migrations/024_assign_courses_to_teachers.sql.',
+  'Assessment history protection is required before deletion. Apply backend/migrations/025_preserve_assessment_history.sql.',
 ]);
 
 export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {

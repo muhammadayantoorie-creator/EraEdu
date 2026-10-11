@@ -51,6 +51,7 @@ const TeacherQuizzes = lazy(() => import('./pages/dashboard/teacher/TeacherQuizz
 const TeacherSubmissions = lazy(() => import('./pages/dashboard/teacher/TeacherSubmissions'));
 const AdminOverview = lazy(() => import('./pages/dashboard/admin/AdminOverview'));
 const AdminCoursesPage = lazy(() => import('./pages/dashboard/admin/AdminCoursesPage'));
+const AdminAttemptsPage = lazy(() => import('./pages/dashboard/admin/AdminAttemptsPage'));
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
@@ -180,6 +181,7 @@ function App() {
           <Route index element={<AdminOverview />} />
           <Route path="users" element={<AdminOverview />} />
           <Route path="courses" element={<AdminCoursesPage />} />
+          <Route path="attempts" element={<AdminAttemptsPage />} />
           <Route path="courses/new" element={<CreateCoursePage />} />
           <Route path="quizzes" element={<TeacherQuizzes />} />
           <Route path="submissions" element={<TeacherSubmissions />} />

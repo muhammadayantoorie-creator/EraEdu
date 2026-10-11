@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase';
 import { emailService } from './emailService';
 import { canonicalCourseCategory, normalizeCourseCategory } from './courseCategory';
+import { explainProtectedDelete, requireAssessmentHistoryProtection } from './assessmentHistoryPolicy';
 
 function isMissingColumnError(err: any, column: string): boolean {
   if (!err) return false;
@@ -244,6 +245,10 @@ export const courseService = {
       description: courseData.description,
       difficulty: courseData.difficulty,
     };
+    if (courseData.isPublished !== undefined) {
+      if (typeof courseData.isPublished !== 'boolean') throw courseError('Course publication must be true or false.', 400);
+      updatePayload.is_published = courseData.isPublished;
+    }
     if (courseData.category !== undefined) updatePayload.category = await canonicalCourseCategory(courseData.category, existing.category);
     const capacity = parseCourseCapacity(courseData.maxStudents);
     if (capacity !== undefined) updatePayload.max_students = capacity;
@@ -280,14 +285,14 @@ export const courseService = {
       throw courseError('Not authorized to delete this course', 403);
     }
 
+    await requireAssessmentHistoryProtection();
+
     const { error } = await supabase
       .from('courses')
       .delete()
       .eq('id', courseId);
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    if (error) explainProtectedDelete(error);
 
     return { message: 'Course deleted successfully' };
   },
@@ -451,14 +456,14 @@ export const courseService = {
       throw courseError('Not authorized to delete this topic', 403);
     }
 
+    await requireAssessmentHistoryProtection();
+
     const { error } = await supabase
       .from('topics')
       .delete()
       .eq('id', topicId);
 
-    if (error) {
-      throw new Error(error.message);
-    }
+    if (error) explainProtectedDelete(error);
 
     return { message: 'Topic deleted successfully' };
   },
@@ -713,6 +718,7 @@ export const courseService = {
             description: course.description,
             category: course.category,
             difficulty: course.difficulty,
+            isPublished: course.is_published === true,
             courseCode: course.course_code,
             topics: topics?.map((t: any) => t.id) || [],
             createdBy: course.created_by,

@@ -4,7 +4,9 @@ Use this checklist before publishing a release. Do not treat a successful fronte
 
 ## Database
 
-- Apply migrations in order: `001` through `009` from `backend/migrations/`.
+- Apply every numbered migration present in `backend/migrations/` in ascending order; record the latest applied number. Do not skip `025_preserve_assessment_history.sql` before enabling course/topic/exam deletion.
+- Before `025`, back up the database and run the read-only `backend/scripts/report_assessment_references.sql`. Review any orphan rows individually; the migration does not delete or repair them. Plan a maintenance window because stored generated columns can rewrite `quiz_attempts`.
+- After `025`, confirm `assessment_history_protection_ready()` returns true using the server role, rerun the reference report, and validate the `NOT VALID` constraints only after existing orphan rows have been reviewed and repaired.
 - Confirm `teacher_quizzes.violation_limit` exists and has a default of `3`.
 - Confirm `users.is_suspended` and `users.suspended_at` exist.
 - Confirm Row Level Security is enabled for production tables and browser roles do not have direct write access to user, attempt, violation, or quiz tables.
