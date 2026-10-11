@@ -59,7 +59,7 @@ describe('course category contract', () => {
     });
     const created = await courseService.createCourse('teacher-1', { title: 'Structures', category: ' Civil   Engineering ', maxStudents: null });
     expect(created.category).toBe('Civil Engineering');
-    const loaded = await courseService.getCourseById('course-1');
+    const loaded = await courseService.getCourseById('course-1', 'teacher-1', 'teacher');
     expect(loaded.category).toBe('Civil Engineering');
     const edited = await courseService.updateCourse('teacher-1', 'course-1', { title: 'Structures II', category: 'civil engineering' });
     expect(edited.category).toBe('Civil Engineering');

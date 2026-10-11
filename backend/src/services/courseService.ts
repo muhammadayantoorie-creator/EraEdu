@@ -98,24 +98,32 @@ export const courseService = {
     );
   },
 
-  async getCourseById(courseId: string) {
+  async getCourseById(courseId: string, userId: string, role: string) {
     const { data: course, error } = await supabase
       .from('courses')
       .select('*')
       .eq('id', courseId)
       .single();
 
-    if (error) {
-      throw new Error('Course not found');
-    }
+    if (error || !course) throw courseError('Course not found', 404);
 
     requireCapacityColumn(course);
-    return { ...course, _id: course.id, maxStudents: course.max_students };
+    let isEnrolled = false;
+    if (role === 'student') {
+      const { data: enrollment, error: enrollmentError } = await supabase
+        .from('enrollments').select('id').eq('course_id', courseId).eq('user_id', userId).maybeSingle();
+      if (enrollmentError) throw new Error(enrollmentError.message);
+      isEnrolled = Boolean(enrollment);
+    }
+    const canViewTopics = role === 'admin'
+      || (role === 'teacher' && course.created_by === userId)
+      || (role === 'student' && isEnrolled && course.is_published === true);
+    return { ...course, _id: course.id, maxStudents: course.max_students, isEnrolled, canViewTopics };
   },
 
   async enrollCourse(userId: string, courseId: string) {
     const created = await enrollCourseAtomically(courseId, userId);
-    if (!created) return { message: 'Already enrolled' };
+    if (!created) return { message: 'Already enrolled', isEnrolled: true, alreadyEnrolled: true };
 
     // Fetch user and course details for email
     const { data: user } = await supabase.from('users').select('email, name').eq('id', userId).single();
@@ -125,7 +133,7 @@ export const courseService = {
       await emailService.sendCourseEnrollmentEmail(user.email, user.name, course.title);
     }
 
-    return { message: 'Enrolled successfully' };
+    return { message: 'Enrolled successfully', isEnrolled: true, alreadyEnrolled: false };
   },
 
   async getEnrolledCourses(userId: string) {
@@ -203,7 +211,7 @@ export const courseService = {
 
     const created = await enrollCourseAtomically(course.id, userId);
     if (!created) {
-      return { message: 'Already enrolled in this course', course: { _id: course.id, title: course.title } };
+      return { message: 'Already enrolled in this course', isEnrolled: true, alreadyEnrolled: true, course: { _id: course.id, title: course.title } };
     }
 
     // Send enrollment email
@@ -212,7 +220,7 @@ export const courseService = {
       await emailService.sendCourseEnrollmentEmail(user.email, user.name, course.title);
     }
 
-    return { message: 'Enrolled successfully', course: { _id: course.id, title: course.title } };
+    return { message: 'Enrolled successfully', isEnrolled: true, alreadyEnrolled: false, course: { _id: course.id, title: course.title } };
   },
 
   async createCourse(teacherId: string, courseData: any) {

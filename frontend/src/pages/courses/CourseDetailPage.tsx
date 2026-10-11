@@ -12,6 +12,7 @@ const CourseDetailPage: React.FC = () => {
     topics, 
     loading, 
     error, 
+    enrolling,
     fetchCourseById, 
     enrollInCourse 
   } = useCourses();
@@ -22,7 +23,7 @@ const CourseDetailPage: React.FC = () => {
     }
   }, [id, fetchCourseById]);
 
-  if (loading || (id && !currentCourse && !error)) {
+  if ((loading && !currentCourse) || (id && !currentCourse && !error)) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
@@ -30,7 +31,7 @@ const CourseDetailPage: React.FC = () => {
     );
   }
 
-  if (error || !currentCourse) {
+  if (!currentCourse) {
     return (
       <div className="bg-red-50 border-l-4 border-red-400 p-4">
         <div className="flex">
@@ -47,6 +48,11 @@ const CourseDetailPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error} <button className="ml-2 font-medium underline" onClick={() => id && fetchCourseById(id, true)}>Retry</button>
+        </div>
+      )}
       {/* Course Header */}
       <div className="bg-white shadow overflow-hidden sm:rounded-lg">
         <div className="px-4 py-5 sm:px-6">
@@ -55,12 +61,17 @@ const CourseDetailPage: React.FC = () => {
               <h1 className="text-3xl font-bold text-gray-900">{currentCourse.title}</h1>
               <p className="mt-1 max-w-2xl text-sm text-gray-500">{currentCourse.category} • {currentCourse.difficulty}</p>
             </div>
-            <button
-              onClick={() => id && enrollInCourse(id)}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              Enroll Now
-            </button>
+            {role === 'student' && (currentCourse.isEnrolled ? (
+              <span className="inline-flex items-center rounded-md bg-green-50 px-4 py-2 text-sm font-medium text-green-800">Enrolled</span>
+            ) : (
+              <button
+                onClick={() => id && enrollInCourse(id)}
+                disabled={enrolling}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              >
+                {enrolling ? 'Enrolling...' : 'Enroll Now'}
+              </button>
+            ))}
           </div>
         </div>
         <div className="border-t border-gray-200 px-4 py-5 sm:px-6">

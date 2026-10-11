@@ -25,6 +25,8 @@ export interface Course {
   enrolledStudents: string[];
   topics: string[];
   topicsCount?: number; // Enrolled-course API: topics currently visible to this student.
+  isEnrolled?: boolean; // Authenticated course-detail API, for the current user only.
+  canViewTopics?: boolean;
   thumbnail?: string;
   createdAt: string;
   updatedAt: string;

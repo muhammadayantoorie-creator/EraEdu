@@ -19,7 +19,7 @@ router.use(protect);
 
 // Student enrollment routes
 router.get('/my/enrolled', getEnrolledCourses);
-router.post('/join-by-code', enrollByCourseCode);
+router.post('/join-by-code', authorize('student'), enrollByCourseCode);
 
 // ============ Teacher routes (must come before /:id to avoid conflicts) ============
 router.get('/teacher/my-courses', authorize('teacher', 'admin'), getTeacherCourses);
@@ -46,6 +46,6 @@ router.delete('/questions/:id', authorize('teacher', 'admin'), deleteQuestion);
 
 // Get single course (must be last to avoid conflicts with /teacher/* routes)
 router.get('/:id', getCourseById);
-router.post('/:id/enroll', enrollInCourse);
+router.post('/:id/enroll', authorize('student'), enrollInCourse);
 
 export default router;

@@ -14,7 +14,7 @@ export const getCourses = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getCourseById = asyncHandler(async (req: Request, res: Response) => {
-  const course = await courseService.getCourseById(req.params.id);
+  const course = await courseService.getCourseById(req.params.id, req.user!._id.toString(), req.user!.role);
   
   res.status(200).json({
     success: true,

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import api from '../services/api';
 import { Course, Topic } from '../types';
 import toast from 'react-hot-toast';
@@ -9,6 +9,8 @@ export const useCourses = () => {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
+  const enrollmentPending = useRef(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -30,40 +32,53 @@ export const useCourses = () => {
     }
   }, []);
 
-  const fetchCourseById = useCallback(async (id: string) => {
+  const fetchCourseById = useCallback(async (id: string, preserveCurrent = false) => {
     setLoading(true);
     setError(null);
-    setCurrentCourse(null);
-    setTopics([]);
+    if (!preserveCurrent) {
+      setCurrentCourse(null);
+      setTopics([]);
+    }
     try {
       const response = await api.get(`/courses/${id}`);
-      setCurrentCourse(response.data.data);
-      
-      // Also fetch topics
-      const topicsResponse = await api.get(`/courses/${id}/topics`);
-      setTopics(topicsResponse.data.data);
+      const course: Course = response.data.data;
+      if (typeof course.isEnrolled !== 'boolean' || typeof course.canViewTopics !== 'boolean') {
+        throw new Error('Course enrollment state is unavailable. Please retry.');
+      }
+      setCurrentCourse(course);
+      if (course.canViewTopics) {
+        const topicsResponse = await api.get(`/courses/${id}/topics`);
+        setTopics(topicsResponse.data.data);
+      } else {
+        setTopics([]);
+      }
       
       setError(null);
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Failed to fetch course details');
+      setError(err.response?.data?.message || err.response?.data?.error?.message || err.message || 'Failed to fetch course details');
     } finally {
       setLoading(false);
     }
   }, []);
 
   const enrollInCourse = useCallback(async (courseId: string) => {
-    setLoading(true);
+    if (enrollmentPending.current) return;
+    enrollmentPending.current = true;
+    setEnrolling(true);
+    setError(null);
     try {
-      await api.post(`/courses/${courseId}/enroll`);
-      toast.success('Enrolled successfully!');
-      // Refresh course data
-      await fetchCourseById(courseId);
+      const response = await api.post(`/courses/${courseId}/enroll`);
+      if (response.data.data?.isEnrolled !== true) throw new Error('Enrollment confirmation is unavailable. Please retry.');
+      setCurrentCourse(previous => previous ? { ...previous, isEnrolled: true } : previous);
+      toast.success(response.data.data.alreadyEnrolled ? 'Already enrolled' : 'Enrolled successfully!');
+      await fetchCourseById(courseId, true);
     } catch (err: any) {
-      const message = err.response?.data?.error?.message || 'Failed to enroll';
+      const message = err.response?.data?.message || err.response?.data?.error?.message || err.message || 'Failed to enroll';
       toast.error(message);
       setError(message);
     } finally {
-      setLoading(false);
+      enrollmentPending.current = false;
+      setEnrolling(false);
     }
   }, [fetchCourseById]);
 
@@ -93,6 +108,7 @@ export const useCourses = () => {
     topics,
     loading,
     error,
+    enrolling,
     pagination,
     fetchCourses,
     fetchCourseById,
