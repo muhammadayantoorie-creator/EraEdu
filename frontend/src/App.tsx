@@ -148,6 +148,7 @@ function App() {
         <Route path="/courses/:courseId/topics/:topicId" element={<TopicPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/settings" element={<Navigate to="/profile" replace />} />
       </Route>
 
       {/* Student Dashboard Routes */}

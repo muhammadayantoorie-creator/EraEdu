@@ -387,7 +387,7 @@ export const authService = {
       .from('users')
       .update(patch)
       .eq('id', userId)
-      .select()
+      .select('id, name, email, role, bio, interests')
       .single();
 
     if (error) throw new Error(error.message);

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { UserCircleIcon, PencilIcon, XMarkIcon, CheckIcon } from '@heroicons/react/24/solid';
 import { useForm } from 'react-hook-form';
@@ -108,6 +109,7 @@ const OrganizationCard = () => {
 
 const ProfilePage: React.FC = () => {
   const { user, logout, updateProfile } = useAuthStore();
+  const dashboardPath = user?.role === 'admin' ? '/dashboard/admin' : user?.role === 'teacher' ? '/dashboard/teacher' : '/dashboard/student';
   const [isEditing, setIsEditing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'checking' | 'paid' | 'pending' | 'failed' | 'cancelled' | null>(null);
   const [billing, setBilling] = useState<BillingRecord | null>(null);
@@ -208,6 +210,9 @@ const ProfilePage: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto">
+      <Link to={dashboardPath} className="mb-4 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500">
+        &larr; Back to dashboard
+      </Link>
       {paymentStatus && (
         <div className={`mb-4 rounded-lg px-4 py-3 text-sm ${paymentStatus === 'paid' ? 'bg-green-50 text-green-800' : paymentStatus === 'cancelled' ? 'bg-gray-50 text-gray-800' : 'bg-amber-50 text-amber-800'}`}>
           {paymentStatus === 'paid'

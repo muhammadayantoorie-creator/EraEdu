@@ -135,7 +135,7 @@ const Header = ({ toggleSidebar }: HeaderProps) => {
                 Your profile
               </Link>
               <Link
-                to="/settings"
+                to="/profile"
                 onClick={() => setIsProfileOpen(false)}
                 className="block rounded-xl px-3 py-2 text-sm text-ink-700 transition-colors duration-300 hover:bg-ink-50"
               >

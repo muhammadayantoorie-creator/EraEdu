@@ -340,7 +340,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ role }) => {
                     Your profile
                   </Link>
                   <Link
-                    to="/settings"
+                    to="/profile"
                     onClick={() => setShowUserMenu(false)}
                     className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-700 transition-colors duration-300 hover:bg-ink-50"
                   >
