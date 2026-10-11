@@ -19,7 +19,7 @@ export const updateAdminUser = asyncHandler(async (req: Request, res: Response) 
   res.json({ success: true, data: await adminService.updateUser(req.params.userId, req.body, req.user!._id) });
 });
 export const getAdminIntegrityEvents = asyncHandler(async (req: Request, res: Response) => {
-  res.json({ success: true, data: await adminService.getIntegrityEvents(Number(req.query.limit || 100)) });
+  res.json({ success: true, ...await adminService.getIntegrityEvents(Number(req.query.page || 1), Number(req.query.limit || 100)) });
 });
 export const getAdminFeedback = asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: await feedbackService.getForAdmins(Number(req.query.limit || 100)) });

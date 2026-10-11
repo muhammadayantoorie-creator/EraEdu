@@ -92,16 +92,19 @@ export const adminService = {
     return { data: (data || []).map((user: any) => ({ ...user, _id: user.id })), pagination: { page: safePage, limit: safeLimit, total: total ?? 0 } };
   },
 
-  async getIntegrityEvents(limit = 100) {
-    const { data, error } = await supabase.from('cheating_violations')
-      .select('id, quiz_attempt_id, violation_type, severity, detection_method, timestamp, student_id, quiz_id, quiz_attempts(is_flagged, teacher_grade, status), users:student_id(name, email), teacher_quizzes:quiz_id(title, courses:course_id(title))')
-      .order('timestamp', { ascending: false }).limit(Math.min(Math.max(limit, 1), 100));
+  async getIntegrityEvents(page = 1, limit = 100) {
+    const safePage = Number.isSafeInteger(page) && page > 0 ? page : 1;
+    const safeLimit = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 100;
+    const { data, count: total, error } = await supabase.from('cheating_violations')
+      .select('id, quiz_attempt_id, violation_type, severity, detection_method, timestamp, student_id, quiz_id, quiz_attempts(is_flagged, teacher_grade, status), users:student_id(name, email), teacher_quizzes:quiz_id(title, courses:course_id(title))', { count: 'exact' })
+      .order('timestamp', { ascending: false }).range((safePage - 1) * safeLimit, safePage * safeLimit - 1);
     if (error) throw new Error(error.message);
-    return (data || []).map((event: any) => ({
+    if (typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0) throw new Error('Failed to count integrity events: no valid count returned');
+    return { data: (data || []).map((event: any) => ({
       id: event.id, attemptId: event.quiz_attempt_id, type: event.violation_type, severity: event.severity || 'low', detectionMethod: event.detection_method || 'unknown', timestamp: event.timestamp,
       studentName: event.users?.name || 'Unknown student', studentEmail: event.users?.email || '', assessment: event.teacher_quizzes?.title || 'Unknown assessment',
       course: event.teacher_quizzes?.courses?.title || 'No course', flagged: !!event.quiz_attempts?.is_flagged, reviewed: event.quiz_attempts?.teacher_grade !== null && event.quiz_attempts?.teacher_grade !== undefined,
-    }));
+    })), pagination: { page: safePage, limit: safeLimit, total } };
   },
 
   async updateUser(userId: string, updates: { role?: string; isSuspended?: boolean }, actorId: string) {
