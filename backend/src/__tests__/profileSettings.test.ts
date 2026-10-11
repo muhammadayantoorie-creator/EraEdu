@@ -13,9 +13,10 @@ import type { NextFunction, Request, Response } from 'express';
 
 beforeEach(() => mockFrom.mockReset());
 
-it('saves permitted profile fields and reloads them without returning credentials', async () => {
+it.each(['teacher', 'student'])('saves permitted %s profile fields and reloads them without returning credentials', async role => {
+  const userId = `${role}-1`;
   let stored: Record<string, any> = {
-    id: 'teacher-1', name: 'Teacher', email: 'teacher@example.test', role: 'teacher',
+    id: userId, name: 'Before', email: `${role}@example.test`, role,
     bio: '', interests: [], password: 'hashed-secret',
   };
   const selected: string[] = [];
@@ -33,14 +34,14 @@ it('saves permitted profile fields and reloads them without returning credential
   };
   mockFrom.mockReturnValue(query);
 
-  const saved = await authService.updateProfile('teacher-1', {
-    name: '  Updated Teacher  ', bio: 'Course lead', interests: ['Physics'], role: 'admin',
+  const saved = await authService.updateProfile(userId, {
+    name: '  Updated Profile  ', bio: 'Profile bio', interests: ['Physics'], role: 'admin',
   });
-  expect(saved).toMatchObject({ name: 'Updated Teacher', bio: 'Course lead', interests: ['Physics'], role: 'teacher' });
+  expect(saved).toMatchObject({ name: 'Updated Profile', bio: 'Profile bio', interests: ['Physics'], role });
   expect(saved).not.toHaveProperty('password');
-  expect(stored.role).toBe('teacher');
-  expect((await authService.getCurrentUser('teacher-1'))).toMatchObject({
-    name: 'Updated Teacher', bio: 'Course lead', interests: ['Physics'],
+  expect(stored.role).toBe(role);
+  expect((await authService.getCurrentUser(userId))).toMatchObject({
+    name: 'Updated Profile', bio: 'Profile bio', interests: ['Physics'],
   });
   expect(selected[0]).not.toContain('password');
 });
