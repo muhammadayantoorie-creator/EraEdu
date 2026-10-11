@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
 import { courseService, parseCourseCapacity } from './courseService';
+import { canonicalCourseCategory } from './courseCategory';
 
 const fail = (message: string, statusCode: number) => Object.assign(new Error(message), { statusCode });
 const ASSIGNMENT_MIGRATION = 'Course assignment setup is incomplete. Apply backend/migrations/024_assign_courses_to_teachers.sql.';
@@ -90,10 +91,11 @@ export const courseAssignmentService = {
     if (!title || title.length > 255) throw fail('Course title must be between 1 and 255 characters.', 400);
     requireAssignmentIds(input.teacherId, input.organizationId);
     const maxStudents = parseCourseCapacity(input.maxStudents) ?? null;
+    const category = await canonicalCourseCategory(input.category);
     const courseCode = await courseService.generateUniqueCourseCode();
     const { data, error } = await supabase.rpc('admin_create_assigned_course', {
       p_actor_id: actorId, p_teacher_id: input.teacherId, p_organization_id: input.organizationId,
-      p_title: title, p_description: input.description || '', p_category: input.category || 'Other',
+      p_title: title, p_description: input.description || '', p_category: category,
       p_difficulty: input.difficulty || 'Beginner', p_course_code: courseCode, p_max_students: maxStudents,
     });
     if (error) assignmentRpcError(error);

@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
 import { emailService } from './emailService';
+import { canonicalCourseCategory, normalizeCourseCategory } from './courseCategory';
 
 function isMissingColumnError(err: any, column: string): boolean {
   if (!err) return false;
@@ -62,8 +63,9 @@ export const courseService = {
   async getAllCourses(filters: any = {}) {
     let query = supabase.from('courses').select('*');
 
-    if (filters.category) {
-      query = query.eq('category', filters.category);
+    if (filters.category !== undefined) {
+      const category = normalizeCourseCategory(filters.category).replace(/[\\%_]/g, '\\$&');
+      query = query.ilike('category', category);
     }
     if (filters.difficulty) {
       query = query.eq('difficulty', filters.difficulty);
@@ -188,12 +190,13 @@ export const courseService = {
 
   async createCourse(teacherId: string, courseData: any) {
     const capacity = parseCourseCapacity(courseData.maxStudents) ?? null;
+    const category = await canonicalCourseCategory(courseData.category);
     const courseCode = await this.generateUniqueCourseCode();
 
     const insertData: any = {
       title: courseData.title,
       description: courseData.description || '',
-      category: courseData.category || 'Other',
+      category,
       difficulty: courseData.difficulty || 'Beginner',
       created_by: teacherId,
       course_code: courseCode,
@@ -228,7 +231,7 @@ export const courseService = {
     // Verify ownership
     const { data: existing } = await supabase
       .from('courses')
-      .select('created_by')
+      .select('created_by, category')
       .eq('id', courseId)
       .single();
 
@@ -239,9 +242,9 @@ export const courseService = {
     const updatePayload: any = {
       title: courseData.title,
       description: courseData.description,
-      category: courseData.category,
       difficulty: courseData.difficulty,
     };
+    if (courseData.category !== undefined) updatePayload.category = await canonicalCourseCategory(courseData.category, existing.category);
     const capacity = parseCourseCapacity(courseData.maxStudents);
     if (capacity !== undefined) updatePayload.max_students = capacity;
 

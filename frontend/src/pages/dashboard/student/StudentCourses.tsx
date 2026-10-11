@@ -38,7 +38,7 @@ const StudentCourses = () => {
         (course) =>
           course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
           course.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          course.category.toLowerCase().includes(searchTerm.toLowerCase())
+          (course.category || '').toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 

@@ -38,16 +38,17 @@ describe('admin course assignment', () => {
 
   it('creates a course for the selected teacher and institution without changing the admin role', async () => {
     jest.spyOn(courseService, 'generateUniqueCourseCode').mockResolvedValue('ABC123');
+    mockFrom.mockReturnValue({ select: () => ({ ilike: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }) });
     mockRpc.mockResolvedValue({ data: { id: 'course-1', title: 'Course', created_by: 'teacher-1', organization_id: 'org-1', max_students: 30 }, error: null });
     const created = await courseAssignmentService.createAssignedCourse('admin-1', {
-      title: 'Course', organizationId: 'org-1', teacherId: 'teacher-1', maxStudents: 30,
+      title: 'Course', category: 'Civil Engineering', organizationId: 'org-1', teacherId: 'teacher-1', maxStudents: 30,
     });
     expect(mockRpc).toHaveBeenCalledWith('admin_create_assigned_course', expect.objectContaining({
       p_actor_id: 'admin-1', p_teacher_id: 'teacher-1', p_organization_id: 'org-1',
-      p_max_students: 30, p_course_code: 'ABC123',
+      p_max_students: 30, p_course_code: 'ABC123', p_category: 'Civil Engineering',
     }));
     expect(created).toMatchObject({ _id: 'course-1', createdBy: 'teacher-1', maxStudents: 30 });
-    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockFrom).toHaveBeenCalledTimes(1);
   });
 
   it('reassigns with a single database call and handles idempotent retry', async () => {

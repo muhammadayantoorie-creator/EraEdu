@@ -5,6 +5,7 @@ import api from '../../../services/api';
 import { useAuthStore } from '../../../store/authStore';
 import toast from 'react-hot-toast';
 import { parseCourseCapacity } from '../../../utils/courseCapacity';
+import { parseCourseCategory, MAX_COURSE_CATEGORY_LENGTH } from '../../../utils/courseCategory';
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -82,7 +83,7 @@ const TeacherCourses = () => {
     setEditForm({
       title: course.title || '',
       description: course.description || '',
-      category: course.category || 'Other',
+      category: course.category || '',
       difficulty: course.difficulty || 'Beginner',
       maxStudents: course.maxStudents != null ? String(course.maxStudents) : '',
     });
@@ -96,8 +97,10 @@ const TeacherCourses = () => {
       return;
     }
     let maxStudentsValue: number | null;
+    let category: string;
     try {
       maxStudentsValue = parseCourseCapacity(editForm.maxStudents);
+      category = parseCourseCategory(editForm.category);
     } catch (error) {
       toast.error((error as Error).message);
       return;
@@ -107,7 +110,7 @@ const TeacherCourses = () => {
       await api.put(`/courses/${editingCourse._id}`, {
         title: editForm.title.trim(),
         description: editForm.description,
-        category: editForm.category,
+        category,
         difficulty: editForm.difficulty,
         maxStudents: maxStudentsValue,
       });
@@ -141,10 +144,11 @@ const TeacherCourses = () => {
     }
   };
 
+  const normalizedSearch = searchTerm.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
   const filteredCourses = courses.filter(
     (course) =>
-      course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      course.category.toLowerCase().includes(searchTerm.toLowerCase())
+      course.title.toLocaleLowerCase().includes(normalizedSearch) ||
+      (course.category || '').replace(/\s+/g, ' ').toLocaleLowerCase().includes(normalizedSearch)
   );
 
   const getDifficultyBadge = (difficulty: string) => {
@@ -358,11 +362,13 @@ const TeacherCourses = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
                 <input
                   type="text"
                   value={editForm.category}
                   onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                  maxLength={MAX_COURSE_CATEGORY_LENGTH + 20}
+                  required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 />
               </div>

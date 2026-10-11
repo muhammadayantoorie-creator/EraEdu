@@ -39,7 +39,7 @@ describe('course capacity persistence', () => {
     mockFrom.mockImplementation((table: string) => {
       if (table !== 'courses') throw new Error(`Unexpected table ${table}`);
       return {
-        select: () => ({ eq: () => ({ single: async () => ({ data: null }) }) }),
+        select: () => ({ eq: () => ({ single: async () => ({ data: null }) }), ilike: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
         insert: (rows: any[]) => {
           inserted = rows[0];
           return { select: () => ({ single: async () => ({ data: { id: 'course-1', ...inserted }, error: null }) }) };
@@ -47,7 +47,7 @@ describe('course capacity persistence', () => {
       };
     });
 
-    const created = await courseService.createCourse('teacher-1', { title: 'Course', maxStudents: 30 });
+    const created = await courseService.createCourse('teacher-1', { title: 'Course', category: 'Other', maxStudents: 30 });
     expect(inserted.max_students).toBe(30);
     expect(created.maxStudents).toBe(30);
   });
@@ -61,7 +61,7 @@ describe('course capacity persistence', () => {
   it('rejects missing capacity schema without retrying an insert without the field', async () => {
     let inserts = 0;
     mockFrom.mockImplementation(() => ({
-      select: () => ({ eq: () => ({ single: async () => ({ data: null }) }) }),
+      select: () => ({ eq: () => ({ single: async () => ({ data: null }) }), ilike: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
       insert: () => {
         inserts++;
         return { select: () => ({ single: async () => ({
@@ -71,7 +71,7 @@ describe('course capacity persistence', () => {
       },
     }));
 
-    await expect(courseService.createCourse('teacher-1', { title: 'Course', maxStudents: 30 }))
+    await expect(courseService.createCourse('teacher-1', { title: 'Course', category: 'Other', maxStudents: 30 }))
       .rejects.toMatchObject({ statusCode: 503, message: expect.stringContaining('006_add_course_capacity.sql') });
     expect(inserts).toBe(1);
   });

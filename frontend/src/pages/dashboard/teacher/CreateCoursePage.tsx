@@ -5,6 +5,7 @@ import api from '../../../services/api';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../../store/authStore';
 import { parseCourseCapacity } from '../../../utils/courseCapacity';
+import { parseCourseCategory, MAX_COURSE_CATEGORY_LENGTH } from '../../../utils/courseCategory';
 
 const CreateCoursePage = () => {
   const navigate = useNavigate();
@@ -68,8 +69,10 @@ const CreateCoursePage = () => {
     }
 
     let maxStudentsValue: number | null;
+    let category: string;
     try {
       maxStudentsValue = parseCourseCapacity(formData.maxStudents);
+      category = parseCourseCategory(formData.category);
     } catch (error) {
       toast.error((error as Error).message);
       return;
@@ -79,7 +82,7 @@ const CreateCoursePage = () => {
     try {
       await api.post(user?.role === 'admin' ? '/admin/courses' : '/courses', {
         ...formData,
-        category: formData.category.trim() || 'Other',
+        category,
         description: formData.description || `Learn ${formData.title}`,
         maxStudents: maxStudentsValue,
         ...(user?.role === 'admin' ? { organizationId, teacherId } : {}),
@@ -156,14 +159,16 @@ const CreateCoursePage = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category
+              Category <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="Enter your own category (optional)"
+              placeholder="Enter a category or choose a suggestion"
+              maxLength={MAX_COURSE_CATEGORY_LENGTH + 20}
+              required
             />
             <button
               type="button"
