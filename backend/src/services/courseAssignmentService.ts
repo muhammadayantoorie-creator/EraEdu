@@ -59,6 +59,7 @@ export const courseAssignmentService = {
     if (search.trim()) query = query.ilike('title', `%${search.trim()}%`);
     const { data: courses, error, count } = await query;
     if (error) throw new Error(error.message);
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) throw new Error('Failed to count courses: no valid count returned');
     const ownerIds = [...new Set((courses || []).map((course: any) => course.created_by).filter(Boolean))];
     const { data: owners, error: ownerError } = ownerIds.length
       ? await supabase.from('users').select('id, name, email, role').in('id', ownerIds)
@@ -83,7 +84,7 @@ export const courseAssignmentService = {
         assignedTeacherEmail: owner?.role === 'teacher' ? owner.email : '', enrollmentCount: enrollmentCount ?? 0,
         topics: (topics || []).map((topic: any) => topic.id) };
     }));
-    return { data: rows, pagination: { page: safePage, limit: safeLimit, total: count ?? 0 } };
+    return { data: rows, pagination: { page: safePage, limit: safeLimit, total: count } };
   },
 
   async createAssignedCourse(actorId: string, input: any) {

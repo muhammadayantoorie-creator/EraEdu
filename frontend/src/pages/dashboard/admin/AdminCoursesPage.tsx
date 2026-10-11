@@ -34,11 +34,12 @@ const AdminCoursesPage = () => {
     try {
       const { data } = await api.get('/admin/courses', { params: { search, page, limit: 50 } });
       if (requestId !== requestRef.current) return;
+      if (!Number.isSafeInteger(data.pagination?.total) || data.pagination.total < 0) throw new Error('Course count is unavailable. Please retry.');
       setCourses(data.data || []);
-      setTotal(data.pagination?.total ?? 0);
+      setTotal(data.pagination.total);
     } catch (err: any) {
       if (requestId !== requestRef.current) return;
-      setError(err.response?.data?.error?.message || 'Could not load courses.');
+      setError(err.response?.data?.error?.message || err.message || 'Could not load courses.');
     } finally {
       if (requestId === requestRef.current) setLoading(false);
     }
@@ -96,7 +97,7 @@ const AdminCoursesPage = () => {
       : loading ? <p className="text-sm text-gray-500">Loading courses…</p>
         : courses.length === 0 ? <p className="rounded-lg border bg-white p-6 text-sm text-gray-500">{search ? 'No courses match this search.' : 'No courses have been created yet.'}</p>
           : <div className="overflow-x-auto rounded-xl border bg-white"><table className="min-w-full text-left text-sm"><thead className="bg-gray-50 text-gray-600"><tr><th className="px-4 py-3">Course</th><th className="px-4 py-3">Assigned teacher</th><th className="px-4 py-3">Students</th><th className="px-4 py-3">Topics</th><th className="px-4 py-3">Actions</th></tr></thead><tbody>{courses.map(course => <tr key={course._id} className="border-t"><td className="px-4 py-3"><p className="font-medium">{course.title}</p><p className="text-xs text-gray-500">{course.category}</p></td><td className="px-4 py-3"><p>{course.assignedTeacherName}</p><p className="text-xs text-gray-500">{course.assignedTeacherEmail}</p></td><td className="px-4 py-3">{course.enrollmentCount}{course.maxStudents != null ? ` / ${course.maxStudents}` : ' / unlimited'}</td><td className="px-4 py-3">{course.topics.length}</td><td className="px-4 py-3"><div className="flex gap-3"><Link to={`/courses/${course._id}`} className="text-primary-700 underline">View</Link><button onClick={() => openAssignment(course)} className="text-primary-700 underline">Assign</button></div></td></tr>)}</tbody></table></div>}
-    <div className="flex items-center justify-between text-sm text-gray-600"><span>{total} total courses</span><div className="flex gap-2"><button disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)} className="rounded border px-3 py-1 disabled:opacity-40">Previous</button><button disabled={page * 50 >= total || loading} onClick={() => setPage(value => value + 1)} className="rounded border px-3 py-1 disabled:opacity-40">Next</button></div></div>
+    {!error && !loading && <div className="flex items-center justify-between text-sm text-gray-600"><span>{total} total courses</span><div className="flex gap-2"><button disabled={page === 1} onClick={() => setPage(value => value - 1)} className="rounded border px-3 py-1 disabled:opacity-40">Previous</button><button disabled={page * 50 >= total} onClick={() => setPage(value => value + 1)} className="rounded border px-3 py-1 disabled:opacity-40">Next</button></div></div>}
     {assignment && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div role="dialog" aria-modal="true" aria-label="Assign course" className="w-full max-w-md space-y-4 rounded-xl bg-white p-6"><h2 className="text-lg font-semibold">Assign {assignment.title}</h2><p className="text-sm text-gray-600">Course content, enrollments, exams, and attempt history stay with this course.</p>
       {optionsError && <div role="alert" className="text-sm text-red-700">{optionsError} <button onClick={() => void loadOptions()} className="underline">Retry</button></div>}
       <label className="block text-sm">Institution<select value={organizationId} disabled={!!assignment.organizationId} onChange={event => { setOrganizationId(event.target.value); setTeacherId(''); }} className="mt-1 w-full rounded-lg border p-2"><option value="">Select institution</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}</option>)}</select></label>

@@ -3,11 +3,13 @@ import { supabase } from '../config/supabase';
 const count = async (table: string) => {
   const { count: value, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
   if (error) throw new Error(`Failed to count ${table}: ${error.message}`);
-  return value ?? 0;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error(`Failed to count ${table}: no valid count returned`);
+  return value;
 };
 
 export const adminService = {
   async getOverview() {
+    // Total courses: the admin governance list has no publication or archive filter.
     const [users, courses, quizzes, attempts, violations] = await Promise.all([
       count('users'), count('courses'), count('teacher_quizzes'), count('quiz_attempts'), count('cheating_violations'),
     ]);
