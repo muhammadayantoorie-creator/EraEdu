@@ -1,7 +1,7 @@
 import express from 'express';
 import { 
   getDashboardStats, getCourseAnalytics, getWeakTopics, getProgressOverTime,
-  getTeacherStats, getTeacherCoursePerformance, getTeacherCourseAnalytics,
+  getTeacherStats, getTeacherRecentActivity, getTeacherCoursePerformance, getTeacherCourseAnalytics,
   getTeacherTimeSeries, getTeacherCourses, getTeacherTopics, getTeacherQuestions
 } from '../controllers/analyticsController';
 import { exportMarksCSV } from '../controllers/exportController';
@@ -19,6 +19,7 @@ router.get('/progress-over-time', getProgressOverTime);
 
 // Teacher analytics routes (teacher and admin only)
 router.get('/teacher/stats', authorize('teacher', 'admin'), getTeacherStats);
+router.get('/teacher/recent-activity', authorize('teacher', 'admin'), getTeacherRecentActivity);
 router.get('/teacher/overview', authorize('teacher', 'admin'), getTeacherStats); // Alias for frontend compatibility
 router.get('/teacher/course-performance', authorize('teacher', 'admin'), getTeacherCoursePerformance);
 router.get('/teacher/course-analytics', authorize('teacher', 'admin'), getTeacherCourseAnalytics);

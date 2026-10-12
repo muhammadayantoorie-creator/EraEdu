@@ -34,6 +34,14 @@ interface CoursePerformance {
   enrollments: number;
 }
 
+interface TeacherActivity {
+  id: string;
+  type: 'enrollment' | 'submission' | 'topic';
+  text: string;
+  occurredAt: string;
+  href: string;
+}
+
 const Stroke = ({ d, size = 18 }: { d: string; size?: number }) => (
   <svg
     viewBox="0 0 24 24"
@@ -56,6 +64,9 @@ const TeacherOverview = () => {
   const [coursePerformance, setCoursePerformance] = useState<CoursePerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<TeacherActivity[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
@@ -167,7 +178,23 @@ const TeacherOverview = () => {
 
   useEffect(() => {
     fetchTeacherStats();
+    fetchActivity();
   }, []);
+
+  const fetchActivity = async () => {
+    setActivityLoading(true);
+    setActivityError(null);
+    try {
+      const { data } = await api.get('/analytics/teacher/recent-activity');
+      if (!Array.isArray(data.data)) throw new Error('Recent activity response is incomplete. Please retry.');
+      setActivity(data.data);
+    } catch (error: any) {
+      setActivity([]);
+      setActivityError(error.response?.data?.error?.message || error.message || 'Could not load recent activity.');
+    } finally {
+      setActivityLoading(false);
+    }
+  };
 
   const fetchTeacherStats = async () => {
     setLoading(true);
@@ -240,7 +267,7 @@ const TeacherOverview = () => {
                 </span>
               </h1>
               <p className="mt-3 max-w-xl text-[14.5px] leading-relaxed text-white/60">
-                Author exams, curate questions, and watch your cohort progress in real time.
+                Author exams, curate questions, and track your cohort's progress.
               </p>
             </div>
 
@@ -474,39 +501,33 @@ const TeacherOverview = () => {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-ink-400">
-                  Live Feed
+                  Recently recorded
                 </span>
                 <h3 className="mt-1 font-display text-[20px] tracking-tightest text-ink-900">
                   Recent Activity
                 </h3>
               </div>
-              <Link
-                to="/dashboard/teacher/analytics"
-                className="text-[12px] font-medium text-primary-700 hover:text-primary-900 transition-colors"
-              >
-                View all →
-              </Link>
+              <button type="button" onClick={() => void fetchActivity()} disabled={activityLoading}
+                className="text-[12px] font-medium text-primary-700 hover:text-primary-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-700 disabled:opacity-50">
+                Refresh
+              </button>
             </div>
-            <ul className="space-y-2">
-              {[
-                { text: 'New student enrolled in JavaScript Basics', time: '2 hours ago' },
-                { text: '15 students completed React Exam #3', time: '5 hours ago' },
-                { text: 'Python course reached 50 enrollments', time: '1 day ago' },
-              ].map((a, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-3 rounded-2xl bg-ink-50/60 ring-1 ring-ink-900/[0.04] px-4 py-3 transition-colors duration-500 hover:bg-ink-50"
-                >
+            {activityLoading ? <p className="text-sm text-ink-500">Loading recent activity…</p>
+              : activityError ? <div role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{activityError} <button type="button" onClick={() => void fetchActivity()} className="font-semibold underline">Retry</button></div>
+                : activity.length === 0 ? <p className="rounded-xl bg-ink-50/60 p-4 text-sm text-ink-500">No recent activity has been recorded for your courses or exams.</p>
+                  : <ul className="space-y-2">{activity.map((event) => (
+                <li key={event.id}>
+                  <Link to={event.href} className="flex items-start gap-3 rounded-2xl bg-ink-50/60 ring-1 ring-ink-900/[0.04] px-4 py-3 transition-colors duration-500 hover:bg-ink-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-700">
                   <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700 ring-1 ring-primary-100">
                     <Stroke d="M3 17l6-6 4 4 8-8 M14 7h7v7" size={14} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[13.5px] text-ink-800">{a.text}</p>
-                    <p className="mt-0.5 text-[10px] uppercase tracking-wider text-ink-400">{a.time}</p>
+                    <p className="text-[13.5px] text-ink-800">{event.text}</p>
+                    <p className="mt-0.5 text-[10px] text-ink-400">{new Date(event.occurredAt).toLocaleString()}</p>
                   </div>
+                  </Link>
                 </li>
-              ))}
-            </ul>
+              ))}</ul>}
           </div>
         </div>
 

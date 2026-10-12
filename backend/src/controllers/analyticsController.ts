@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { analyticsService } from '../services/analyticsService';
 import { asyncHandler } from '../middleware/errorHandler';
+import { teacherActivityService } from '../services/teacherActivityService';
 
 export const getDashboardStats = asyncHandler(async (req: Request, res: Response) => {
   const stats = await analyticsService.getDashboardStats(req.user!._id.toString());
@@ -33,6 +34,10 @@ export const getTeacherStats = asyncHandler(async (req: Request, res: Response) 
     success: true,
     data: stats,
   });
+});
+
+export const getTeacherRecentActivity = asyncHandler(async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await teacherActivityService.getRecent(req.user!._id.toString()) });
 });
 
 export const getTeacherCoursePerformance = asyncHandler(async (req: Request, res: Response) => {
