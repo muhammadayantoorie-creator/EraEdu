@@ -13,6 +13,11 @@ const SAFE_400_MESSAGES = new Set<string>([
 ]);
 
 const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
+  'Student feedback storage is unavailable. An administrator must apply or reconcile backend/migrations/009_add_student_feedback.sql.',
+  'Unable to verify this exam attempt right now. Please retry.',
+  'Feedback could not be saved right now. Please retry.',
+  'Feedback could not be confirmed right now. Please retry.',
+  'Student feedback could not be loaded right now. Please retry.',
   'Course capacity schema is missing. Apply migrations 006_add_course_capacity.sql and 023_enforce_course_capacity_atomically.sql.',
   'Atomic enrollment is unavailable. Apply migration 023_enforce_course_capacity_atomically.sql.',
   'Course code schema is missing. Apply migration 015_add_course_code.sql.',
