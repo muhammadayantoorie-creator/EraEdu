@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { explainProtectedDelete, requireAssessmentHistoryProtection } from './assessmentHistoryPolicy';
 import { assertStudentEmailPolicy } from './authService';
 import { aiService } from './aiService';
+import { analyticsService } from './analyticsService';
 
 interface QuizQuestion {
   text: string;
@@ -1335,15 +1336,20 @@ export const quizService = {
 
   // Get teacher analytics
   async getTeacherAnalytics(teacherId: string) {
+    // Match the overview's unique enrolled-student metric, including teachers
+    // who have courses and learners but have not authored an exam yet.
+    const { totalStudents } = await analyticsService.getTeacherStudentSummary(teacherId);
     // Get all quizzes by this teacher
-    const { data: quizzes } = await supabase
+    const { data: quizzes, error: quizzesError } = await supabase
       .from('teacher_quizzes')
       .select('id, title')
       .eq('teacher_id', teacherId);
+    if (quizzesError) throw new Error(`Failed to load teacher exams: ${quizzesError.message}`);
+    if (!Array.isArray(quizzes)) throw new Error('Failed to load teacher exams: no rows returned');
 
     if (!quizzes || quizzes.length === 0) {
       return {
-        totalStudents: 0,
+        totalStudents,
         totalQuizzes: 0,
         totalAttempts: 0,
         avgScore: 0,
@@ -1358,17 +1364,18 @@ export const quizService = {
     const quizIds = quizzes.map(q => q.id);
 
     // Get all attempts for these quizzes
-    const { data: attempts } = await supabase
+    const { data: attempts, error: attemptsError } = await supabase
       .from('quiz_attempts')
       .select('*')
       .in('quiz_id', quizIds)
       .eq('status', 'completed')
       .order('completed_at', { ascending: false });
+    if (attemptsError) throw new Error(`Failed to load exam attempts: ${attemptsError.message}`);
+    if (!Array.isArray(attempts)) throw new Error('Failed to load exam attempts: no rows returned');
 
     const completedAttempts = attempts || [];
 
     // Calculate stats
-    const uniqueStudents = new Set(completedAttempts.map(a => a.user_id));
     const scores = completedAttempts.map(a => a.max_score > 0 ? (a.score / a.max_score) * 100 : 0);
     const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     const passCount = scores.filter(s => s >= 60).length;
@@ -1406,10 +1413,11 @@ export const quizService = {
     }
 
     // Course-wise participation data (enrolled count, participating count, percentage)
-    const { data: teacherCourses } = await supabase
+    const { data: teacherCourses, error: teacherCoursesError } = await supabase
       .from('courses')
       .select('id, title, created_by')
       .eq('created_by', teacherId);
+    if (teacherCoursesError) throw new Error(`Failed to load courses: ${teacherCoursesError.message}`);
 
     const courseParticipation: Array<{
       courseId: string;
@@ -1420,28 +1428,31 @@ export const quizService = {
     }> = [];
 
     for (const course of teacherCourses || []) {
-      const { data: enrollments } = await supabase
+      const { data: enrollments, error: enrollmentsError } = await supabase
         .from('enrollments')
         .select('user_id')
         .eq('course_id', course.id);
+      if (enrollmentsError) throw new Error(`Failed to load enrollments: ${enrollmentsError.message}`);
 
       const enrolledIds = [...new Set((enrollments || []).map((e: any) => e.user_id))];
 
-      const { data: courseQuizzes } = await supabase
+      const { data: courseQuizzes, error: courseQuizzesError } = await supabase
         .from('teacher_quizzes')
         .select('id')
         .eq('teacher_id', teacherId)
         .eq('course_id', course.id);
+      if (courseQuizzesError) throw new Error(`Failed to load teacher exams: ${courseQuizzesError.message}`);
 
       const courseQuizIds = (courseQuizzes || []).map((q: any) => q.id);
 
       let attemptedStudents = 0;
       if (courseQuizIds.length > 0) {
-        const { data: courseAttempts } = await supabase
+        const { data: courseAttempts, error: courseAttemptsError } = await supabase
           .from('quiz_attempts')
           .select('user_id')
           .in('quiz_id', courseQuizIds)
           .eq('status', 'completed');
+        if (courseAttemptsError) throw new Error(`Failed to load exam attempts: ${courseAttemptsError.message}`);
 
         attemptedStudents = new Set((courseAttempts || []).map((a: any) => a.user_id)).size;
       }
@@ -1461,7 +1472,7 @@ export const quizService = {
     }
 
     return {
-      totalStudents: uniqueStudents.size,
+      totalStudents,
       totalQuizzes: quizzes.length,
       totalAttempts: completedAttempts.length,
       avgScore: Math.round(avgScore * 10) / 10,

@@ -55,6 +55,7 @@ const TeacherOverview = () => {
   const [stats, setStats] = useState<TeacherStats | null>(null);
   const [coursePerformance, setCoursePerformance] = useState<CoursePerformance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
@@ -170,29 +171,21 @@ const TeacherOverview = () => {
 
   const fetchTeacherStats = async () => {
     setLoading(true);
+    setStatsError(null);
     try {
       const [statsRes, performanceRes] = await Promise.all([
         api.get('/analytics/teacher/stats'),
         api.get('/analytics/teacher/course-performance'),
       ]);
+      if (!Number.isSafeInteger(statsRes.data.data?.totalStudents) || statsRes.data.data.totalStudents < 0 || !Array.isArray(performanceRes.data.data)) {
+        throw new Error('Teacher analytics response is incomplete. Please retry.');
+      }
       setStats(statsRes.data.data);
-      setCoursePerformance(performanceRes.data.data || []);
-    } catch (error) {
-      setStats({
-        totalCourses: 5,
-        totalStudents: 128,
-        totalQuestions: 245,
-        totalTopics: 32,
-        avgStudentScore: 76.5,
-        activeEnrollments: 89,
-      });
-      setCoursePerformance([
-        { courseName: 'JavaScript Basics', avgScore: 82, completionRate: 75, enrollments: 45 },
-        { courseName: 'React Fundamentals', avgScore: 78, completionRate: 68, enrollments: 38 },
-        { courseName: 'Node.js Backend', avgScore: 71, completionRate: 52, enrollments: 28 },
-        { courseName: 'Python for Beginners', avgScore: 85, completionRate: 82, enrollments: 52 },
-        { courseName: 'Data Structures', avgScore: 68, completionRate: 45, enrollments: 21 },
-      ]);
+      setCoursePerformance(performanceRes.data.data);
+    } catch (error: any) {
+      setStats(null);
+      setCoursePerformance([]);
+      setStatsError(error.response?.data?.error?.message || error.message || 'Could not load teacher analytics.');
     } finally {
       setLoading(false);
     }
@@ -206,6 +199,13 @@ const TeacherOverview = () => {
         </div>
       </div>
     );
+  }
+
+  if (statsError || !stats) {
+    return <div role="alert" className="mx-auto max-w-7xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800">
+      <p>{statsError || 'Teacher analytics are unavailable.'}</p>
+      <button type="button" onClick={() => void fetchTeacherStats()} className="mt-3 rounded-lg bg-primary-700 px-4 py-2 text-sm font-semibold text-white">Retry</button>
+    </div>;
   }
 
   return (
@@ -351,10 +351,8 @@ const TeacherOverview = () => {
         <StatCard
           icon={<Stroke d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M22 21v-2a4 4 0 0 0-3-3.9 M16 3.1a4 4 0 0 1 0 7.8" />}
           label="Total Students"
-          value={stats?.totalStudents || 0}
+          value={stats.totalStudents}
           color="blue"
-          trend="up"
-          change={8}
         />
         <StatCard
           icon={<Stroke d="M9 9a3 3 0 1 1 4.3 2.7c-.8.4-1.3 1-1.3 2V14 M12 18h.01 M3 12a9 9 0 1 1 18 0 9 9 0 0 1-18 0z" />}
@@ -370,6 +368,7 @@ const TeacherOverview = () => {
           trend={stats?.avgStudentScore && stats.avgStudentScore >= 70 ? 'up' : 'down'}
         />
       </section>
+      <p className="text-xs text-ink-500">Total Students counts each learner once across your assigned courses. Growth is unavailable without comparable historical data.</p>
 
       {/* Charts — Asymmetrical */}
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -41,6 +41,7 @@ interface AnalyticsData {
 const TeacherAnalytics = () => {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAnalytics();
@@ -48,21 +49,16 @@ const TeacherAnalytics = () => {
 
   const fetchAnalytics = async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await api.get('/quizzes/teacher/analytics');
+      if (!Number.isSafeInteger(response.data.data?.totalStudents) || response.data.data.totalStudents < 0) {
+        throw new Error('Teacher analytics response is incomplete. Please retry.');
+      }
       setAnalytics(response.data.data);
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
-      setAnalytics({
-        totalStudents: 0,
-        totalQuizzes: 0,
-        totalAttempts: 0,
-        avgScore: 0,
-        passRate: 0,
-        scoreDistribution: [],
-        weeklyData: [],
-        courseParticipation: [],
-      });
+    } catch (caught: any) {
+      setAnalytics(null);
+      setError(caught.response?.data?.error?.message || caught.message || 'Could not load teacher analytics.');
     } finally {
       setLoading(false);
     }
@@ -76,6 +72,13 @@ const TeacherAnalytics = () => {
     );
   }
 
+  if (error || !analytics) {
+    return <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-5 text-red-700">
+      <p>{error || 'Teacher analytics are unavailable.'}</p>
+      <button type="button" onClick={() => void fetchAnalytics()} className="mt-2 underline">Retry</button>
+    </div>;
+  }
+
   const hasData = !!analytics && (
     analytics.totalAttempts > 0 ||
     (analytics.courseParticipation && analytics.courseParticipation.length > 0)
@@ -87,6 +90,7 @@ const TeacherAnalytics = () => {
       <header>
         <h1 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
         <p className="text-sm text-gray-500 mt-1">Track student performance and engagement</p>
+        <p className="text-xs text-gray-500 mt-1">Total Students counts each learner once across your assigned courses.</p>
       </header>
 
       {/* Stats Grid */}
@@ -94,7 +98,7 @@ const TeacherAnalytics = () => {
         <StatCard
           icon={<UserGroupIcon className="h-6 w-6" />}
           label="Total Students"
-          value={analytics?.totalStudents || 0}
+          value={analytics.totalStudents}
           color="blue"
         />
         <StatCard

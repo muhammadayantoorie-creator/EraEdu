@@ -1,5 +1,20 @@
 import { supabase } from '../config/supabase';
 
+// Page through PostgREST results so a teacher with more than the default row
+// limit still gets an exact, course-scoped unique learner count.
+async function readAllRows(table: string, columns: string, filter: (query: any) => any): Promise<any[]> {
+  const pageSize = 500;
+  const rows: any[] = [];
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await filter(supabase.from(table).select(columns))
+      .order('id', { ascending: true }).range(start, start + pageSize - 1);
+    if (error) throw new Error(`Failed to load ${table}: ${error.message}`);
+    if (!Array.isArray(data)) throw new Error(`Failed to load ${table}: no rows returned`);
+    rows.push(...data);
+    if (data.length < pageSize) return rows;
+  }
+}
+
 export const analyticsService = {
   async getDashboardStats(userId: string) {
     let coursesEnrolled = 0;
@@ -50,72 +65,78 @@ export const analyticsService = {
 
   // ============ Teacher Analytics ============
 
+  async getTeacherStudentSummary(teacherId: string) {
+    const courses = await readAllRows('courses', 'id', query => query.eq('created_by', teacherId));
+    const courseIds = courses.map((course: any) => course.id);
+    if (courseIds.some((id: unknown) => typeof id !== 'string' || !id)) throw new Error('Course IDs are missing from teacher analytics');
+    const students = new Set<string>();
+    let activeEnrollments = 0;
+    for (let start = 0; start < courseIds.length; start += 100) {
+      const enrollments = await readAllRows('enrollments', 'id, user_id', query => query.in('course_id', courseIds.slice(start, start + 100)));
+      for (const enrollment of enrollments) {
+        if (typeof enrollment.user_id !== 'string' || !enrollment.user_id) throw new Error('Student IDs are missing from enrollments');
+        students.add(enrollment.user_id);
+        activeEnrollments += 1;
+      }
+    }
+    return { courseIds, totalCourses: courseIds.length, totalStudents: students.size, activeEnrollments };
+  },
+
   async getTeacherStats(teacherId: string) {
-    let totalCourses = 0;
-    let totalStudents = 0;
+    const { courseIds, totalCourses, totalStudents, activeEnrollments } = await this.getTeacherStudentSummary(teacherId);
     let totalQuestions = 0;
     let totalTopics = 0;
     let avgStudentScore = 0;
-    let activeEnrollments = 0;
 
-    try {
-      // Fetch courses, topics, and enrollments in parallel
-      const [coursesResult, quizzesResult] = await Promise.all([
-        supabase.from('courses').select('id', { count: 'exact' }).eq('created_by', teacherId),
-        supabase.from('teacher_quizzes').select('id').eq('teacher_id', teacherId),
-      ]);
+    const { data: quizzes, error: quizzesError } = await supabase.from('teacher_quizzes').select('id').eq('teacher_id', teacherId);
+    if (quizzesError) throw new Error(`Failed to load teacher exams: ${quizzesError.message}`);
+    if (!Array.isArray(quizzes)) throw new Error('Failed to load teacher exams: no rows returned');
 
-      totalCourses = coursesResult.count || 0;
-      const courseIds = (coursesResult.data || []).map((c: any) => c.id);
-
-      if (courseIds.length > 0) {
-        const [enrollResult, topicResult] = await Promise.all([
-          supabase.from('enrollments').select('*', { count: 'exact', head: true }).in('course_id', courseIds),
-          supabase.from('topics').select('id', { count: 'exact' }).in('course_id', courseIds),
-        ]);
-
-        totalStudents = enrollResult.count || 0;
-        activeEnrollments = enrollResult.count || 0;
-        totalTopics = topicResult.count || 0;
-
-        const topicIds = (topicResult.data || []).map((t: any) => t.id);
-        if (topicIds.length > 0) {
-          const { count: qCount } = await supabase
-            .from('questions')
-            .select('*', { count: 'exact', head: true })
-            .in('topic_id', topicIds);
-          totalQuestions = qCount || 0;
-        }
+    if (courseIds.length > 0) {
+      const topics = (await Promise.all(Array.from({ length: Math.ceil(courseIds.length / 100) }, (_, index) =>
+        readAllRows('topics', 'id', query => query.in('course_id', courseIds.slice(index * 100, index * 100 + 100)))))).flat();
+      totalTopics = topics.length;
+      const topicIds = topics.map((topic: any) => topic.id);
+      if (topicIds.length > 0) {
+        const counts = await Promise.all(Array.from({ length: Math.ceil(topicIds.length / 100) }, async (_, index) => {
+          const { count, error } = await supabase.from('questions').select('*', { count: 'exact', head: true })
+            .in('topic_id', topicIds.slice(index * 100, index * 100 + 100));
+          if (error) throw new Error(`Failed to count questions: ${error.message}`);
+          if (typeof count !== 'number') throw new Error('Failed to count questions: no valid count returned');
+          return count;
+        }));
+        totalQuestions = counts.reduce((sum, count) => sum + count, 0);
       }
-
-      // Calculate avg score from teacher_quizzes attempts
-      const quizIds = (quizzesResult.data || []).map((q: any) => q.id);
-      if (quizIds.length > 0) {
-        const { data: attempts } = await supabase
-          .from('quiz_attempts')
-          .select('score, max_score')
-          .in('quiz_id', quizIds)
-          .eq('status', 'completed');
-
-        if (attempts && attempts.length > 0) {
-          const total = attempts.reduce((sum: number, a: any) =>
-            sum + (a.max_score > 0 ? (a.score / a.max_score) * 100 : 0), 0);
-          avgStudentScore = Math.round(total / attempts.length);
-        }
-      }
-    } catch (e) {
-      console.error('Error fetching teacher stats:', e);
     }
 
+    // Calculate avg score from teacher_quizzes attempts
+    const quizIds = quizzes.map((q: any) => q.id);
+    if (quizIds.length > 0) {
+      const { data: attempts, error: attemptsError } = await supabase
+        .from('quiz_attempts')
+        .select('score, max_score')
+        .in('quiz_id', quizIds)
+        .eq('status', 'completed');
+      if (attemptsError) throw new Error(`Failed to load exam attempts: ${attemptsError.message}`);
+      if (!Array.isArray(attempts)) throw new Error('Failed to load exam attempts: no rows returned');
+
+      if (attempts.length > 0) {
+        const total = attempts.reduce((sum: number, a: any) =>
+          sum + (a.max_score > 0 ? (a.score / a.max_score) * 100 : 0), 0);
+        avgStudentScore = Math.round(total / attempts.length);
+      }
+    }
     return { totalCourses, totalStudents, totalQuestions, totalTopics, avgStudentScore, activeEnrollments };
   },
 
   async getTeacherCoursePerformance(teacherId: string) {
     try {
-      const { data: courses } = await supabase
+      const { data: courses, error: coursesError } = await supabase
         .from('courses')
         .select('id, title')
         .eq('created_by', teacherId);
+      if (coursesError) throw new Error(`Failed to load courses: ${coursesError.message}`);
+      if (!Array.isArray(courses)) throw new Error('Failed to load courses: no rows returned');
 
       if (!courses || courses.length === 0) return [];
 
@@ -126,11 +147,14 @@ export const analyticsService = {
         supabase.from('enrollments').select('course_id').in('course_id', courseIds),
         supabase.from('teacher_quizzes').select('id, course_id').in('course_id', courseIds),
       ]);
+      if (enrollResult.error) throw new Error(`Failed to load enrollments: ${enrollResult.error.message}`);
+      if (quizResult.error) throw new Error(`Failed to load teacher exams: ${quizResult.error.message}`);
 
       const quizIds = (quizResult.data || []).map((q: any) => q.id);
       const attemptResult = quizIds.length > 0
         ? await supabase.from('quiz_attempts').select('score, max_score, status, quiz_id').in('quiz_id', quizIds)
         : { data: [] };
+      if ('error' in attemptResult && attemptResult.error) throw new Error(`Failed to load exam attempts: ${attemptResult.error.message}`);
 
       // Group in memory
       const enrollmentsByCourse: Record<string, number> = {};
@@ -177,7 +201,7 @@ export const analyticsService = {
       });
     } catch (e) {
       console.error('Error fetching course performance:', e);
-      return [];
+      throw e;
     }
   },
 
