@@ -56,10 +56,16 @@ const AdminIntegrityEventsPage = lazy(() => import('./pages/dashboard/admin/Admi
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-  const { isAuthenticated, isAuthChecking } = useAuthStore();
+  const { isAuthenticated, isAuthChecking, authCheckError, checkAuth } = useAuthStore();
   
   if (isAuthChecking) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+  if (authCheckError) {
+    return <div role="alert" className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center text-ink-900">
+      <p>{authCheckError}</p>
+      <button type="button" onClick={() => void checkAuth()} className="rounded-lg bg-primary-700 px-4 py-2 font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-700">Retry account check</button>
+    </div>;
   }
   
   if (!isAuthenticated) {
@@ -109,7 +115,7 @@ function App() {
 
   // Check auth on app mount
   useEffect(() => {
-    const onSessionExpired = () => expireSession();
+    const onSessionExpired = (event: Event) => expireSession((event as CustomEvent<{ code?: string }>).detail?.code);
     window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
     void checkAuth();
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);

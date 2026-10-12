@@ -2,6 +2,15 @@ import { create } from 'zustand';
 import api from '../services/api';
 import { User } from '../types';
 
+const sessionNoticeFor = (code?: string): string => {
+  if (code === 'ACCOUNT_SUSPENDED') return 'Your account has been suspended. Please contact support.';
+  if (code === 'ROLE_CHANGED') return 'Your account role changed. Please sign in again.';
+  if (code === 'ACCOUNT_UNAVAILABLE') return 'This account is no longer available. Please contact support.';
+  if (code === 'ACCOUNT_ROLE_INVALID') return 'This account has no supported access role. Please contact support.';
+  return 'Your session has expired. Please sign in again.';
+};
+let sessionRevision = 0;
+
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -9,25 +18,30 @@ interface AuthState {
   isLoading: boolean;
   isAuthChecking: boolean;
   error: string | null;
+  sessionNotice: string | null;
+  authCheckError: string | null;
   login: (credentials: any) => Promise<void>;
   register: (data: any) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string>;
   resetPassword: (token: string, password: string) => Promise<string>;
   logout: () => void;
-  expireSession: () => void;
+  expireSession: (code?: string) => void;
   checkAuth: () => Promise<void>;
   updateProfile: (data: Partial<User>) => Promise<void>;
 }
 
-export const useAuthStore = create<AuthState>((set, _get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
   isAuthenticated: false,
   isLoading: false,
   isAuthChecking: true, // Start as true to prevent flash
   error: null,
+  sessionNotice: null,
+  authCheckError: null,
 
   login: async (credentials) => {
+    sessionRevision += 1;
     // A new sign-in attempt must never inherit an earlier user session. In
     // particular, a student must not be redirected by a stale /auth/me check
     // before completing the required face verification step.
@@ -38,6 +52,8 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       token: null,
       isAuthenticated: false,
       isAuthChecking: false,
+      sessionNotice: null,
+      authCheckError: null,
     });
     try {
        const response = await api.post<any>('/auth/login', credentials);
@@ -46,7 +62,7 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
       // A slow initial /auth/me check can still be in flight when a user signs
       // in. Mark the new session as settled immediately so that stale check
       // cannot send the user back to the sign-in screen.
-      set({ user: responseData.user || responseData, token: null, isAuthenticated: true, isLoading: false, isAuthChecking: false, error: null });
+      set({ user: responseData.user || responseData, token: null, isAuthenticated: true, isLoading: false, isAuthChecking: false, error: null, sessionNotice: null, authCheckError: null });
     } catch (error: any) {
       const message = error.response?.data?.message || error.response?.data?.error?.message || 'Login failed';
       set({ error: message, isLoading: false });
@@ -105,30 +121,34 @@ export const useAuthStore = create<AuthState>((set, _get) => ({
   },
 
   logout: () => {
+    sessionRevision += 1;
     void api.post('/auth/logout').catch(() => undefined);
-    set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false });
+    set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false, sessionNotice: null, authCheckError: null });
   },
 
-  expireSession: () => {
-    set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false });
+  expireSession: (code) => {
+    sessionRevision += 1;
+    set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false, sessionNotice: sessionNoticeFor(code), authCheckError: null });
   },
 
   checkAuth: async () => {
-    // Don't set isLoading, use separate isAuthChecking
+    // Don't set isLoading, use separate isAuthChecking.
+    const revision = sessionRevision;
+    set({ isAuthChecking: true, authCheckError: null });
     try {
       const response = await api.get<any>('/auth/me');
-      // A student has just passed password validation and is awaiting camera
-      // verification. Ignore any older cookie-session response so it cannot
-      // bypass the face-verification screen.
-      set({ user: response.data.data, isAuthenticated: true, isAuthChecking: false });
-    } catch (error) {
-      // Do not let an older failed checkAuth request overwrite a session that
-      // was established by a successful login in the meantime.
-      if (_get().isAuthenticated) {
-        set({ isAuthChecking: false });
-        return;
-      }
-      set({ user: null, token: null, isAuthenticated: false, isAuthChecking: false });
+      // Ignore an older response after login, logout, or session revocation.
+      if (revision !== sessionRevision) return;
+      set({ user: response.data.data, isAuthenticated: true, isAuthChecking: false, sessionNotice: null, authCheckError: null });
+    } catch (error: any) {
+      if (revision !== sessionRevision) return;
+      const code = error.response?.data?.error?.code;
+      const unavailable = !error.response || error.response.status === 503;
+      set({
+        user: null, token: null, isAuthenticated: false, isAuthChecking: false,
+        authCheckError: unavailable ? 'Account status is temporarily unavailable. Please retry.' : null,
+        sessionNotice: !unavailable && code && code !== 'AUTH_REQUIRED' ? sessionNoticeFor(code) : null,
+      });
     }
   },
 

@@ -108,12 +108,14 @@ export const adminService = {
   },
 
   async updateUser(userId: string, updates: { role?: string; isSuspended?: boolean }, actorId: string) {
+    if (userId === actorId) throw Object.assign(new Error('You cannot change your own administrator access from this screen'), { statusCode: 400 });
     const payload: any = {};
     if (updates.role !== undefined) {
       if (!['student', 'teacher', 'admin'].includes(updates.role)) throw Object.assign(new Error('Invalid role'), { statusCode: 400 });
       payload.role = updates.role;
     }
     if (updates.isSuspended !== undefined) {
+      if (typeof updates.isSuspended !== 'boolean') throw Object.assign(new Error('Invalid suspension status'), { statusCode: 400 });
       payload.is_suspended = updates.isSuspended;
       payload.suspended_at = updates.isSuspended ? new Date().toISOString() : null;
     }

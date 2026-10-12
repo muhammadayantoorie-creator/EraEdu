@@ -22,6 +22,12 @@ const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 128;
 const MAX_BIO_LEN = 500;
 export const STUDENT_EMAIL_DOMAIN = '@nutech.edu.pk';
+const ACCOUNT_STATUS_UNAVAILABLE = 'Account status is temporarily unavailable. Please retry.';
+
+const assertActiveAccount = (user: any): void => {
+  if (typeof user.is_suspended !== 'boolean') throw createHttpError(ACCOUNT_STATUS_UNAVAILABLE, 503);
+  if (user.is_suspended) throw createHttpError('This account has been suspended. Please contact support.', 403);
+};
 
 const isStudentEmail = (email: string): boolean => {
   const normalized = email.toLowerCase().trim();
@@ -153,12 +159,15 @@ export const authService = {
 
     const user = users && users.length > 0 ? users[0] : null;
     if (!user) throw new Error('Invalid credentials');
-    if (user.is_suspended) throw Object.assign(new Error('This account has been suspended. Please contact support.'), { statusCode: 403 });
+    assertActiveAccount(user);
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) throw new Error('Invalid credentials');
 
     const normalizedRole = (user.role || '').toLowerCase();
+    if (!['student', 'teacher', 'admin'].includes(user.role)) {
+      throw createHttpError('This account has no supported access role. Please contact support.', 403);
+    }
 
     // Enforce the university-domain policy for existing records too, so an
     // account created or edited outside this API cannot bypass the restriction.
@@ -166,16 +175,6 @@ export const authService = {
       throw createHttpError('Student accounts must use a valid @nutech.edu.pk university email address', 403);
     }
 
-    if (normalizedRole === 'teacher' || normalizedRole === 'student') {
-      const token = jwt.sign({ id: user.id, role: user.role }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
-      return {
-        requiresFaceVerification: false,
-        user: { _id: user.id, name: user.name, email: user.email, role: user.role },
-        token,
-      };
-    }
-
-    // Fallback for unknown roles — issue token so app doesn't deadlock
     const token = jwt.sign({ id: user.id, role: user.role }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
     return {
       requiresFaceVerification: false,
@@ -192,6 +191,8 @@ export const authService = {
 
     const { data: user, error } = await supabase.from('users').select('*').eq('id', decoded.id).single();
     if (error || !user) throw createHttpError('User not found', 404);
+    assertActiveAccount(user);
+    if (user.role !== 'student') throw createHttpError('Your account role changed. Please sign in again.', 403);
     if (!user.student_otp_hash || !user.student_otp_expires_at || new Date(user.student_otp_expires_at).getTime() < Date.now()) {
       throw createHttpError('Your sign-in code has expired. Please sign in again.', 401);
     }
@@ -224,7 +225,8 @@ export const authService = {
       .single();
 
     if (error || !user) throw new Error('User not found');
-    if (user.is_suspended) throw Object.assign(new Error('This account has been suspended. Please contact support.'), { statusCode: 403 });
+    assertActiveAccount(user);
+    if (!['student', 'teacher', 'admin'].includes(user.role)) throw createHttpError('This account has no supported access role. Please contact support.', 403);
 
     if (!Array.isArray(liveFaceEncoding) || liveFaceEncoding.length === 0) {
       throw new Error('Invalid face data submitted');
@@ -394,33 +396,4 @@ export const authService = {
     return { ...user, _id: user.id };
   },
 
-  async switchRole(userId: string, newRole: string) {
-    if (!ALLOWED_ROLES.includes(newRole as any)) {
-      throw createHttpError('Invalid role specified. Allowed roles: student, teacher', 400);
-    }
-
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('id', userId)
-      .single();
-
-    if (error) throw new Error(error.message);
-
-    if (newRole === 'student' && !isStudentEmail(user.email || '')) {
-      throw createHttpError('Only users with a valid @nutech.edu.pk email can use the student role', 403);
-    }
-
-    const { data: updatedUser, error: updateError } = await supabase
-      .from('users')
-      .update({ role: newRole })
-      .eq('id', userId)
-      .select()
-      .single();
-
-    if (updateError) throw new Error(updateError.message);
-
-    const token = jwt.sign({ id: updatedUser.id, role: updatedUser.role }, config.jwtSecret, { expiresIn: ACCESS_TOKEN_TTL });
-    return { user: { ...updatedUser, _id: updatedUser.id }, token };
-  },
 };

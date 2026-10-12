@@ -42,14 +42,16 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Redirect to login on 401 for protected API calls only
-    // — skip auth endpoints where 401 is expected (check-auth, login, register)
-    if (error.response && error.response.status === 401) {
+    // Notify the app when an existing protected session has been revoked.
+    const status = error.response?.status;
+    const code = error.response?.data?.error?.code;
+    // A temporary account-state lookup failure must not masquerade as logout.
+    if (status === 401 || (status === 403 && (code === 'ACCOUNT_SUSPENDED' || code === 'ACCOUNT_ROLE_INVALID'))) {
       const url: string = error.config?.url ?? '';
       const isAuthEndpoint = url.includes('/auth/me') || url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/auth/verify-student-otp');
       if (!isAuthEndpoint && !sessionExpiryNotified) {
         sessionExpiryNotified = true;
-        window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+        window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { code } }));
       }
     }
     return Promise.reject(error);

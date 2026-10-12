@@ -13,6 +13,7 @@ const SAFE_400_MESSAGES = new Set<string>([
 ]);
 
 const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
+  'Account status is temporarily unavailable. Please retry.',
   'Student feedback storage is unavailable. An administrator must apply or reconcile backend/migrations/009_add_student_feedback.sql.',
   'Unable to verify this exam attempt right now. Please retry.',
   'Feedback could not be saved right now. Please retry.',

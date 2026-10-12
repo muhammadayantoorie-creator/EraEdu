@@ -5,7 +5,7 @@ import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 
 const LoginPage = () => {
-  const { login, isLoading } = useAuthStore();
+  const { login, isLoading, sessionNotice } = useAuthStore();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors } } = useForm();
@@ -25,6 +25,7 @@ const LoginPage = () => {
   return <div>
     <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Sign in to your account</h2>
     <p className="mt-2 text-center text-sm text-gray-600">Or <Link to="/register" className="font-medium text-primary-600 hover:text-primary-500">create a new account</Link></p>
+    {sessionNotice && <p role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{sessionNotice}</p>}
     <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
       <div><label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label><input id="email" type="email" autoComplete="email" className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500" {...register('email', { required: 'Email is required' })} />{errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message as string}</p>}</div>
       <div><label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label><input id="password" type="password" autoComplete="current-password" className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500" {...register('password', { required: 'Password is required' })} /><div className="mt-2 text-right"><Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">Forgot password?</Link></div></div>
