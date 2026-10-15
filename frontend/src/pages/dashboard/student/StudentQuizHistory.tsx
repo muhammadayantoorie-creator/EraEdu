@@ -21,7 +21,7 @@ interface QuizHistoryItem {
   quizTitle?: string;
   topicTitle?: string;
   courseTitle?: string;
-  teacherGrade?: number;
+  teacherGrade?: number | null;
   teacherFeedback?: string;
   reviewStatus?: 'pending' | 'reviewed';
 }
@@ -29,6 +29,7 @@ interface QuizHistoryItem {
 const StudentQuizHistory = () => {
   const [attempts, setAttempts] = useState<QuizHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [filter, setFilter] = useState<'all' | 'passed' | 'failed'>('all');
 
   useEffect(() => {
@@ -37,61 +38,29 @@ const StudentQuizHistory = () => {
 
   const fetchQuizHistory = async () => {
     setLoading(true);
+    setError(false);
     try {
       const response = await api.get('/quizzes/history');
-      setAttempts(response.data.data || []);
-    } catch (error) {
-      // Mock data for development
-      setAttempts([
-        {
-          _id: '1',
-          quizId: 'q1',
-          score: 85,
-          totalQuestions: 10,
-          correctAnswers: 8,
-          timeTaken: 600,
-          isCompleted: true,
-          attemptedAt: new Date(Date.now() - 86400000).toISOString(),
-          quizTitle: 'JavaScript Basics',
-          topicTitle: 'Variables & Types',
-          courseTitle: 'Web Development',
-        },
-        {
-          _id: '2',
-          quizId: 'q2',
-          score: 60,
-          totalQuestions: 10,
-          correctAnswers: 6,
-          timeTaken: 480,
-          isCompleted: true,
-          attemptedAt: new Date(Date.now() - 172800000).toISOString(),
-          quizTitle: 'React Fundamentals',
-          topicTitle: 'Components',
-          courseTitle: 'Web Development',
-        },
-        {
-          _id: '3',
-          quizId: 'q3',
-          score: 90,
-          totalQuestions: 15,
-          correctAnswers: 14,
-          timeTaken: 720,
-          isCompleted: true,
-          attemptedAt: new Date(Date.now() - 259200000).toISOString(),
-          quizTitle: 'Python Data Structures',
-          topicTitle: 'Lists & Dictionaries',
-          courseTitle: 'Python Programming',
-        },
-      ]);
+      if (!Array.isArray(response.data?.data)) throw new Error('Invalid exam history response');
+      setAttempts(response.data.data);
+    } catch {
+      setAttempts([]);
+      setError(true);
     } finally {
       setLoading(false);
     }
   };
 
+  const visibleGrade = (attempt: QuizHistoryItem): number | null => {
+    if (attempt.reviewStatus !== 'reviewed') return null;
+    if (typeof attempt.teacherGrade === 'number') return attempt.teacherGrade;
+    return typeof attempt.score === 'number' ? attempt.score : null;
+  };
+
   const filteredAttempts = attempts.filter((attempt) => {
-    const finalGrade = attempt.teacherGrade;
-    if (filter === 'passed') return finalGrade !== undefined && finalGrade >= 70;
-    if (filter === 'failed') return finalGrade !== undefined && finalGrade < 70;
+    const finalGrade = visibleGrade(attempt);
+    if (filter === 'passed') return finalGrade !== null && finalGrade >= 70;
+    if (filter === 'failed') return finalGrade !== null && finalGrade < 70;
     return true;
   });
 
@@ -156,7 +125,7 @@ const StudentQuizHistory = () => {
       header: 'Teacher Grade',
       render: (attempt: QuizHistoryItem) => (
         <div className="flex items-center gap-2">
-          {attempt.teacherGrade !== undefined ? (
+          {attempt.reviewStatus === 'reviewed' && typeof attempt.teacherGrade === 'number' ? (
             <>
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium ${getScoreColor(attempt.teacherGrade)}`}>
                 {attempt.teacherGrade}%
@@ -168,7 +137,7 @@ const StudentQuizHistory = () => {
               )}
             </>
           ) : (
-            <span className="text-sm text-gray-400">Pending</span>
+            <span className="text-sm text-gray-400">{attempt.reviewStatus === 'reviewed' ? 'Not teacher graded' : 'Pending'}</span>
           )}
         </div>
       ),
@@ -215,11 +184,20 @@ const StudentQuizHistory = () => {
 
   // Calculate stats
   const totalAttempts = attempts.length;
-  const reviewedAttempts = attempts.filter((a) => a.teacherGrade !== undefined);
-  const passedAttempts = reviewedAttempts.filter((a) => (a.teacherGrade || 0) >= 70).length;
+  const reviewedAttempts = attempts.filter((a) => visibleGrade(a) !== null);
+  const passedAttempts = reviewedAttempts.filter((a) => visibleGrade(a)! >= 70).length;
+  const failedAttempts = reviewedAttempts.length - passedAttempts;
   const avgScore = reviewedAttempts.length > 0
-    ? Math.round(reviewedAttempts.reduce((sum, a) => sum + (a.teacherGrade || 0), 0) / reviewedAttempts.length)
-    : 0;
+    ? Math.round(reviewedAttempts.reduce((sum, a) => sum + visibleGrade(a)!, 0) / reviewedAttempts.length)
+    : null;
+
+  if (loading) return <div role="status" className="p-8 text-center text-gray-600">Loading exam history...</div>;
+  if (error) return (
+    <div role="alert" className="mx-auto max-w-xl rounded-xl border border-red-200 bg-red-50 p-6 text-red-900">
+      Exam history could not be loaded. Please retry.
+      <button type="button" onClick={fetchQuizHistory} className="ml-3 font-semibold underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">Retry</button>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -250,7 +228,7 @@ const StudentQuizHistory = () => {
             <div>
               <p className="text-sm text-gray-500">Passed</p>
               <p className="text-2xl font-bold text-gray-900">
-                {passedAttempts} <span className="text-sm font-normal text-gray-500">({totalAttempts > 0 ? Math.round((passedAttempts / totalAttempts) * 100) : 0}%)</span>
+                {passedAttempts} <span className="text-sm font-normal text-gray-500">({reviewedAttempts.length > 0 ? Math.round((passedAttempts / reviewedAttempts.length) * 100) : 0}% of graded)</span>
               </p>
             </div>
           </div>
@@ -262,7 +240,7 @@ const StudentQuizHistory = () => {
             </div>
             <div>
               <p className="text-sm text-gray-500">Average Score</p>
-              <p className="text-2xl font-bold text-gray-900">{avgScore}%</p>
+              <p className="text-2xl font-bold text-gray-900">{avgScore === null ? '—' : `${avgScore}%`}</p>
             </div>
           </div>
         </div>
@@ -288,7 +266,7 @@ const StudentQuizHistory = () => {
                     ? totalAttempts
                     : tab === 'passed'
                     ? passedAttempts
-                    : totalAttempts - passedAttempts}
+                    : failedAttempts}
                 </span>
               </button>
             ))}

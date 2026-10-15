@@ -109,22 +109,38 @@ export const adminService = {
 
   async updateUser(userId: string, updates: { role?: string; isSuspended?: boolean }, actorId: string) {
     if (userId === actorId) throw Object.assign(new Error('You cannot change your own administrator access from this screen'), { statusCode: 400 });
-    const payload: any = {};
     if (updates.role !== undefined) {
       if (!['student', 'teacher', 'admin'].includes(updates.role)) throw Object.assign(new Error('Invalid role'), { statusCode: 400 });
-      payload.role = updates.role;
     }
     if (updates.isSuspended !== undefined) {
       if (typeof updates.isSuspended !== 'boolean') throw Object.assign(new Error('Invalid suspension status'), { statusCode: 400 });
-      payload.is_suspended = updates.isSuspended;
-      payload.suspended_at = updates.isSuspended ? new Date().toISOString() : null;
     }
-    if (!Object.keys(payload).length) throw Object.assign(new Error('No changes provided'), { statusCode: 400 });
-    const { data, error } = await supabase.from('users').update(payload).eq('id', userId).select('id, name, email, role, created_at, is_suspended, suspended_at').single();
-    if (error) throw new Error(error.message);
-    const action = updates.isSuspended === true ? 'suspend' : updates.isSuspended === false ? 'restore' : 'role_change';
-    const { error: auditError } = await supabase.from('admin_governance_audit').insert({ actor_id: actorId, target_user_id: userId, action, details: { role: updates.role, isSuspended: updates.isSuspended } });
-    if (auditError) throw Object.assign(new Error('Governance audit migration required: apply backend/migrations/020_add_admin_governance_audit.sql'), { statusCode: 503 });
+    if (updates.role === undefined && updates.isSuspended === undefined) {
+      throw Object.assign(new Error('No changes provided'), { statusCode: 400 });
+    }
+    // The database function locks both accounts, checks the actor's *current*
+    // admin state, and commits the user change and audit event together.
+    const { data, error } = await supabase.rpc('admin_update_user_atomic', {
+      p_actor_id: actorId,
+      p_target_user_id: userId,
+      p_role: updates.role ?? null,
+      p_is_suspended: updates.isSuspended ?? null,
+    });
+    if (error) {
+      const message = String(error.message || 'Account governance update failed');
+      if (['PGRST202', 'PGRST204', '42883', '42703', '42P01', '42501'].includes(error.code)) {
+        throw Object.assign(new Error('Account governance setup is incomplete. Apply backend/migrations/008_add_user_suspension.sql, 020_add_admin_governance_audit.sql, and 026_atomic_admin_governance.sql.'), { statusCode: 503 });
+      }
+      const statusCode = message === 'Only active platform admins can change users' ? 403
+        : message === 'Target user not found' ? 404
+        : message === 'Account suspension state unavailable' ? 503
+        : error.code === '22P02' || ['Actor and target account IDs are required', 'You cannot change your own administrator access from this screen', 'No changes provided', 'Invalid role'].includes(message) ? 400
+        : 500;
+      throw Object.assign(new Error(message), { statusCode });
+    }
+    if (!data || typeof data !== 'object' || typeof data.id !== 'string') {
+      throw new Error('Account governance update returned no user');
+    }
     return { ...data, _id: data.id };
   },
 };

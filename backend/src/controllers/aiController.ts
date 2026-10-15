@@ -60,64 +60,22 @@ export const explainConcept = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const getRecommendations = asyncHandler(async (req: Request, res: Response) => {
-  // Return mock recommendations for now
+  // There is no persisted recommendation model yet. Do not present sample
+  // topics or scores as if they came from this student's exam history.
   res.status(200).json({
     success: true,
-    data: [
-      {
-        id: '1',
-        type: 'topic',
-        title: 'Review JavaScript Closures',
-        description: 'Based on your exam performance, we recommend reviewing closures.',
-        priority: 'high',
-        topicId: 'js-closures-1',
-      },
-      {
-        id: '2',
-        type: 'practice',
-        title: 'Practice Array Methods',
-        description: 'You scored 65% on array methods. More practice recommended.',
-        priority: 'medium',
-        topicId: 'js-arrays-1',
-      },
-      {
-        id: '3',
-        type: 'course',
-        title: 'Explore React Hooks',
-        description: 'Based on your interests, you might enjoy learning React Hooks.',
-        priority: 'low',
-        courseId: 'react-hooks-1',
-      },
-    ],
+    available: false,
+    data: [],
   });
 });
 
 export const getInsights = asyncHandler(async (req: Request, res: Response) => {
-  // Return mock insights for the student dashboard
+  // No authorized, persisted insight calculation exists yet. An empty result
+  // with explicit availability is more truthful than fabricated percentages.
   res.status(200).json({
     success: true,
-    data: {
-      strengths: [
-        { topic: 'JavaScript Basics', score: 92 },
-        { topic: 'HTML & CSS', score: 88 },
-        { topic: 'Git Fundamentals', score: 85 },
-      ],
-      weaknesses: [
-        { topic: 'Advanced React', score: 45, suggestion: 'Review component lifecycle and hooks' },
-        { topic: 'Data Structures', score: 52, suggestion: 'Practice with trees and graphs' },
-        { topic: 'Algorithms', score: 58, suggestion: 'Focus on sorting and searching algorithms' },
-      ],
-      studyPlan: [
-        { day: 'Monday', topic: 'React Hooks Review', duration: '45 min' },
-        { day: 'Tuesday', topic: 'Data Structures Practice', duration: '60 min' },
-        { day: 'Wednesday', topic: 'Algorithm Challenges', duration: '45 min' },
-        { day: 'Thursday', topic: 'Project Work', duration: '90 min' },
-        { day: 'Friday', topic: 'Exam Practice', duration: '30 min' },
-      ],
-      overallProgress: 68,
-      weeklyGoal: 5,
-      weeklyCompleted: 3,
-    },
+    available: false,
+    data: [],
   });
 });
 

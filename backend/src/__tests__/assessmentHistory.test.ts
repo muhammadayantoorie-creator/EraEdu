@@ -75,15 +75,16 @@ describe('admin assessment history', () => {
 });
 
 describe('assessment retention and start policy', () => {
-  it.each([false, null])('blocks a new teacher exam attempt when its course availability is %s', async published => {
+  it('propagates the atomic start function\'s course-access refusal without inserting an attempt', async () => {
     const insert = jest.fn();
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'teacher_quizzes') return { select: () => ({ eq: () => ({ single: async () => ({ data: { id: 'quiz-1', course_id: 'course-1', is_active: true }, error: null }) }) }) };
-      if (table === 'courses') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: published === null ? null : { id: 'course-1', is_published: published }, error: null }) }) }) };
+      if (table === 'teacher_quizzes') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: 'quiz-1' }, error: null }) }) }) };
       if (table === 'quiz_attempts') return { insert };
       throw new Error(`Unexpected table ${table}`);
     });
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'Course access is unavailable' } });
     await expect(quizService.startQuizByCode('CODE', 'student-1')).rejects.toMatchObject({ statusCode: 403 });
+    expect(mockRpc).toHaveBeenCalledWith('start_teacher_attempt', { p_student_id: 'student-1', p_quiz_id: 'quiz-1' });
     expect(insert).not.toHaveBeenCalled();
   });
 

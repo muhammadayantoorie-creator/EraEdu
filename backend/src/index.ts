@@ -7,7 +7,8 @@ import pinoHttp from 'pino-http';
 import { config } from './config/environment';
 import { connectDatabase } from './config/database';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import { logger } from './config/logger';
+import { logger, serializeHttpRequest } from './config/logger';
+import { allowedBrowserOrigins, requireTrustedBrowserOrigin } from './middleware/csrf';
 
 // Import routes
 import authRoutes from './routes/auth';
@@ -35,27 +36,17 @@ app.use(helmet({
 
 connectDatabase();
 
+// Server-to-server Safepay callbacks are authenticated by their HMAC, not a
+// browser Origin. Register the raw-body route before browser CORS/CSRF checks.
+app.post('/api/safepay/webhook', express.raw({ type: 'application/json', limit: '1mb' }), safepayWebhook);
+
 // ---------------------------------------------------------------------------
 // CORS — strict exact-match only (no startsWith to prevent subdomain spoofing)
 // ---------------------------------------------------------------------------
-const localOrigins = config.nodeEnv === 'production' ? [] : [
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:5173',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001',
-  'http://127.0.0.1:5173',
-];
-const allowedOrigins = new Set([
-  config.frontendUrl,
-  ...localOrigins,
-  ...config.additionalAllowedOrigins,
-].filter(Boolean));
-
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.has(origin)) {
+    if (allowedBrowserOrigins.has(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'), false);
@@ -69,14 +60,18 @@ app.use(cookieParser());
 // ---------------------------------------------------------------------------
 // 10mb is wide enough for face encodings + base64 profile pictures used during
 // registration. Tighten if those flows move to multipart uploads.
-app.post('/api/safepay/webhook', express.raw({ type: 'application/json', limit: '1mb' }), safepayWebhook);
+app.use(requireTrustedBrowserOrigin);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // ---------------------------------------------------------------------------
 // Logging — redact tokens from URLs in production
 // ---------------------------------------------------------------------------
-app.use(pinoHttp({ logger, genReqId: (req) => req.headers['x-request-id']?.toString() || crypto.randomUUID() }));
+app.use(pinoHttp({
+  logger,
+  genReqId: () => crypto.randomUUID(),
+  serializers: { req: serializeHttpRequest },
+}));
 
 // ---------------------------------------------------------------------------
 // Rate limiting

@@ -28,7 +28,7 @@ const getOwnedOrganization = async (userId: string) => {
 };
 
 const updatePaymentFromTracker = async (trackerToken: string, userId?: string) => {
-  const query = supabase.from('safepay_payments').select('tracker_token, user_id, organization_id, status').eq('tracker_token', trackerToken);
+  const query = supabase.from('safepay_payments').select('tracker_token').eq('tracker_token', trackerToken);
   const { data: payment, error } = userId ? await query.eq('user_id', userId).maybeSingle() : await query.maybeSingle();
   if (error) throw error;
   if (!payment) return null;
@@ -38,39 +38,25 @@ const updatePaymentFromTracker = async (trackerToken: string, userId?: string) =
   // Keep the nested fallback for older SDK response shapes.
   const tracker = report?.data?.tracker || report?.data;
   const reportedStatus = paymentStatusFromTrackerState(tracker?.state);
-  // A completed monthly entitlement remains paid in this record. Later
-  // refund/dispute handling is an explicit support policy, not an accidental
-  // downgrade caused by polling a post-payment tracker state.
-  const verifiedStatus = payment.status === 'paid' ? 'paid' : reportedStatus;
-  if (verifiedStatus !== payment.status) {
-    const now = new Date().toISOString();
-    const paymentUpdate = verifiedStatus === 'paid'
-      ? { status: 'paid', paid_at: now, updated_at: now }
-      : { status: verifiedStatus, updated_at: now };
-    const { error: updateError } = await supabase
-      .from('safepay_payments')
-      .update(paymentUpdate)
-      .eq('tracker_token', trackerToken);
-    if (updateError) throw updateError;
-  }
-  if (verifiedStatus === 'paid' && payment.status !== 'paid') {
-    // Only Safepay's server-reported TRACKER_ENDED state can activate the
-    // plan. Neither a success nor a cancellation return URL changes access.
-    // This checkout records a monthly Institution licence. It is currently a
-    // manual monthly renewal, not an automatic recurring charge.
-    if (payment.organization_id) {
-      const { error: organizationError } = await supabase
-        .from('organizations')
-        .update({ subscription_status: 'active' })
-        .eq('id', payment.organization_id);
-      if (organizationError) throw organizationError;
-    } else {
-      // Supports payments created before organization billing was introduced.
-      const { error: userError } = await supabase.from('users').update({ subscription_status: 'active' }).eq('id', payment.user_id);
-      if (userError) throw userError;
+  // Only the server-fetched TRACKER_ENDED state maps to paid. The RPC locks
+  // the payment and commits its status with entitlement activation, so an
+  // activation failure cannot leave a paid-but-inactive payment behind.
+  const { data: persistedStatus, error: transitionError } = await supabase.rpc('apply_verified_safepay_payment', {
+    p_tracker_token: trackerToken,
+    p_verified_status: reportedStatus,
+    p_user_id: userId || null,
+  });
+  if (transitionError) {
+    if (['PGRST202', 'PGRST204', '42883', '42703', '42P01', '42501'].includes(transitionError.code)) {
+      throw new Error('Safepay entitlement setup is incomplete. Apply backend/migrations/010_add_subscription_status.sql, 013_add_safepay_payments.sql, 018_share_free_trials_by_institution.sql, and 028_atomic_safepay_entitlement.sql.');
     }
+    throw new Error('Unable to finalize payment status. Please retry.');
   }
-  return { status: verifiedStatus };
+  if (persistedStatus === null) return null;
+  if (!['pending', 'paid', 'failed', 'cancelled'].includes(persistedStatus)) {
+    throw new Error('Unable to finalize payment status. Please retry.');
+  }
+  return { status: persistedStatus };
 };
 
 router.post('/checkout', protect, authorize('teacher'), async (req, res) => {
@@ -146,22 +132,34 @@ router.get('/subscription', protect, authorize('teacher'), async (req, res) => {
 // webhooks, so fetching the tracker and updating an already-paid record is safe.
 export const safepayWebhook = async (req: Request, res: Response) => {
   if (!config.safepayWebhookSecret) return res.status(503).send('Webhook is not configured');
+  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+  const signature = req.header('x-sfpy-signature') || '';
+  // Safepay signs webhook payloads with the endpoint shared secret. Compare
+  // the HMAC in constant time before looking at any payment data.
+  const expected = crypto.createHmac('sha512', config.safepayWebhookSecret).update(rawBody).digest('hex');
+  if (!signature || signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+    return res.status(401).send('Invalid signature');
+  }
+  let payload: any;
   try {
-    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
-    const signature = req.header('x-sfpy-signature') || '';
-    // Safepay signs webhook payloads with the endpoint shared secret. Compare
-    // the HMAC in constant time before looking at any payment data.
-    const expected = crypto.createHmac('sha512', config.safepayWebhookSecret).update(rawBody).digest('hex');
-    if (!signature || signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-      return res.status(401).send('Invalid signature');
-    }
-    const payload = JSON.parse(rawBody.toString('utf8'));
-    const tracker = payload?.notification?.tracker || payload?.data?.tracker?.token;
-    if (!tracker || typeof tracker !== 'string') return res.status(400).send('Missing tracker');
+    payload = JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    return res.status(400).send('Invalid webhook');
+  }
+  const trackerValue = payload?.notification?.tracker || payload?.data?.tracker?.token || payload?.data?.tracker;
+  const tracker = typeof trackerValue === 'string'
+    ? trackerValue
+    : typeof trackerValue?.token === 'string'
+      ? trackerValue.token
+      : null;
+  if (!tracker || typeof tracker !== 'string') return res.status(400).send('Missing tracker');
+  try {
     await updatePaymentFromTracker(tracker);
     return res.status(200).send('ok');
   } catch {
-    return res.status(400).send('Invalid webhook');
+    // A provider or database outage must remain retryable to the webhook
+    // sender; a 400 response would misclassify it as a malformed notification.
+    return res.status(503).send('Webhook processing temporarily unavailable');
   }
 };
 export default router;

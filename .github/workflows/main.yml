@@ -28,12 +28,12 @@ jobs:
       run: npm run lint --if-present
 
     - name: Run Tests
-      run: npm test -- --coverage --passWithNoTests
+      run: npm test -- --coverage --runInBand
       env:
         NODE_ENV: test
-        JWT_SECRET: ${{ secrets.JWT_SECRET || 'test-secret-key-minimum-32-characters-long' }}
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://placeholder.supabase.co' }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || 'placeholder-key' }}
+        JWT_SECRET: 'test-secret-key-minimum-32-characters-long'
+        SUPABASE_URL: 'https://placeholder.supabase.co'
+        SUPABASE_KEY: 'placeholder-key'
 
     - name: Build
       run: npm run build
@@ -59,6 +59,9 @@ jobs:
 
     - name: Lint
       run: npm run lint
+
+    - name: Type check
+      run: npx tsc --noEmit
 
     - name: Build
       run: npx vite build

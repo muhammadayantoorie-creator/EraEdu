@@ -159,7 +159,13 @@ export function normalizeAttemptAnswers(
       };
     }
 
-    const displayedOptionIndex = Number(answer.selectedAnswer);
+    // Do not coerce browser input: `null`, booleans, empty strings, and
+    // numeric-looking strings otherwise become valid option zero/one values.
+    // The JSON API for an MCQ accepts an integer display position only.
+    if (typeof answer.selectedAnswer !== 'number') {
+      throw submissionError('Selected option must be an integer');
+    }
+    const displayedOptionIndex = answer.selectedAnswer;
     // -1 is the browser's explicit unanswered sentinel. It is retained as a
     // null canonical answer so review has a row but it never earns a point.
     if (displayedOptionIndex === -1) {
@@ -218,6 +224,182 @@ function answersForReview(attempt: { id: string; answers?: any[] }, quiz: { id: 
       return { questionId: String(answer?.questionId ?? ''), selectedAnswer: null, isCorrect: false, answerVersion: 2 };
     }
   });
+}
+
+type TeacherAttemptState = Record<string, {
+  activatedAt?: string;
+  deadlineAt?: string;
+  answer?: SavedAttemptAnswer;
+}>;
+
+type TeacherQuizSnapshot = {
+  id?: string;
+  teacher_id?: string | null;
+  title?: string;
+  description?: string;
+  course_id?: string | null;
+  time_limit?: number | null;
+  camera_monitoring?: boolean | null;
+  violation_limit?: number | null;
+  questions?: QuizQuestion[];
+};
+
+function teacherAttemptMigrationError(error: any): Error | null {
+  const message = String(error?.message || error || '').toLowerCase();
+  if (
+    error?.code === '42883' || error?.code === '42703' ||
+    message.includes('teacher exam timing migration') ||
+    message.includes('teacher_quiz_snapshot') ||
+    message.includes('teacher_question_state') ||
+    message.includes('start_teacher_attempt') ||
+    message.includes('teacher_attempt_action') ||
+    message.includes('schema cache')
+  ) {
+    return Object.assign(
+      new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
+      { statusCode: 503 },
+    );
+  }
+  return null;
+}
+
+function teacherAttemptError(error: any): never {
+  const migrationError = teacherAttemptMigrationError(error);
+  if (migrationError) throw migrationError;
+  const message = String(error?.message || 'Teacher exam request failed');
+  const statusCode = /already submitted|deadline|expired/i.test(message) ? 409
+    : /unavailable|not enrolled|has not started|student account/i.test(message) ? 403
+    : /not found/i.test(message) ? 404
+    : /out of range|must be|does not belong|not been activated|invalid/i.test(message) ? 400
+    : 500;
+  throw Object.assign(new Error(message), { statusCode });
+}
+
+function snapshotForAttempt(attempt: any): TeacherQuizSnapshot {
+  const snapshot = attempt?.teacher_quiz_snapshot;
+  if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.questions)) {
+    throw Object.assign(
+      new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
+      { statusCode: 503 },
+    );
+  }
+  return snapshot as TeacherQuizSnapshot;
+}
+
+// Only this formatter reads the server snapshot. It removes answer keys and
+// turns stored canonical option IDs back into the student-specific display
+// positions. The browser never receives correctAnswer, answerText, or score.
+function publicTeacherAttempt(attempt: any) {
+  const snapshot = snapshotForAttempt(attempt);
+  const quizId = String(attempt.quiz_id || snapshot.id || '');
+  const questions = snapshot.questions || [];
+  if (!quizId || !questions.length) {
+    throw Object.assign(new Error('This exam is missing its immutable question snapshot.'), { statusCode: 503 });
+  }
+  const state = (attempt.teacher_question_state && typeof attempt.teacher_question_state === 'object'
+    ? attempt.teacher_question_state
+    : {}) as TeacherAttemptState;
+  const savedAnswers: Record<string, number | string> = {};
+  const questionStates: Record<string, { activatedAt?: string; deadlineAt?: string }> = {};
+
+  for (let questionIndex = 0; questionIndex < questions.length; questionIndex += 1) {
+    const questionId = `${quizId}-q${questionIndex}`;
+    const entry = state[questionId];
+    if (entry?.activatedAt || entry?.deadlineAt) {
+      questionStates[questionId] = {
+        ...(entry.activatedAt ? { activatedAt: entry.activatedAt } : {}),
+        ...(entry.deadlineAt ? { deadlineAt: entry.deadlineAt } : {}),
+      };
+    }
+    const saved = entry?.answer;
+    if (!saved || saved.selectedAnswer === null || saved.selectedAnswer === undefined) continue;
+    const isShortAnswer = saved.questionType === 'shortAnswer'
+      || questions[questionIndex].questionType === 'shortAnswer'
+      || !questions[questionIndex].options?.length;
+    if (isShortAnswer) {
+      if (typeof saved.selectedAnswer === 'string' && saved.selectedAnswer.length > 0) {
+        savedAnswers[questionId] = saved.selectedAnswer;
+      }
+      continue;
+    }
+    if (typeof saved.selectedAnswer === 'number') {
+      const displayIndex = optionOrderForAttempt(
+        questions[questionIndex].options?.length || 0,
+        String(attempt.id),
+        questionIndex,
+      ).indexOf(saved.selectedAnswer);
+      if (displayIndex >= 0) savedAnswers[questionId] = displayIndex;
+    }
+  }
+
+  return {
+    attemptId: attempt.id,
+    status: attempt.status,
+    serverNow: attempt.serverNow || attempt.server_now,
+    autoSubmitted: attempt.auto_submitted === true,
+    submissionReason: attempt.submission_reason || null,
+    questionStates,
+    savedAnswers,
+    quiz: {
+      _id: quizId,
+      title: snapshot.title || 'Exam',
+      description: snapshot.description || '',
+      courseId: snapshot.course_id || null,
+      timeLimit: Number(snapshot.time_limit || 0),
+      cameraMonitoring: snapshot.camera_monitoring !== false,
+      violationLimit: Number(snapshot.violation_limit || 3),
+      questions: questionOrderForAttempt(questions.length, String(attempt.id)).map((questionIndex) => {
+        const question = questions[questionIndex];
+        const optionOrder = optionOrderForAttempt(question.options?.length || 0, String(attempt.id), questionIndex);
+        return {
+          _id: `${quizId}-q${questionIndex}`,
+          text: question.text,
+          options: optionOrder.map((optionIndex) => question.options[optionIndex]),
+          difficulty: question.difficulty,
+          questionType: question.questionType,
+          timeLimit: question.timeLimit,
+        };
+      }),
+    },
+  };
+}
+
+// Review must use the same immutable question/options variant that was used
+// for grading. Live quiz edits are only a legacy fallback.
+function reviewQuizForAttempt(attempt: any, liveQuiz: any) {
+  const snapshot = attempt?.teacher_quiz_snapshot;
+  if (snapshot && typeof snapshot === 'object' && Array.isArray(snapshot.questions)) {
+    return {
+      id: String(snapshot.id || attempt.quiz_id),
+      title: snapshot.title || liveQuiz?.title || 'Exam',
+      description: snapshot.description || liveQuiz?.description || '',
+      // Snapshot ownership is evidence of who authored the exam variant, not
+      // an authorization grant. Course reassignment can change the live quiz
+      // owner, and that current owner is the only teacher who may review it.
+      teacher_id: liveQuiz?.teacher_id ?? snapshot.teacher_id,
+      camera_monitoring: snapshot.camera_monitoring ?? liveQuiz?.camera_monitoring,
+      questions: snapshot.questions as QuizQuestion[],
+    };
+  }
+  return liveQuiz;
+}
+
+async function teacherAttemptAction(
+  studentId: string,
+  attemptId: string,
+  action: 'read' | 'activate' | 'answer' | 'submit',
+  questionId?: string,
+  answers?: SavedAttemptAnswer[],
+) {
+  const { data, error } = await supabase.rpc('teacher_attempt_action', {
+    p_student_id: studentId,
+    p_attempt_id: attemptId,
+    p_action: action,
+    p_question_id: questionId || null,
+    p_answers: answers || [],
+  });
+  if (error || !data) teacherAttemptError(error || new Error('Teacher exam request returned no attempt'));
+  return data as any;
 }
 const MAX_QUESTIONS = 200;
 const MAX_QUESTION_TEXT_LEN = 2000;
@@ -692,143 +874,105 @@ export const quizService = {
   async startQuizByCode(code: string, userId: string) {
     await assertStudentEmailPolicy(userId);
 
-    // Get quiz by code
+    // The lookup only translates an access code to an opaque quiz ID. The
+    // database function performs *all* availability, enrollment, role, and
+    // one-attempt checks while atomically creating/resuming a snapshot.
     const { data: quiz, error } = await supabase
       .from('teacher_quizzes')
-      .select('*')
-      .eq('access_code', code)
-      .single();
-
-    if (error || !quiz) {
-      throw new Error('Invalid exam code');
-    }
-
-    // Ensure student is enrolled if this quiz is course-specific
-    if (quiz.course_id) {
-      const { data: course, error: courseError } = await supabase.from('courses')
-        .select('id, is_published').eq('id', quiz.course_id).maybeSingle();
-      if (courseError) throw new Error(courseError.message);
-      if (!course || course.is_published !== true) {
-        throw Object.assign(new Error('This course is not published for exams.'), { statusCode: 403 });
-      }
-      const { data: enrollment } = await supabase
-        .from('enrollments')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('course_id', quiz.course_id)
-        .maybeSingle();
-
-      if (!enrollment) {
-        throw new Error('You are not enrolled in this course. Please join the course first.');
-      }
-    }
-
-    // Check if quiz has a scheduled start time. The teacher-defined `time_limit`
-    // is the per-attempt duration, NOT the availability window. The availability
-    // window is controlled separately by `is_active`. We only block early starts.
-    if (quiz.scheduled_start) {
-      const scheduledTime = new Date(quiz.scheduled_start);
-      const now = new Date();
-      if (now < scheduledTime) {
-        throw new Error(`Exam will start at ${scheduledTime.toLocaleString()}. Please wait.`);
-      }
-    }
-
-    if (quiz.is_active === false) {
-      throw new Error('This exam is no longer accepting attempts.');
-    }
-
-    // One submitted attempt per student. This is enforced on the server so a
-    // student cannot bypass the user interface by reusing the quiz code.
-    const { data: completedAttempt, error: completedAttemptError } = await supabase
-      .from('quiz_attempts')
       .select('id')
-      .eq('user_id', userId)
-      .eq('quiz_id', quiz.id)
-      .eq('status', 'completed')
+      .eq('access_code', code)
       .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!quiz) throw Object.assign(new Error('Invalid exam code'), { statusCode: 404 });
 
-    if (completedAttemptError) throw new Error(completedAttemptError.message);
-    if (completedAttempt) {
-      throw Object.assign(
-        new Error('You have already submitted this quiz. Each student has one attempt.'),
-        { statusCode: 409 },
-      );
+    const { data: attempt, error: startError } = await supabase.rpc('start_teacher_attempt', {
+      p_student_id: userId,
+      p_quiz_id: quiz.id,
+    });
+    if (startError || !attempt) teacherAttemptError(startError || new Error('Teacher exam start returned no attempt'));
+    return publicTeacherAttempt(attempt);
+  },
+
+  // This replaces sessionStorage/result recovery for a code exam. It is
+  // student-owned only and intentionally strips snapshot answer keys.
+  async getActiveTeacherAttempt(attemptId: string, userId: string) {
+    await assertStudentEmailPolicy(userId);
+    const attempt = await teacherAttemptAction(userId, attemptId, 'read');
+    if (attempt.status !== 'in-progress') {
+      return {
+        attemptId: attempt.id,
+        status: attempt.status,
+        serverNow: attempt.serverNow || attempt.server_now,
+        autoSubmitted: attempt.auto_submitted === true,
+        submissionReason: attempt.submission_reason || null,
+      };
     }
+    return publicTeacherAttempt(attempt);
+  },
 
-    // Reuse an existing in-progress attempt instead of spawning duplicates.
-    // This also prevents a student from racing two concurrent attempts to
-    // submit different answer sets.
-    const { data: existing } = await supabase
-      .from('quiz_attempts')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('quiz_id', quiz.id)
-      .eq('status', 'in-progress')
-      .order('started_at', { ascending: false })
-      .limit(1);
-
-    let attempt = existing && existing.length > 0 ? existing[0] : null;
-
-    // Never revive an attempt whose server-side deadline has passed. The
-    // browser timer is only a convenience; the API remains authoritative.
-    if (attempt && quiz.time_limit && attempt.started_at) {
-      const deadline = new Date(attempt.started_at).getTime() + Number(quiz.time_limit) * 60_000;
-      if (Date.now() >= deadline) {
-        await supabase
-          .from('quiz_attempts')
-          .update({
-            status: 'completed',
-            completed_at: new Date(),
-            auto_submitted: true,
-            submission_reason: 'time_expired',
-          })
-          .eq('id', attempt.id)
-          .eq('status', 'in-progress');
-        attempt = null;
-      }
+  async activateTeacherAttemptQuestion(attemptId: string, userId: string, questionId: string) {
+    await assertStudentEmailPolicy(userId);
+    if (typeof questionId !== 'string' || questionId.length > 200) {
+      throw submissionError('A valid question ID is required');
     }
-
-    if (!attempt) {
-      const { data: created, error: attemptError } = await supabase
-        .from('quiz_attempts')
-        .insert([{
-          user_id: userId,
-          quiz_id: quiz.id,
-          started_at: new Date(),
-          status: 'in-progress',
-          max_score: quiz.questions?.length || 0,
-        }])
-        .select()
-        .single();
-
-      if (attemptError) throw new Error(attemptError.message);
-      attempt = created;
+    const attempt = await teacherAttemptAction(userId, attemptId, 'activate', questionId);
+    if (attempt.status !== 'in-progress') {
+      return {
+        attemptId: attempt.id,
+        status: attempt.status,
+        serverNow: attempt.serverNow || attempt.server_now,
+        expired: attempt.expired === true,
+      };
     }
-
+    const state = (attempt.teacher_question_state || {}) as TeacherAttemptState;
+    const entry = state[questionId];
+    if (!entry?.deadlineAt) throw new Error('The server did not return a question deadline');
     return {
       attemptId: attempt.id,
-      quiz: {
-        _id: quiz.id,
-        title: quiz.title,
-        description: quiz.description,
-        courseId: quiz.course_id,
-        timeLimit: quiz.time_limit,
-        cameraMonitoring: quiz.camera_monitoring !== false,
-        violationLimit: quiz.violation_limit ?? 3,
-        questions: questionOrderForAttempt(quiz.questions?.length || 0, attempt.id).map((questionIndex) => {
-          const question = quiz.questions[questionIndex];
-          const optionOrder = optionOrderForAttempt(question.options?.length || 0, attempt.id, questionIndex);
-          return {
-            _id: `${quiz.id}-q${questionIndex}`,
-            text: question.text,
-            options: optionOrder.map((optionIndex) => question.options[optionIndex]),
-            difficulty: question.difficulty,
-            questionType: question.questionType,
-            timeLimit: question.timeLimit,
-          };
-        }),
-      }
+      status: attempt.status,
+      serverNow: attempt.serverNow || attempt.server_now,
+      questionId,
+      activatedAt: entry.activatedAt,
+      deadlineAt: entry.deadlineAt,
+    };
+  },
+
+  async saveTeacherAttemptAnswer(
+    attemptId: string,
+    userId: string,
+    questionId: string,
+    selectedAnswer: number | string,
+  ) {
+    await assertStudentEmailPolicy(userId);
+    const { data: attempt, error } = await supabase
+      .from('quiz_attempts')
+      .select('id, quiz_id, status, teacher_quiz_snapshot')
+      .eq('id', attemptId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!attempt) throw Object.assign(new Error('Exam attempt not found'), { statusCode: 404 });
+    if (attempt.status !== 'in-progress') {
+      throw Object.assign(new Error('Exam already submitted'), { statusCode: 409 });
+    }
+    const snapshot = snapshotForAttempt(attempt);
+    const normalized = normalizeAttemptAnswers(
+      String(attempt.quiz_id),
+      String(attempt.id),
+      snapshot.questions || [],
+      [{ questionId, selectedAnswer }],
+    );
+    const saved = normalized.answers[0];
+    // This endpoint represents an explicit edit, including clearing a short
+    // answer. Defaults are never sent on load; the database checks the same
+    // activation/deadline for a clear as for any other change.
+    const updated = await teacherAttemptAction(userId, attemptId, 'answer', undefined, [saved]);
+    return {
+      attemptId: updated.id,
+      status: updated.status,
+      serverNow: updated.serverNow || updated.server_now,
+      saved: updated.status === 'in-progress',
+      expired: updated.expired === true,
     };
   },
 
@@ -870,9 +1014,10 @@ export const quizService = {
       .select('*')
       .eq('id', attempt.quiz_id)
       .single();
+    const reviewQuiz = reviewQuizForAttempt(attempt, quiz);
 
     const isStudentOwner = attempt.user_id === userId;
-    const isTeacherOwner = !!quiz && quiz.teacher_id === userId;
+    const isTeacherOwner = !!reviewQuiz && reviewQuiz.teacher_id === userId;
 
     if (!isStudentOwner && !(userRole === 'teacher' && isTeacherOwner) && userRole !== 'admin') {
       throw new Error('Unauthorized to view this attempt');
@@ -895,7 +1040,7 @@ export const quizService = {
     // Students never see violation details — only teachers/admins.
     const showViolations = !isStudentOwner;
 
-    if (isStudentOwner && !isReviewed) {
+    if (isStudentOwner && (attempt.status !== 'completed' || !isReviewed)) {
       return {
         id: attempt.id,
         status: attempt.status,
@@ -904,10 +1049,10 @@ export const quizService = {
         reviewPending: true,
         reviewStatus: 'pending',
         autoSubmitted: attempt.auto_submitted,
-        quiz: quiz ? {
-          title: quiz.title,
-          description: quiz.description,
-          cameraMonitoring: quiz.camera_monitoring !== false,
+        quiz: reviewQuiz ? {
+          title: reviewQuiz.title,
+          description: reviewQuiz.description,
+          cameraMonitoring: reviewQuiz.camera_monitoring !== false,
           questions: [],
         } : null,
       };
@@ -921,7 +1066,7 @@ export const quizService = {
       status: attempt.status,
       startedAt: attempt.started_at,
       completedAt: attempt.completed_at,
-      answers: quiz ? answersForReview(attempt, quiz) : [],
+      answers: reviewQuiz ? answersForReview(attempt, reviewQuiz) : [],
       ...(showViolations
         ? {
             violations: persistedViolations,
@@ -936,11 +1081,11 @@ export const quizService = {
       reviewPending: false,
       reviewStatus: 'reviewed',
       autoSubmitted: attempt.auto_submitted,
-      quiz: quiz ? {
-        title: quiz.title,
-        description: quiz.description,
-        cameraMonitoring: quiz.camera_monitoring !== false,
-        questions: quiz.questions || [],
+      quiz: reviewQuiz ? {
+        title: reviewQuiz.title,
+        description: reviewQuiz.description,
+        cameraMonitoring: reviewQuiz.camera_monitoring !== false,
+        questions: reviewQuiz.questions || [],
       } : null,
     };
   },
@@ -956,7 +1101,7 @@ export const quizService = {
     if (!quizzes || quizzes.length === 0) return [];
 
     const quizIds = quizzes.map(q => q.id);
-    const quizMap = new Map(quizzes.map(q => [q.id, q.title]));
+    const quizMap = new Map(quizzes.map(q => [q.id, q]));
 
     // Get all attempts for these quizzes
     const { data: attempts } = await supabase
@@ -981,10 +1126,11 @@ export const quizService = {
     return attempts.map(attempt => {
       const user = userMap.get(attempt.user_id) || { name: 'Unknown', email: '' };
       const normalizedViolations = violationsByAttempt.get(attempt.id) || [];
+      const reviewQuiz = reviewQuizForAttempt(attempt, quizMap.get(attempt.quiz_id));
       return {
         id: attempt.id,
         quizId: attempt.quiz_id,
-        quizTitle: quizMap.get(attempt.quiz_id) || 'Unknown Quiz',
+        quizTitle: reviewQuiz?.title || 'Unknown Exam',
         studentId: attempt.user_id,
         studentName: user.name || 'Unknown',
         studentEmail: user.email || '',
@@ -996,7 +1142,7 @@ export const quizService = {
         completedAt: attempt.completed_at,
         teacherGrade: attempt.teacher_grade,
         teacherFeedback: attempt.teacher_feedback,
-        answers: answersForReview(attempt, quizMap.get(attempt.quiz_id)),
+        answers: reviewQuiz ? answersForReview(attempt, reviewQuiz) : [],
         violations: normalizedViolations,
         violationCount: normalizedViolations.length,
         autoSubmitted: attempt.auto_submitted,
@@ -1027,10 +1173,14 @@ export const quizService = {
 
   // Grade a submission
   async gradeSubmission(submissionId: string, teacherId: string, grade: number, feedback: string) {
+    if (typeof grade !== 'number' || !Number.isFinite(grade) || grade < 0 || grade > 100 ||
+        typeof feedback !== 'string' || feedback.length > 5000) {
+      throw Object.assign(new Error('Provide a grade from 0 to 100 and feedback of at most 5000 characters.'), { statusCode: 400 });
+    }
     // Verify the submission belongs to a quiz by this teacher
     const { data: attempt } = await supabase
       .from('quiz_attempts')
-      .select('quiz_id, user_id')
+      .select('quiz_id, user_id, status')
       .eq('id', submissionId)
       .single();
 
@@ -1048,16 +1198,23 @@ export const quizService = {
       throw new Error('Unauthorized');
     }
 
+    if (attempt.status !== 'completed') {
+      throw Object.assign(new Error('Only completed attempts can be reviewed.'), { statusCode: 409 });
+    }
+
     // Update the attempt with grade and feedback
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from('quiz_attempts')
       .update({
         teacher_grade: grade,
         teacher_feedback: feedback,
       })
-      .eq('id', submissionId);
+      .eq('id', submissionId)
+      .eq('status', 'completed')
+      .select('id');
 
     if (updateError) throw new Error(updateError.message);
+    if (!updated?.length) throw Object.assign(new Error('Only completed attempts can be reviewed.'), { statusCode: 409 });
 
     // Send notification to student
     await supabase.from('notifications').insert([{
@@ -1093,108 +1250,82 @@ export const quizService = {
       throw new Error('Exam attempt not found');
     }
 
-    const completingViolationAutoSubmit = attempt.status === 'completed' && attempt.submission_reason === 'excessive_violations';
-    if (attempt.status === 'completed' && !completingViolationAutoSubmit) {
-      throw new Error('Exam already submitted');
-    }
-
-    // Get quiz to calculate score
-    const { data: quiz, error: quizError } = await supabase
-      .from('teacher_quizzes')
-      .select('id, title, teacher_id, questions, time_limit')
-      .eq('id', attempt.quiz_id)
-      .single();
-
-    if (quizError || !quiz) {
-      throw new Error('Exam not found');
-    }
-
-    const timeLimitMinutes = Number(quiz.time_limit || 0);
-    const deadline = attempt.started_at && timeLimitMinutes > 0
-      ? new Date(attempt.started_at).getTime() + timeLimitMinutes * 60_000
-      : null;
-    const timeExpired = deadline !== null && Date.now() >= deadline;
-
-    const questions = quiz.questions || [];
-    const normalizedSubmission = normalizeAttemptAnswers(quiz.id, attempt.id, questions, answers);
-    const { score, answers: normalizedAnswers } = normalizedSubmission;
-
-    // Update the attempt with violations
-    const updateData: any = {
-      status: 'completed',
-      completed_at: new Date(),
-      score,
-      answers: normalizedAnswers,
-    };
-
-    if (timeExpired) {
-      updateData.auto_submitted = true;
-      updateData.submission_reason = 'time_expired';
-    }
-    
-    // Violation events are written through report-violation and are the
-    // authoritative source. Never replace server-recorded events with a
-    // shorter, stale browser-memory list supplied during submission.
-
-    // Atomic guard: only the first concurrent submit succeeds. The
-    // `.eq('status', 'in-progress')` filter prevents a double-submit from
-    // overwriting the original score with a second answer set.
-    let updateQuery = supabase.from('quiz_attempts').update(updateData).eq('id', attemptId);
-    updateQuery = completingViolationAutoSubmit
-      ? updateQuery.eq('status', 'completed').eq('submission_reason', 'excessive_violations')
-      : updateQuery.eq('status', 'in-progress');
-    let updateResult = await updateQuery.select('id');
-
-    // Auto-submit metadata is optional for old schemas, but monitoring event
-    // persistence is not: report-violation returns an actionable migration
-    // error instead of silently dropping an event.
-    const missingOptionalSubmissionColumn = (error: any) => {
-      const message = String(error?.message || '').toLowerCase();
-      return ['violations', 'violation_count', 'auto_submitted', 'submission_reason']
-        .some((column) => message.includes(column) && (message.includes('column') || message.includes('schema cache')));
-    };
-    if (updateResult.error && missingOptionalSubmissionColumn(updateResult.error)) {
-      console.warn('Optional quiz-attempt monitoring columns are unavailable; saving submission without them.');
-      updateResult = await supabase
-        .from('quiz_attempts')
-        .update({
-          status: 'completed',
-          completed_at: new Date(),
-          score,
-          answers: normalizedAnswers,
-        })
-        .eq('id', attemptId)
-        .eq('status', completingViolationAutoSubmit ? 'completed' : 'in-progress')
-        .select('id');
-    }
-
-    const { data: updatedRows, error: updateError } = updateResult;
-    if (updateError) throw new Error(updateError.message);
-    if (!updatedRows || updatedRows.length === 0) {
-      throw new Error('Exam already submitted');
-    }
-
-    if (quiz.teacher_id) {
-      const { error: notifyError } = await supabase.from('notifications').insert([{
-        user_id: quiz.teacher_id,
-        title: 'Submission Pending Review',
-        message: 'A student submitted exam "' + quiz.title + '" and is waiting for your review.',
-        type: 'submission',
-        quiz_id: quiz.id,
-        is_read: false,
-      }]);
-
-      if (notifyError) {
-        console.error('Failed to notify teacher about submission:', notifyError.message);
+    // Code-based teacher exams are finalized from their immutable snapshot
+    // and server-accepted question state. Do not score a browser-provided
+    // replacement answer array, even during a retry or automatic submission.
+    if (!attempt.topic_id && attempt.teacher_quiz_snapshot) {
+      const snapshot = snapshotForAttempt(attempt);
+      const questions = snapshot.questions || [];
+      let result: any = attempt;
+      if (attempt.status === 'completed') {
+        // A retry can arrive after the first tab/timer already finalized the
+        // attempt. Return the immutable result without parsing or writing its
+        // stale browser payload, and never send a second notification.
+        result = attempt;
+      } else if (attempt.status === 'in-progress') {
+        const normalized = normalizeAttemptAnswers(
+          String(attempt.quiz_id),
+          String(attempt.id),
+          questions,
+          answers,
+        );
+        const actualAnswers = normalized.answers.filter((answer) =>
+          answer.selectedAnswer !== null &&
+          !(answer.questionType === 'shortAnswer' && !String(answer.selectedAnswer).trim()),
+        );
+        if (actualAnswers.length) {
+          result = await teacherAttemptAction(userId, attemptId, 'answer', undefined, actualAnswers);
+        }
+        if (result.status === 'in-progress') {
+          result = await teacherAttemptAction(userId, attemptId, 'submit');
+        }
+      } else {
+        throw Object.assign(new Error('Exam already submitted'), { statusCode: 409 });
       }
+
+      // Only the transition that actually completes the attempt notifies the
+      // teacher. Duplicate manual/timer/violation submits are idempotent.
+      if (result.newlyCompleted) {
+        // The snapshot preserves authorship, not the current manager's access.
+        const { data: currentQuiz, error: managerError } = await supabase.from('teacher_quizzes')
+          .select('teacher_id').eq('id', attempt.quiz_id).single();
+        if (managerError) console.error('Could not resolve the current exam manager for a submission notification.');
+        if (currentQuiz?.teacher_id && !managerError) {
+          const { error: notifyError } = await supabase.from('notifications').insert([{
+            user_id: currentQuiz.teacher_id,
+            title: 'Submission Pending Review',
+            message: `A student submitted exam "${snapshot.title || 'Exam'}" and is waiting for your review.`,
+            type: 'submission',
+            quiz_id: attempt.quiz_id,
+            is_read: false,
+          }]);
+          if (notifyError) console.error('Failed to notify the current exam manager about submission.');
+        }
+      }
+
+      const maxScore = Number(result.max_score ?? questions.length);
+      const score = Number(result.score || 0);
+      return {
+        score,
+        maxScore,
+        percentage: maxScore > 0 ? Math.round((score / maxScore) * 100) : 0,
+        violationsCount: (await persistedViolationsForAttempts([attemptId])).get(attemptId)?.length || 0,
+        status: result.status,
+        autoSubmitted: result.auto_submitted === true,
+      };
+    }
+    if (!attempt.topic_id && attempt.status === 'in-progress') {
+      throw Object.assign(
+        new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
+        { statusCode: 503 },
+      );
     }
 
-    return {
-      score,
-      maxScore: questions.length,
-      percentage: questions.length > 0 ? Math.round((score / questions.length) * 100) : 0,
-      violationsCount: (await persistedViolationsForAttempts([attemptId])).get(attemptId)?.length || 0,
-    };
+    // Topic attempts use their own snapshot/answer lifecycle. In particular,
+    // an old threshold-completed teacher attempt must never be regraded
+    // from a late browser array or the live (possibly edited) exam questions.
+    if (attempt.topic_id) throw submissionError('Use the topic exam answer/submission workflow for this attempt');
+    throw Object.assign(new Error('Exam already submitted'), { statusCode: 409 });
   },
 
   async getQuizForTopic(topicId: string, userId: string, difficulty?: string) {
@@ -1553,7 +1684,6 @@ export const quizService = {
   },
 
   async getQuizHistory(userId: string) {
-    try {
       // Get user's quiz attempts
       const { data: attempts, error } = await supabase
         .from('quiz_attempts')
@@ -1595,10 +1725,6 @@ export const quizService = {
         reviewStatus: reviewed ? 'reviewed' : 'pending',
       };
       });
-    } catch (err) {
-      console.error('Error fetching quiz history:', err);
-      return [];
-    }
   },
 
 };

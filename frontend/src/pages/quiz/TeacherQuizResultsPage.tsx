@@ -6,7 +6,7 @@ import { ClockIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { PostQuizFeedbackModal } from '../../components/shared';
 
 interface Violation {
-  type: string;
+  type?: string;
   violation_type?: string;
   timestamp: string;
   details?: unknown;
@@ -20,10 +20,15 @@ const eventLabel = (event: Violation) => {
     || type.replace(/[_-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) || 'Unrecognized monitoring event';
 };
 const detailsText = (details: unknown) => {
-  if (!details) return 'No additional details recorded.';
+  if (details == null || details === '') return 'No additional details recorded.';
   if (typeof details === 'string') { try { return detailsText(JSON.parse(details)); } catch { return details; } }
-  const value = details as Record<string, unknown>;
-  return String(value.alertMessage || value.focus_state || value.key_name || 'Additional event context recorded.');
+  if (typeof details === 'object' && !Array.isArray(details)) {
+    const value = details as Record<string, unknown>;
+    for (const key of ['alertMessage', 'focus_state', 'key_name']) {
+      if (typeof value[key] === 'string' && value[key].trim()) return value[key];
+    }
+  }
+  return 'Additional event context recorded.';
 };
 
 interface AttemptResult {
@@ -63,20 +68,32 @@ const TeacherQuizResultsPage = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!attemptId) {
+      setError('The exam attempt is missing from this URL.');
+      setLoading(false);
+      return;
+    }
+
+    let active = true;
     const fetchResults = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const response = await api.get(`/quizzes/attempt/${attemptId}/results`);
-        setResult(response.data.data);
-      } catch (err: any) {
-        setError(err.response?.data?.error?.message || 'Failed to load results');
+        if (!response.data?.data) throw new Error('Invalid exam result response');
+        if (active) setResult(response.data.data);
+      } catch (err: unknown) {
+        const responseError = err as { response?: { data?: { message?: unknown; error?: { message?: unknown } } } };
+        const message = responseError.response?.data?.error?.message
+          ?? responseError.response?.data?.message;
+        if (active) setError(typeof message === 'string' ? message : 'Failed to load results');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
-    if (attemptId) {
-      fetchResults();
-    }
+    void fetchResults();
+    return () => { active = false; };
   }, [attemptId]);
 
   if (loading) {
@@ -215,14 +232,11 @@ const TeacherQuizResultsPage = () => {
                       v.type === 'paste_attempt' ? 'bg-purple-100 text-purple-700' :
                       'bg-gray-100 text-gray-700'
                     }`}>
-                      {v.type === 'tab_switch' ? 'Tab Switch' :
-                       v.type === 'copy_attempt' ? 'Copy Attempt' :
-                       v.type === 'paste_attempt' ? 'Paste Attempt' :
-                       v.type === 'right_click' ? 'Right Click' : v.type}
+                      {eventLabel(v)}
                     </span>
                     <span className="text-xs text-gray-500">{new Date(v.timestamp).toLocaleString()} · {v.severity || 'low'} · {v.detectionMethod || v.detection_method || 'unknown'}</span>
                     <p className="mt-1 text-xs text-gray-600">{detailsText(v.details)}</p>
-                    {v.details && <details className="mt-1 text-xs text-gray-500"><summary className="cursor-pointer">Technical event data</summary><pre className="mt-1 whitespace-pre-wrap break-words">{typeof v.details === 'string' ? v.details : JSON.stringify(v.details, null, 2)}</pre></details>}
+                    {Boolean(v.details) && <details className="mt-1 text-xs text-gray-500"><summary className="cursor-pointer">Technical event data</summary><pre className="mt-1 whitespace-pre-wrap break-words">{typeof v.details === 'string' ? v.details : JSON.stringify(v.details, null, 2)}</pre></details>}
                   </div>
                 ))}
               </div>

@@ -38,6 +38,8 @@ const StudentRecommendations = () => {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [insights, setInsights] = useState<LearningInsight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetchRecommendations();
@@ -45,91 +47,20 @@ const StudentRecommendations = () => {
 
   const fetchRecommendations = async () => {
     setLoading(true);
+    setError(false);
     try {
       const [recsResponse, insightsResponse] = await Promise.all([
         api.get('/ai/recommendations'),
         api.get('/ai/insights'),
       ]);
-      setRecommendations(recsResponse.data.data || []);
-      setInsights(insightsResponse.data.data || []);
-    } catch (error) {
-      // Mock data for development
-      setRecommendations([
-        {
-          id: '1',
-          type: 'topic',
-          title: 'Binary Trees',
-          description: 'Master tree traversal algorithms and common operations.',
-          reason: 'Your recent exam scores show room for improvement in tree-based problems.',
-          priority: 'high',
-          actionUrl: '/courses/ds101/topics/binary-trees',
-          actionLabel: 'Start Learning',
-          metadata: {
-            difficulty: 'intermediate',
-            estimatedTime: '45 min',
-          },
-        },
-        {
-          id: '2',
-          type: 'quiz',
-          title: 'Array Manipulation Practice',
-          description: 'Test your understanding of array operations and algorithms.',
-          reason: 'You haven\'t practiced arrays in a while, and it\'s a foundational concept.',
-          priority: 'medium',
-          actionUrl: '/quiz/start/arrays',
-          actionLabel: 'Take Exam',
-          metadata: {
-            estimatedTime: '20 min',
-          },
-        },
-        {
-          id: '3',
-          type: 'review',
-          title: 'Review: Recursion Basics',
-          description: 'Revisit recursion concepts before moving to advanced algorithms.',
-          reason: 'Based on your learning path, reviewing recursion will help with upcoming topics.',
-          priority: 'medium',
-          actionUrl: '/courses/algo101/topics/recursion',
-          actionLabel: 'Review',
-          metadata: {
-            estimatedTime: '30 min',
-          },
-        },
-        {
-          id: '4',
-          type: 'course',
-          title: 'Advanced Algorithms',
-          description: 'Take your algorithm skills to the next level with advanced techniques.',
-          reason: 'You\'ve completed the basics and are ready for more challenging content.',
-          priority: 'low',
-          actionUrl: '/courses/algo201',
-          actionLabel: 'Explore Course',
-          metadata: {
-            difficulty: 'advanced',
-            estimatedTime: '8 hours',
-          },
-        },
-      ]);
-
-      setInsights([
-        {
-          type: 'strength',
-          title: 'Strong in JavaScript Fundamentals',
-          description: 'You consistently score above 85% on JavaScript topics.',
-          topics: ['Variables', 'Functions', 'Objects'],
-        },
-        {
-          type: 'weakness',
-          title: 'Needs Improvement: Data Structures',
-          description: 'Your scores in data structure exams are below average.',
-          topics: ['Trees', 'Graphs', 'Hash Tables'],
-        },
-        {
-          type: 'suggestion',
-          title: 'Recommended Learning Path',
-          description: 'Focus on tree data structures before moving to graph algorithms.',
-        },
-      ]);
+      setRecommendations(Array.isArray(recsResponse.data.data) ? recsResponse.data.data : []);
+      setInsights(Array.isArray(insightsResponse.data.data) ? insightsResponse.data.data : []);
+      setUnavailable(recsResponse.data.available === false || insightsResponse.data.available === false);
+    } catch {
+      setRecommendations([]);
+      setInsights([]);
+      setUnavailable(false);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -190,12 +121,27 @@ const StudentRecommendations = () => {
       <header className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl p-6 text-white">
         <div className="flex items-center gap-3 mb-2">
           <SparklesIcon className="h-8 w-8" />
-          <h1 className="text-2xl font-bold">AI-Powered Recommendations</h1>
+          <h1 className="text-2xl font-bold">Learning Recommendations</h1>
         </div>
         <p className="text-white/90">
-          Personalized suggestions to optimize your learning journey based on your performance and goals.
+          Recommendations and insights will appear here when they are available.
         </p>
       </header>
+
+      {error && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          Recommendations could not be loaded. Please try again.
+          <button type="button" onClick={fetchRecommendations} className="ml-3 font-semibold underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+            Retry
+          </button>
+        </div>
+      )}
+
+      {unavailable && !error && (
+        <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          Personalized recommendations and insights are not available yet. No exam scores or study plans are being inferred.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Recommendations */}
@@ -254,9 +200,9 @@ const StudentRecommendations = () => {
           ) : (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
               <SparklesIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No recommendations yet</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">{error ? 'Recommendations unavailable' : 'No recommendations yet'}</h3>
               <p className="text-gray-500">
-                Complete more exams and courses to get personalized AI recommendations.
+                {error ? 'Recommendations could not be loaded.' : unavailable ? 'Personalized recommendations are not available yet.' : 'No recommendations are available for your account yet.'}
               </p>
             </div>
           )}
@@ -297,7 +243,7 @@ const StudentRecommendations = () => {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
               <LightBulbIcon className="h-8 w-8 text-gray-300 mx-auto mb-2" />
               <p className="text-sm text-gray-500">
-                Insights will appear as you complete more learning activities.
+                {error ? 'Learning insights could not be loaded.' : unavailable ? 'Personalized insights are not available yet.' : 'No learning insights are available for your account yet.'}
               </p>
             </div>
           )}

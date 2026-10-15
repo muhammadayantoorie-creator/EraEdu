@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { safeRouteLabel } from '../config/logger';
 
 const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 
@@ -14,6 +15,9 @@ const SAFE_400_MESSAGES = new Set<string>([
 
 const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
   'Account status is temporarily unavailable. Please retry.',
+  'Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.',
+  'Monitoring schema migration required: apply backend/migrations/019_make_cheating_events_authoritative.sql',
+  'Account governance setup is incomplete. Apply backend/migrations/008_add_user_suspension.sql, 020_add_admin_governance_audit.sql, and 026_atomic_admin_governance.sql.',
   'Student feedback storage is unavailable. An administrator must apply or reconcile backend/migrations/009_add_student_feedback.sql.',
   'Unable to verify this exam attempt right now. Please retry.',
   'Feedback could not be saved right now. Please retry.',
@@ -28,15 +32,16 @@ const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
 ]);
 
 export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
-  console.warn(`[404] Route not found: ${req.method} ${req.originalUrl}`);
-  const error: any = new Error(`Not Found - ${req.originalUrl}`);
+  console.warn(`[404] Route not found: ${req.method}`);
+  const error: any = new Error('Route not found');
   error.statusCode = 404;
   next(error);
 };
 
 export const errorHandler = (err: any, req: Request, res: Response, _next: NextFunction) => {
-  // Always log the full error server-side
-  console.error(`[Error] ${req.method} ${req.originalUrl}:`, err?.message || err);
+  // Log a route template, never a raw URL with query tokens. In production,
+  // arbitrary error messages can themselves include client-supplied secrets.
+  console.error(`[Error] ${req.method} ${safeRouteLabel(req)}:`, isProd ? (err?.name || 'Error') : (err?.message || err));
   if (err?.stack && !isProd) console.error(err.stack);
 
   let statusCode: number = err.statusCode || 0;

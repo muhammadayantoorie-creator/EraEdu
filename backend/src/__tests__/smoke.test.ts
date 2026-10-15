@@ -8,8 +8,23 @@ process.env.JWT_SECRET     = 'test-secret-key-minimum-32-characters-ok';
 process.env.SUPABASE_URL   = 'https://placeholder.supabase.co';
 process.env.SUPABASE_KEY   = 'placeholder-anon-key';
 process.env.NODE_ENV       = 'test';
+process.env.SAFEPAY_WEBHOOK_SECRET = '';
 
 import request from 'supertest';
+
+// Smoke checks are deterministic and never contact an external database.
+// A failing readiness dependency is explicit; it is not an accepted 500 on a
+// route that is supposed to work.
+jest.mock('../config/supabase', () => ({
+  supabase: {
+    from: () => ({
+      select: () => {
+        const result = { data: null, count: null, error: { message: 'Isolated readiness failure' } };
+        return { ...result, limit: async () => result };
+      },
+    }),
+  },
+}));
 
 // Lazy import so env vars above are set first
 let app: any;
@@ -28,11 +43,11 @@ afterAll(() => {
 
 // ---------------------------------------------------------------------------
 describe('Health endpoint', () => {
-  it('GET /health returns 200 or 503 (never crashes)', async () => {
+  it('GET /health reports exactly 503 when its isolated database dependency fails', async () => {
     const res = await request(app).get('/health');
-    expect([200, 503]).toContain(res.status);
-    expect(res.body).toHaveProperty('status');
-    expect(res.body).toHaveProperty('checks');
+    expect(res.status).toBe(503);
+    expect(res.body.status).toBe('degraded');
+    expect(res.body.checks.database).toBe('degraded');
   });
 
   it('GET / returns API running message', async () => {
@@ -44,28 +59,38 @@ describe('Health endpoint', () => {
 
 // ---------------------------------------------------------------------------
 describe('Auth routes — unauthenticated behaviour', () => {
-  it('POST /api/auth/login with missing body returns 400 or 401', async () => {
+  it('POST /api/auth/login rejects a missing body before database access', async () => {
     const res = await request(app)
       .post('/api/auth/login')
+      .set('Origin', 'http://localhost:3000')
       .send({});
-    expect([400, 401, 500]).toContain(res.status);
+    expect(res.status).toBe(400);
+    expect(res.body.error.fields).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'email' }),
+      expect.objectContaining({ field: 'password' }),
+    ]));
   });
 
-  it('POST /api/auth/login with invalid credentials returns 400 or 401', async () => {
+  it('POST /api/auth/login rejects a malformed email before database access', async () => {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ email: 'nobody@test.com', password: 'WrongPassword1' });
-    // Could be 400 (validation) or 401 (invalid creds) or 500 (DB unreachable in test)
-    expect([400, 401, 500]).toContain(res.status);
+      .set('Origin', 'http://localhost:3000')
+      .send({ email: 'not-an-email', password: 'WrongPassword1' });
+    expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
+    expect(res.body.error.fields).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'email' }),
+    ]));
   });
 
-  it('POST /api/auth/forgot-password returns success shape (enumeration resistant)', async () => {
+  it('POST /api/auth/forgot-password rejects a malformed email before database access', async () => {
     const res = await request(app)
       .post('/api/auth/forgot-password')
-      .send({ email: 'doesnotexist@test.com' });
-    // Always returns 200 or 500 (DB unreachable) — never 404 to prevent enumeration
-    expect([200, 500]).toContain(res.status);
+      .send({ email: 'not-an-email' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.fields).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'email' }),
+    ]));
   });
 
   it('POST /api/auth/register rejects non-university student email addresses', async () => {
@@ -109,19 +134,32 @@ describe('Protected routes — require valid JWT', () => {
 });
 
 // ---------------------------------------------------------------------------
+describe('Safepay webhook CSRF exemption', () => {
+  it('reaches webhook verification despite an unrelated Origin and cookie', async () => {
+    const res = await request(app)
+      .post('/api/safepay/webhook')
+      .set('Cookie', 'eraedu_session=example-session')
+      .set('Origin', 'https://safepay.example')
+      .set('Content-Type', 'application/json')
+      .send({});
+    expect(res.status).toBe(503);
+    expect(res.text).toBe('Webhook is not configured');
+  });
+});
+
 describe('Rate limiting headers present', () => {
   it('POST /api/auth/login returns rate limit headers', async () => {
     const res = await request(app)
       .post('/api/auth/login')
-      .send({ email: 'test@test.com', password: 'Test1234' });
+      .set('Origin', 'http://localhost:3000')
+      .send({});
     // RateLimit headers should be present
     const hasRateLimitHeader =
       'ratelimit-limit' in res.headers ||
       'x-ratelimit-limit' in res.headers ||
       'retry-after' in res.headers;
-    // Not guaranteed in test env, but at least the request should not crash
-    expect([400, 401, 429, 500]).toContain(res.status);
-    void hasRateLimitHeader; // documented intent
+    expect(res.status).toBe(400);
+    expect(hasRateLimitHeader).toBe(true);
   });
 });
 

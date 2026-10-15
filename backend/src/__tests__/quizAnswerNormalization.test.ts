@@ -4,9 +4,10 @@ process.env.SUPABASE_KEY = 'placeholder-anon-key';
 process.env.NODE_ENV = 'test';
 
 const mockFrom = jest.fn();
+const mockRpc = jest.fn();
 const mockAssertStudentEmailPolicy = jest.fn().mockResolvedValue(undefined);
 
-jest.mock('../config/supabase', () => ({ supabase: { from: mockFrom } }));
+jest.mock('../config/supabase', () => ({ supabase: { from: mockFrom, rpc: mockRpc } }));
 jest.mock('../services/authService', () => ({ assertStudentEmailPolicy: mockAssertStudentEmailPolicy }));
 
 import { normalizeAttemptAnswers, optionOrderForAttempt, quizService } from '../services/quizService';
@@ -55,6 +56,9 @@ describe('normalized teacher-quiz answers', () => {
 
   it.each([
     [[{ questionId: `${quizId}-q0`, selectedAnswer: 3 }], 'out of range'],
+    [[{ questionId: `${quizId}-q0`, selectedAnswer: null }], 'must be an integer'],
+    [[{ questionId: `${quizId}-q0`, selectedAnswer: true }], 'must be an integer'],
+    [[{ questionId: `${quizId}-q0`, selectedAnswer: '0' }], 'must be an integer'],
     [[{ questionId: `${quizId}-q0`, selectedAnswer: 0 }, { questionId: `${quizId}-q0`, selectedAnswer: 1 }], 'only be answered once'],
     [[{ questionId: 'other-quiz-q0', selectedAnswer: 0 }], 'does not belong'],
   ])('rejects invalid answer payloads: %s', (answers, message) => {
@@ -62,53 +66,102 @@ describe('normalized teacher-quiz answers', () => {
   });
 });
 
-function setupSubmission({ status, updateRows = [{ id: 'attempt-1' }], onUpdate }: {
-  status: string;
-  updateRows?: { id: string }[];
-  onUpdate?: (payload: any) => void;
-}) {
-  const attempt = { id: 'attempt-1', user_id: 'student-1', quiz_id: quizId, status, started_at: new Date().toISOString() };
-  const quiz = { id: quizId, title: 'Quiz', teacher_id: 'teacher-1', questions, time_limit: 0 };
+function setupSnapshotSubmission({ status = 'in-progress', score = 0 }: { status?: string; score?: number } = {}) {
+  const notify = jest.fn().mockResolvedValue({ error: null });
+  const snapshot = {
+    id: quizId,
+    title: 'Exam',
+    teacher_id: 'teacher-1',
+    questions,
+  };
+  const attempt = {
+    id: 'attempt-1',
+    user_id: 'student-1',
+    quiz_id: quizId,
+    status,
+    score,
+    max_score: questions.length,
+    started_at: new Date().toISOString(),
+    teacher_quiz_snapshot: snapshot,
+  };
   mockFrom.mockImplementation((table: string) => {
     if (table === 'quiz_attempts') {
       return {
         select: () => ({ eq: () => ({ eq: () => ({ single: async () => ({ data: attempt, error: null }) }) }) }),
-        update: (payload: any) => {
-          onUpdate?.(payload);
-          return { eq: () => ({ eq: () => ({ select: async () => ({ data: updateRows, error: null }) }) }) };
-        },
       };
     }
-    if (table === 'teacher_quizzes') {
-      return { select: () => ({ eq: () => ({ single: async () => ({ data: quiz, error: null }) }) }) };
+    if (table === 'cheating_violations') {
+      return { select: () => ({ in: () => ({ order: async () => ({ data: [], error: null }) }) }) };
     }
-    if (table === 'notifications') return { insert: async () => ({ error: null }) };
+    if (table === 'notifications') return { insert: notify };
+    if (table === 'teacher_quizzes') return { select: () => ({ eq: () => ({ single: async () => ({ data: { teacher_id: 'current-teacher' }, error: null }) }) }) };
     throw new Error(`Unexpected table ${table}`);
   });
+  mockRpc.mockImplementation(async (fn: string, params: any) => {
+    if (fn !== 'teacher_attempt_action') throw new Error(`Unexpected RPC ${fn}`);
+    if (params.p_action === 'answer') {
+      return { data: { ...attempt, status: 'in-progress' }, error: null };
+    }
+    if (params.p_action === 'submit') {
+      return {
+        data: {
+          ...attempt,
+          status: 'completed',
+          score: 1,
+          max_score: questions.length,
+          newlyCompleted: true,
+        },
+        error: null,
+      };
+    }
+    throw new Error(`Unexpected action ${params.p_action}`);
+  });
+  return { attempt, snapshot, notify };
 }
 
-describe('submitAllAnswers persistence and resubmission guard', () => {
+describe('snapshot-backed submission and resubmission guard', () => {
   beforeEach(() => {
     mockFrom.mockReset();
+    mockRpc.mockReset();
     mockAssertStudentEmailPolicy.mockClear();
   });
 
-  it('persists normalized answers and returns 1/3 (33%)', async () => {
-    let savedPayload: any;
-    setupSubmission({ status: 'in-progress', onUpdate: (payload) => { savedPayload = payload; } });
+  it('sends canonical answers to the server-owned snapshot and returns 1/3 (33%)', async () => {
+    const { notify } = setupSnapshotSubmission();
 
     await expect(quizService.submitAllAnswers('attempt-1', 'student-1', answersWithOnlyQ3Correct('attempt-1')))
       .resolves.toMatchObject({ score: 1, maxScore: 3, percentage: 33 });
-    expect(savedPayload.answers.map((answer: any) => answer.selectedAnswer)).toEqual([1, 0, 2]);
-    expect(savedPayload.answers.map((answer: any) => answer.isCorrect)).toEqual([false, false, true]);
+    expect(mockRpc).toHaveBeenNthCalledWith(1, 'teacher_attempt_action', expect.objectContaining({
+      p_action: 'answer',
+      p_answers: expect.arrayContaining([
+        expect.objectContaining({ questionId: `${quizId}-q0`, selectedAnswer: 1, isCorrect: false }),
+        expect.objectContaining({ questionId: `${quizId}-q1`, selectedAnswer: 0, isCorrect: false }),
+        expect.objectContaining({ questionId: `${quizId}-q2`, selectedAnswer: 2, isCorrect: true }),
+      ]),
+    }));
+    expect(mockRpc).toHaveBeenNthCalledWith(2, 'teacher_attempt_action', expect.objectContaining({ p_action: 'submit' }));
+    expect(notify).toHaveBeenCalledWith([expect.objectContaining({ user_id: 'current-teacher' })]);
   });
 
-  it('rejects a completed attempt and a raced atomic update as resubmissions', async () => {
-    setupSubmission({ status: 'completed' });
-    await expect(quizService.submitAllAnswers('attempt-1', 'student-1', [])).rejects.toThrow('Exam already submitted');
+  it('returns the existing completed result for a stale duplicate submit without parsing or writing it again', async () => {
+    setupSnapshotSubmission({ status: 'completed', score: 1 });
+    await expect(quizService.submitAllAnswers('attempt-1', 'student-1', [
+      { questionId: `${quizId}-q0`, selectedAnswer: true as any },
+    ])).resolves.toMatchObject({ score: 1, maxScore: 3, percentage: 33, status: 'completed' });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
 
-    setupSubmission({ status: 'in-progress', updateRows: [] });
-    await expect(quizService.submitAllAnswers('attempt-1', 'student-1', [])).rejects.toThrow('Exam already submitted');
+  it('requires migration 027 before accepting a legacy in-progress teacher exam', async () => {
+    const attempt = { id: 'attempt-1', user_id: 'student-1', quiz_id: quizId, status: 'in-progress' };
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'quiz_attempts') {
+        return { select: () => ({ eq: () => ({ eq: () => ({ single: async () => ({ data: attempt, error: null }) }) }) }) };
+      }
+      throw new Error(`Unexpected table ${table}`);
+    });
+
+    await expect(quizService.submitAllAnswers('attempt-1', 'student-1', []))
+      .rejects.toMatchObject({ statusCode: 503 });
   });
 });
 
@@ -137,5 +190,54 @@ describe('student results DTO', () => {
     await expect(quizService.getAttemptResults('attempt-1', 'student-1', 'student'))
       .resolves.toMatchObject({ reviewPending: true, quiz: { questions: [] } });
     await expect(quizService.getAttemptResults('attempt-1', 'student-2', 'student')).rejects.toThrow('Unauthorized');
+  });
+
+  it('never releases the answer key for an active attempt even if a grade is present', async () => {
+    setupResult({ id: 'attempt-1', user_id: 'student-1', quiz_id: quizId, status: 'in-progress', score: 1, max_score: 3, answers: [], teacher_grade: 33 });
+
+    const result = await quizService.getAttemptResults('attempt-1', 'student-1', 'student');
+    expect(result).toMatchObject({ reviewPending: true, quiz: { questions: [] } });
+    expect(result).not.toHaveProperty('answers');
+    expect(result).not.toHaveProperty('score');
+  });
+});
+
+describe('completed-attempt review boundary', () => {
+  const update = jest.fn();
+  const statusFilter = jest.fn();
+  function setup(status: string, rows: any[] = [{ id: 'attempt-1' }]) {
+    update.mockReset();
+    statusFilter.mockReset().mockReturnValue({ select: async () => ({ data: rows, error: null }) });
+    update.mockReturnValue({ eq: () => ({ eq: statusFilter }) });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'quiz_attempts') return {
+        select: () => ({ eq: () => ({ single: async () => ({ data: { quiz_id: quizId, user_id: 'student-1', status }, error: null }) }) }),
+        update,
+      };
+      if (table === 'teacher_quizzes') return { select: () => ({ eq: () => ({ single: async () => ({ data: { teacher_id: 'teacher-1', title: 'Exam' }, error: null }) }) }) };
+      if (table === 'notifications') return { insert: async () => ({ error: null }) };
+      throw new Error(`Unexpected table ${table}`);
+    });
+  }
+
+  it('rejects early review and does not write a grade', async () => {
+    setup('in-progress');
+    await expect(quizService.gradeSubmission('attempt-1', 'teacher-1', 33, 'Reviewed')).rejects.toMatchObject({ statusCode: 409 });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('permits completed review only with an atomic completed-status predicate', async () => {
+    setup('completed');
+    await expect(quizService.gradeSubmission('attempt-1', 'teacher-1', 33, 'Reviewed')).resolves.toEqual({ success: true });
+    expect(statusFilter).toHaveBeenCalledWith('status', 'completed');
+    setup('completed', []);
+    await expect(quizService.gradeSubmission('attempt-1', 'teacher-1', 33, 'Reviewed')).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('rejects another teacher and invalid review input', async () => {
+    setup('completed');
+    await expect(quizService.gradeSubmission('attempt-1', 'teacher-2', 33, 'Reviewed')).rejects.toThrow('Unauthorized');
+    await expect(quizService.gradeSubmission('attempt-1', 'teacher-1', NaN, '')).rejects.toMatchObject({ statusCode: 400 });
+    expect(update).not.toHaveBeenCalled();
   });
 });

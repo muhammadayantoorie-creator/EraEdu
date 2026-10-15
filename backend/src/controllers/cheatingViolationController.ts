@@ -66,7 +66,7 @@ export const reportViolation = asyncHandler(async (req: Request, res: Response) 
 
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    res.status(error.statusCode || 500).json({ success: false, error: { message: error.message } });
+    throw error; // use the common production-safe error handler
   }
 });
 
@@ -80,8 +80,7 @@ export const getViolations = asyncHandler(async (req: Request, res: Response) =>
     const result = await cheatingViolationService.getViolationsForAttempt(attemptId, userId, userRole);
     res.status(200).json({ success: true, data: result });
   } catch (error: any) {
-    const status = error.statusCode || (error.message.includes('authorized') ? 403 : 500);
-    res.status(status).json({ success: false, error: { message: error.message } });
+    throw error;
   }
 });
 

@@ -53,6 +53,9 @@ const canonicalViolationTypes: Record<string, ViolationType> = {
 };
 
 export function normalizeViolationType(value: string): ViolationType {
+  if (typeof value !== 'string' || !value.trim() || value.length > 50) {
+    throw Object.assign(new Error('A valid integrity event type is required'), { statusCode: 400 });
+  }
   return canonicalViolationTypes[value] || (value.toLowerCase() as ViolationType);
 }
 
@@ -64,19 +67,66 @@ function monitoringMigrationRequired(error: any): Error | null {
   return null;
 }
 
+function teacherAttemptMigrationRequired(error: any): Error | null {
+  const message = String(error?.message || '').toLowerCase();
+  if (
+    error?.code === '42883' || error?.code === '42703' ||
+    message.includes('teacher_quiz_snapshot') ||
+    message.includes('report_teacher_violation') ||
+    message.includes('teacher exam timing migration') ||
+    message.includes('schema cache')
+  ) {
+    return Object.assign(
+      new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
+      { statusCode: 503 },
+    );
+  }
+  return null;
+}
+
 export const cheatingViolationService = {
   // Report a new violation
   async reportViolation(input: ViolationInput) {
+    const normalizedType = normalizeViolationType(input.violationType);
+    if (typeof input.eventId !== 'string' || !input.eventId.trim() || input.eventId.length > 200) {
+      throw Object.assign(new Error('A stable event ID is required to retry integrity reports safely'), { statusCode: 400 });
+    }
+    if (typeof input.detectionMethod !== 'string' || !input.detectionMethod.trim() || input.detectionMethod.length > 100) {
+      throw Object.assign(new Error('A valid detection method is required'), { statusCode: 400 });
+    }
     const { data: attempt, error: attemptError } = await supabase
       .from('quiz_attempts')
-      .select('id, quiz_id, status')
+      .select('id, quiz_id, status, topic_id, teacher_quiz_snapshot')
       .eq('id', input.quizAttemptId)
       .eq('user_id', input.studentId)
       .single();
 
-    if (attemptError || !attempt) throw new Error('Exam attempt not found');
+    if (attemptError || !attempt) throw teacherAttemptMigrationRequired(attemptError) || new Error('Exam attempt not found');
+    // Teacher code-exam events and finalization must share one database lock.
+    // This prevents a threshold report racing a browser submit and losing
+    // answers that were already persisted before the event.
+    if (!attempt.topic_id && attempt.teacher_quiz_snapshot) {
+      const { data, error } = await supabase.rpc('report_teacher_violation', {
+        p_student_id: input.studentId,
+        p_attempt_id: input.quizAttemptId,
+        p_event: {
+          violationType: normalizedType,
+          eventId: input.eventId || null,
+          detectionMethod: input.detectionMethod || 'browser_event',
+          severity: input.severity || 'low',
+          details: input.details || {},
+        },
+      });
+      if (error || !data) throw teacherAttemptMigrationRequired(error) || new Error(error?.message || 'Could not save integrity event');
+      return data;
+    }
+
+    if (!attempt.topic_id && attempt.status === 'in-progress') {
+      throw teacherAttemptMigrationRequired({ message: 'Teacher exam timing migration is required' });
+    }
     if (attempt.status !== 'in-progress') {
-      return { violationId: null, violationCount: 0, violationLimit: 0, autoSubmitted: false, alreadySubmitted: true };
+      // A hidden/unread count is not a factual zero.
+      return { violationId: null, autoSubmitted: false, alreadySubmitted: true };
     }
 
     const { data: quiz } = await supabase
@@ -86,7 +136,6 @@ export const cheatingViolationService = {
       .single();
     const violationLimit = Math.min(100, Math.max(1, Number(quiz?.violation_limit) || 3));
 
-    const normalizedType = normalizeViolationType(input.violationType);
     const row = {
       quiz_attempt_id: input.quizAttemptId,
       student_id: input.studentId,
@@ -111,12 +160,14 @@ export const cheatingViolationService = {
     if (error) throw monitoringMigrationRequired(error) || new Error(error.message);
 
     // Get updated violation count
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from('cheating_violations')
       .select('*', { count: 'exact', head: true })
       .eq('quiz_attempt_id', input.quizAttemptId);
 
-    const currentCount = count || 0;
+    if (countError) throw monitoringMigrationRequired(countError) || new Error(countError.message);
+    if (count === null) throw new Error('Could not confirm integrity event count');
+    const currentCount = count;
 
     // Update the attempt and auto-submit as soon as the teacher's limit is reached.
     // The status predicate prevents duplicate completion during concurrent reports.
@@ -163,9 +214,9 @@ export const cheatingViolationService = {
     }
 
     if (requesterRole === 'student') {
-      if (attempt.user_id !== requesterId) {
-        throw Object.assign(new Error('You are not authorized to view these violations'), { statusCode: 403 });
-      }
+      // Match the result DTO policy: integrity detail is for authorized
+      // teacher/admin review, including when a student owns the attempt.
+      throw Object.assign(new Error('Integrity details are available to authorized reviewers only'), { statusCode: 403 });
     } else if (requesterRole !== 'admin') {
       const { data: quiz } = await supabase
         .from('teacher_quizzes')
@@ -186,10 +237,13 @@ export const cheatingViolationService = {
 
     if (error) throw new Error(error.message);
 
-    return violations.map(v => ({
+    return (violations || []).map(v => ({
       type: v.violation_type || 'unknown',
       timestamp: v.timestamp,
-      details: typeof v.details === 'string' ? v.details : JSON.stringify(v.details)
+      severity: v.severity || 'low',
+      detectionMethod: v.detection_method || 'unknown',
+      eventId: v.event_id || undefined,
+      details: v.details ?? null,
     }));
   },
 

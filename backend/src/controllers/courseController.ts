@@ -56,9 +56,6 @@ export const getEnrolledCourses = asyncHandler(async (req: Request, res: Respons
 // ============ Course Controllers (Teacher) ============
 
 export const createCourse = asyncHandler(async (req: Request, res: Response) => {
-  console.log('createCourse called by user:', req.user);
-  console.log('Request body:', req.body);
-  
   const course = await courseService.createCourse(req.user!._id.toString(), req.body);
   
   res.status(201).json({

@@ -12,7 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 interface Violation {
-  type: string;
+  type?: string;
   violation_type?: string;
   timestamp: string;
   details?: unknown;
@@ -27,15 +27,17 @@ const eventLabel = (event: Violation) => {
     || type.replace(/[_-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) || 'Unrecognized monitoring event';
 };
 const detailSummary = (details: unknown) => {
-  if (!details) return 'No additional details recorded.';
+  if (details == null || details === '') return 'No additional details recorded.';
   if (typeof details === 'string') {
     try { return detailSummary(JSON.parse(details)); } catch { return details; }
   }
-  if (typeof details === 'object') {
+  if (typeof details === 'object' && !Array.isArray(details)) {
     const value = details as Record<string, unknown>;
-    return String(value.alertMessage || value.focus_state || value.key_name || value.detectionMethod || 'Additional event context recorded.');
+    for (const key of ['alertMessage', 'focus_state', 'key_name', 'detectionMethod']) {
+      if (typeof value[key] === 'string' && value[key].trim()) return value[key];
+    }
   }
-  return String(details);
+  return 'Additional event context recorded.';
 };
 const rawDetails = (details: unknown) => typeof details === 'string' ? details : JSON.stringify(details ?? {}, null, 2);
 
@@ -69,9 +71,11 @@ interface QuizDetails {
 const TeacherSubmissions = () => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [quizDetails, setQuizDetails] = useState<QuizDetails | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
   const [gradeInput, setGradeInput] = useState('');
   const [feedbackInput, setFeedbackInput] = useState('');
   const [saving, setSaving] = useState(false);
@@ -83,12 +87,17 @@ const TeacherSubmissions = () => {
 
   const fetchSubmissions = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await api.get('/quizzes/teacher/submissions');
-      setSubmissions(response.data.data || []);
+      if (!Array.isArray(response.data?.data)) {
+        throw new Error('Invalid submission response');
+      }
+      setSubmissions(response.data.data);
     } catch (error) {
       console.error('Error fetching submissions:', error);
       setSubmissions([]);
+      setLoadError('Student submissions could not be loaded. No submission data has been inferred.');
     } finally {
       setLoading(false);
     }
@@ -96,6 +105,8 @@ const TeacherSubmissions = () => {
 
   const openReviewModal = async (submission: Submission) => {
     setSelectedSubmission(submission);
+    setQuizDetails(null);
+    setReviewError(null);
     setGradeInput(submission.teacherGrade?.toString() || submission.percentage.toString());
     setFeedbackInput(submission.teacherFeedback || '');
     
@@ -106,6 +117,9 @@ const TeacherSubmissions = () => {
         api.get(`/quizzes/attempts/${submission.id}/violations`)
       ]);
       
+      if (!quizResponse.data?.data || !Array.isArray(violationsResponse.data?.data)) {
+        throw new Error('Invalid review response');
+      }
       setQuizDetails(quizResponse.data.data);
       setSelectedSubmission(prev => prev ? { 
         ...prev, 
@@ -113,12 +127,14 @@ const TeacherSubmissions = () => {
       } : null);
     } catch (error) {
       console.error('Error fetching details:', error);
+      setReviewError('The exam or its monitoring events could not be loaded. No missing event has been treated as a clean attempt.');
     }
   };
 
   const closeModal = () => {
     setSelectedSubmission(null);
     setQuizDetails(null);
+    setReviewError(null);
     setGradeInput('');
     setFeedbackInput('');
   };
@@ -226,6 +242,17 @@ const TeacherSubmissions = () => {
         {loading ? (
           <div className="p-8 text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
+          </div>
+        ) : loadError ? (
+          <div role="alert" className="p-8 text-center text-red-800">
+            <p>{loadError}</p>
+            <button
+              type="button"
+              onClick={fetchSubmissions}
+              className="mt-3 font-semibold text-primary-700 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              Retry
+            </button>
           </div>
         ) : filteredSubmissions.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
@@ -408,7 +435,21 @@ const TeacherSubmissions = () => {
                   </div>
                 </div>
 
-                {selectedSubmission.autoSubmitted && (
+                {reviewError ? (
+                  <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                    <p>{reviewError}</p>
+                    <button
+                      type="button"
+                      onClick={() => void openReviewModal(selectedSubmission)}
+                      className="mt-2 font-semibold underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    >
+                      Retry loading review details
+                    </button>
+                  </div>
+                ) : (
+                  <>
+
+                    {selectedSubmission.autoSubmitted && (
                   <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
                     <div className="flex items-center gap-2">
                       <ExclamationTriangleIcon className="h-5 w-5" />
@@ -418,7 +459,7 @@ const TeacherSubmissions = () => {
                   </div>
                 )}
 
-                {selectedSubmission.violations && selectedSubmission.violations.length > 0 ? (
+                    {selectedSubmission.violations && selectedSubmission.violations.length > 0 ? (
                   <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                     <p className="text-sm font-medium text-gray-500 mb-3">Violation Timeline</p>
                     <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
@@ -446,17 +487,19 @@ const TeacherSubmissions = () => {
                             </div>
                             <p className="text-xs text-gray-600 mt-1">{detailSummary(v.details)}</p>
                             <p className="text-xs text-gray-500 mt-1">Severity: {v.severity || 'low'} · Detection: {v.detectionMethod || v.detection_method || 'unknown'}</p>
-                            {v.details && <details className="mt-1 text-xs text-gray-500"><summary className="cursor-pointer">Technical event data</summary><pre className="mt-1 whitespace-pre-wrap break-words">{rawDetails(v.details)}</pre></details>}
+                            {Boolean(v.details) && <details className="mt-1 text-xs text-gray-500"><summary className="cursor-pointer">Technical event data</summary><pre className="mt-1 whitespace-pre-wrap break-words">{rawDetails(v.details)}</pre></details>}
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
-                ) : (
+                    ) : (
                   <div className="bg-green-50 text-green-700 p-4 rounded-lg text-sm flex items-center gap-2">
                     <CheckCircleIcon className="h-5 w-5" />
                     No violations detected during this attempt.
                   </div>
+                    )}
+                  </>
                 )}
               </div>
 

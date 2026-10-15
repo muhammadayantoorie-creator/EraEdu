@@ -85,12 +85,53 @@ export const submitAllAnswers = asyncHandler(async (req: Request, res: Response)
   const { answers, violations } = req.body;
   const userId = req.user!._id.toString();
 
+  if (!Array.isArray(answers)) {
+    res.status(400).json({ success: false, error: { message: 'Answers must be an array' } });
+    return;
+  }
+
   const result = await quizService.submitAllAnswers(attemptId, userId, answers, violations);
 
   res.status(200).json({
     success: true,
     data: result,
   });
+});
+
+// Code-based teacher exams use a different lifecycle from topic exams. These
+// endpoints return only a public attempt variant; snapshot answer keys remain
+// server-only.
+export const getActiveTeacherAttempt = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!._id.toString();
+  const result = await quizService.getActiveTeacherAttempt(req.params.attemptId, userId);
+  res.status(200).json({ success: true, data: result });
+});
+
+export const activateTeacherAttemptQuestion = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!._id.toString();
+  const { questionId } = req.body;
+  if (typeof questionId !== 'string') {
+    res.status(400).json({ success: false, error: { message: 'questionId is required' } });
+    return;
+  }
+  const result = await quizService.activateTeacherAttemptQuestion(req.params.attemptId, userId, questionId);
+  res.status(200).json({ success: true, data: result });
+});
+
+export const saveTeacherAttemptAnswer = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!._id.toString();
+  const { questionId, selectedAnswer } = req.body;
+  if (typeof questionId !== 'string' || (typeof selectedAnswer !== 'number' && typeof selectedAnswer !== 'string')) {
+    res.status(400).json({ success: false, error: { message: 'questionId and selectedAnswer are required' } });
+    return;
+  }
+  const result = await quizService.saveTeacherAttemptAnswer(
+    req.params.attemptId,
+    userId,
+    questionId,
+    selectedAnswer,
+  );
+  res.status(200).json({ success: true, data: result });
 });
 
 export const getAttemptResults = asyncHandler(async (req: Request, res: Response) => {

@@ -3,7 +3,8 @@ import {
   getQuizForTopic, getCurrentTopicQuestion, submitAnswer, getHint, getQuizHistory,
   createQuiz, getTeacherQuizzes, updateQuiz, deleteQuiz, startQuizByCode, submitAllAnswers,
   getAttemptResults, getTeacherSubmissions, getTeacherQuizDetails, gradeSubmission,
-  getTeacherAnalytics, getStudentAnalytics
+  getTeacherAnalytics, getStudentAnalytics, getActiveTeacherAttempt,
+  activateTeacherAttemptQuestion, saveTeacherAttemptAnswer
 } from '../controllers/quizController';
 import {
   generateQuizCode, accessQuizByCode, getQuizCodes, toggleQuizCode, deleteQuizCode
@@ -40,6 +41,9 @@ router.delete('/:quizId', authorize('teacher', 'admin'), deleteQuiz);
 // Quiz Code routes
 router.get('/access-by-code/:code', authorize('student'), accessQuizByCode);
 router.post('/start-by-code/:code', authorize('student'), startQuizByCode);
+router.get('/attempt/:attemptId/active', authorize('student'), getActiveTeacherAttempt);
+router.post('/attempt/:attemptId/activate', authorize('student'), activateTeacherAttemptQuestion);
+router.post('/attempt/:attemptId/answer', authorize('student'), saveTeacherAttemptAnswer);
 router.post('/:attemptId/submit-all', authorize('student'), submitAllAnswers);
 router.post('/:quizId/generate-code', authorize('teacher', 'admin'), generateQuizCode);
 router.get('/:quizId/codes', authorize('teacher', 'admin'), getQuizCodes);
