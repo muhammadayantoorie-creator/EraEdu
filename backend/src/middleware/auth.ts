@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
 import { supabase } from '../config/supabase';
+import { accountStateError, assertActiveAccount, isAccountSchemaError } from '../services/accountState';
 
 // Extend Express Request interface to include user
 declare global {
@@ -40,22 +41,21 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
     const result = await supabase.from('users')
       .select('id, role, is_suspended').eq('id', decoded.id).maybeSingle();
     if (result.error) {
-      console.error('Authorization state lookup failed:', result.error);
-      return deny(res, 503, 'AUTH_STATE_UNAVAILABLE', 'Account status is temporarily unavailable. Please retry.');
+      const failure = accountStateError(isAccountSchemaError(result.error));
+      console.error('Authorization state lookup failed:', failure.code);
+      return deny(res, failure.statusCode, failure.code, failure.message);
     }
     liveUser = result.data;
-  } catch (error) {
-    console.error('Authorization state lookup failed:', error);
-    return deny(res, 503, 'AUTH_STATE_UNAVAILABLE', 'Account status is temporarily unavailable. Please retry.');
+  } catch {
+    const failure = accountStateError();
+    console.error('Authorization state lookup failed:', failure.code);
+    return deny(res, failure.statusCode, failure.code, failure.message);
   }
 
   if (!liveUser) return deny(res, 401, 'ACCOUNT_UNAVAILABLE', 'This account is no longer available. Please sign in again.');
-  // Migration 008 makes this non-nullable. A missing or malformed value must
-  // not silently grant access when a deployment has an incomplete schema.
-  if (typeof liveUser.is_suspended !== 'boolean') {
-    return deny(res, 503, 'AUTH_STATE_UNAVAILABLE', 'Account status is temporarily unavailable. Please retry.');
-  }
-  if (liveUser.is_suspended) return deny(res, 403, 'ACCOUNT_SUSPENDED', 'This account has been suspended. Please contact support.');
+  // Fail closed on unknown state; migration 029 reconciles the column contract.
+  try { assertActiveAccount(liveUser); }
+  catch (error: any) { return deny(res, error.statusCode, error.code, error.message); }
   if (!accountRoles.has(liveUser.role)) return deny(res, 403, 'ACCOUNT_ROLE_INVALID', 'This account has no supported access role. Please contact support.');
   // The signed role is never used to authorize a request. Comparing it only
   // revokes older tokens immediately after an administrator changes the role.

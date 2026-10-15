@@ -107,7 +107,8 @@ describe('current account authorization', () => {
     lookupError = { code: '42703', message: 'is_suspended missing' };
     const failed = await request(app).get('/teacher').set('Authorization', `Bearer ${token}`);
     expect(failed.status).toBe(503);
-    expect(failed.body.error.code).toBe('AUTH_STATE_UNAVAILABLE');
+    expect(failed.body.error.code).toBe('AUTH_SCHEMA_REQUIRED');
+    expect(failed.body.message).toContain('migration 029');
     lookupError = new Error('temporary network failure');
     expect((await request(app).get('/teacher').set('Authorization', `Bearer ${token}`)).status).toBe(503);
     lookupError = null;

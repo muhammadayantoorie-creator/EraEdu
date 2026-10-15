@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { safeRouteLabel } from '../config/logger';
+import { ACCOUNT_SCHEMA_REQUIRED } from '../services/accountState';
 
 const isProd = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 
@@ -14,6 +15,7 @@ const SAFE_400_MESSAGES = new Set<string>([
 ]);
 
 const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
+  ACCOUNT_SCHEMA_REQUIRED,
   'Account status is temporarily unavailable. Please retry.',
   'Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.',
   'Monitoring schema migration required: apply backend/migrations/019_make_cheating_events_authoritative.sql',
@@ -64,7 +66,7 @@ export const errorHandler = (err: any, req: Request, res: Response, _next: NextF
     }
   }
 
-  // In production, never echo raw 500 messages — they often contain DB
+  // In production, never echo raw 500 messages ? they often contain DB
   // internals (constraint names, query fragments).
   if (statusCode >= 500 && isProd && !SAFE_OPERATIONAL_MESSAGES.has(message)) {
     message = 'Server error';
@@ -78,7 +80,7 @@ export const errorHandler = (err: any, req: Request, res: Response, _next: NextF
   res.status(statusCode).json({
     success: false,
     message,
-    error: { message },
+    error: { message, ...(['AUTH_SCHEMA_REQUIRED', 'AUTH_STATE_UNAVAILABLE', 'ACCOUNT_SUSPENDED'].includes(err.code) ? { code: err.code } : {}) },
     ...(isProd ? {} : { stack: err.stack }),
   });
 };

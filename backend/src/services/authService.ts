@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
 import { emailService } from './emailService';
+import { accountStateError, assertActiveAccount, isAccountSchemaError } from './accountState';
 
 const createHttpError = (message: string, statusCode = 400) =>
   Object.assign(new Error(message), { statusCode });
@@ -22,12 +23,6 @@ const MAX_EMAIL_LEN = 254;
 const MAX_PASSWORD_LEN = 128;
 const MAX_BIO_LEN = 500;
 export const STUDENT_EMAIL_DOMAIN = '@nutech.edu.pk';
-const ACCOUNT_STATUS_UNAVAILABLE = 'Account status is temporarily unavailable. Please retry.';
-
-const assertActiveAccount = (user: any): void => {
-  if (typeof user.is_suspended !== 'boolean') throw createHttpError(ACCOUNT_STATUS_UNAVAILABLE, 503);
-  if (user.is_suspended) throw createHttpError('This account has been suspended. Please contact support.', 403);
-};
 
 const isStudentEmail = (email: string): boolean => {
   const normalized = email.toLowerCase().trim();
@@ -71,6 +66,11 @@ export const authService = {
       throw createHttpError('Student accounts must use a valid @nutech.edu.pk university email address');
     }
 
+    // Verify the required column before creating any account or sending email.
+    // A missing migration must not create an account that cannot sign in.
+    const { error: stateError } = await supabase.from('users').select('is_suspended').limit(0);
+    if (stateError) throw accountStateError(isAccountSchemaError(stateError));
+
     const { data: existingUsers, error: checkError } = await supabase
       .from('users')
       .select('id')
@@ -92,13 +92,18 @@ export const authService = {
         email: normalizedEmail,
         password: hashedPassword,
         role,
+        is_suspended: false, // Server-owned initial state; never accept client suspension fields.
         interests: [],
         created_at: new Date().toISOString(),
       }])
       .select()
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (isAccountSchemaError(error)) throw accountStateError(true);
+      throw new Error(error.message);
+    }
+    assertActiveAccount(newUser);
 
     let profilePictureUrl: string | undefined;
     if (role === 'student' && profilePictureBase64) {
@@ -155,7 +160,7 @@ export const authService = {
       .select('*')
       .eq('email', (email || '').toLowerCase().trim());
 
-    if (findError) throw new Error('Database error');
+    if (findError) throw accountStateError(isAccountSchemaError(findError));
 
     const user = users && users.length > 0 ? users[0] : null;
     if (!user) throw new Error('Invalid credentials');

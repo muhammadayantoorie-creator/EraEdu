@@ -146,7 +146,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       const unavailable = !error.response || error.response.status === 503;
       set({
         user: null, token: null, isAuthenticated: false, isAuthChecking: false,
-        authCheckError: unavailable ? 'Account status is temporarily unavailable. Please retry.' : null,
+        authCheckError: unavailable
+          ? (code === 'AUTH_SCHEMA_REQUIRED'
+            ? 'Account setup is incomplete. Please contact the administrator; retrying cannot repair the database setup.'
+            : 'Account status is temporarily unavailable. Please retry.')
+          : null,
         sessionNotice: !unavailable && code && code !== 'AUTH_REQUIRED' ? sessionNoticeFor(code) : null,
       });
     }
