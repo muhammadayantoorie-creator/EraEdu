@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DataTable, QuizOpeningConfirmationModal } from '../../../components/shared';
 import api from '../../../services/api';
+import { ExamSaveSession } from '../../../services/examSaveSession';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../../store/authStore';
 import {
@@ -104,6 +105,8 @@ const TeacherQuizzes = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const saveSession = useRef(new ExamSaveSession());
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [quizPendingOpen, setQuizPendingOpen] = useState<Quiz | null>(null);
   const [formMode, setFormMode] = useState<'quiz' | 'question'>('quiz');
@@ -219,6 +222,8 @@ const TeacherQuizzes = () => {
   };
 
   const handleOpenModal = (quiz?: Quiz) => {
+    if (saveSession.current.isSaving) return;
+    saveSession.current.reset();
     setSelectedBankIds([]);
     setBankTopicId('all');
     fetchBankQuestions();
@@ -314,6 +319,7 @@ const TeacherQuizzes = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saveSession.current.isSaving) return;
 
     if (formMode === 'question') {
       if (!formData.courseId) {
@@ -338,7 +344,7 @@ const TeacherQuizzes = () => {
 
         const totalSeconds = formData.questions.reduce((sum, q) => sum + (q.timeLimit || 60), 0);
 
-        await api.post('/quizzes', {
+        const payload = {
           title: formData.questionTitle,
           description: formData.description || 'Short-answer assessment',
           courseId: formData.courseId,
@@ -355,7 +361,13 @@ const TeacherQuizzes = () => {
             explanation: q.explanation,
             timeLimit: q.timeLimit || 60,
           })),
+        };
+        const result = await saveSession.current.submit(payload, true, async key => {
+          setSaving(true);
+          try { return await api.post('/quizzes', payload, { headers: { 'Idempotency-Key': key } }); }
+          finally { setSaving(false); }
         });
+        if (!result.started) return;
 
         toast.success(formData.questions.length > 1
           ? `${formData.questions.length} questions created successfully`
@@ -400,13 +412,15 @@ const TeacherQuizzes = () => {
     };
 
     try {
-      if (editingQuiz) {
-        await api.put(`/quizzes/${editingQuiz._id}`, submitData);
-        toast.success('Exam updated successfully');
-      } else {
-        await api.post('/quizzes', submitData);
-        toast.success('Exam created successfully');
-      }
+      const result = await saveSession.current.submit(submitData, !editingQuiz, async key => {
+        setSaving(true);
+        try {
+          return editingQuiz ? await api.put(`/quizzes/${editingQuiz._id}`, submitData)
+            : await api.post('/quizzes', submitData, { headers: { 'Idempotency-Key': key } });
+        } finally { setSaving(false); }
+      });
+      if (!result.started) return;
+      toast.success(editingQuiz ? 'Exam updated successfully' : 'Exam created successfully');
       setModalOpen(false);
       fetchQuizzes();
     } catch (error: any) {
@@ -603,6 +617,7 @@ const TeacherQuizzes = () => {
                 <button
                   type="button"
                   onClick={() => setFormMode('quiz')}
+                  disabled={saving}
                   className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                     formMode === 'quiz' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100'
                   }`}
@@ -611,6 +626,7 @@ const TeacherQuizzes = () => {
                 </button>
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() => {
                     setFormMode('question');
                     setFormData((prev) => ({
@@ -633,6 +649,7 @@ const TeacherQuizzes = () => {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              <fieldset disabled={saving} className="space-y-6" aria-busy={saving}>
               {formMode === 'quiz' && (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -972,11 +989,13 @@ const TeacherQuizzes = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700"
+                  disabled={saving}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60"
                 >
-                  {editingQuiz ? 'Update Exam' : formMode === 'quiz' ? 'Create Exam' : 'Create Question'}
+                  {saving ? 'Saving…' : editingQuiz ? 'Update Exam' : formMode === 'quiz' ? 'Create Exam' : 'Create Question'}
                 </button>
               </div>
+              </fieldset>
             </form>
           </div>
         </div>

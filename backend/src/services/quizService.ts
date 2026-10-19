@@ -29,6 +29,46 @@ interface QuizData {
   violationLimit?: number;
 }
 
+function quizCreationId(teacherId: string, requestKey?: string): string | undefined {
+  if (requestKey === undefined) return undefined;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestKey)) {
+    throw Object.assign(new Error('Idempotency-Key must be a valid UUID.'), { statusCode: 400 });
+  }
+  // The existing exam primary key is the cross-process uniqueness boundary.
+  // Scope each operation to its authenticated creator; do not use a rotating
+  // JWT secret or in-memory cache. No additional database schema is required.
+  const bytes = crypto.createHash('sha256').update(`eraedu:exam-create:v1:${teacherId}:${requestKey.toLowerCase()}`).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x80;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+async function findCreatedQuiz(teacherId: string, creationId?: string) {
+  if (!creationId) return null;
+  const { data, error } = await supabase.from('teacher_quizzes').select('*')
+    .eq('id', creationId).eq('teacher_id', teacherId).maybeSingle();
+  if (error) throw Object.assign(new Error('Unable to confirm the exam save. Retry the same request.'), { statusCode: 503 });
+  return data;
+}
+
+async function createdQuizResponse(quiz: any) {
+  let courseTitle = 'Unknown Course';
+  // Failure of this display-only lookup must not turn a committed create
+  // into an apparent save failure and encourage another creation.
+  try {
+    const { data: course } = await supabase.from('courses').select('title').eq('id', quiz.course_id).single();
+    if (course?.title) courseTitle = course.title;
+  } catch { /* The saved exam remains the authoritative result. */ }
+  return {
+    _id: quiz.id, title: quiz.title, description: quiz.description,
+    courseId: quiz.course_id, courseTitle, timeLimit: quiz.time_limit,
+    questions: quiz.questions, accessCode: quiz.access_code,
+    scheduledStart: quiz.scheduled_start, cameraMonitoring: quiz.camera_monitoring !== false,
+    violationLimit: quiz.violation_limit ?? 3, createdAt: quiz.created_at,
+  };
+}
+
 // PostgREST returns 42703 / "column ... does not exist" when a referenced
 // column is missing. Match the named column, never every 42703 error.
 function isMissingColumnError(err: any, column: string): boolean {
@@ -611,7 +651,10 @@ export const quizService = {
   },
 
   // Teacher quiz management
-  async createQuiz(teacherId: string, data: QuizData) {
+  async createQuiz(teacherId: string, data: QuizData, requestKey?: string) {
+    const creationId = quizCreationId(teacherId, requestKey);
+    const existing = await findCreatedQuiz(teacherId, creationId);
+    if (existing) return createdQuizResponse(existing);
     if (!data.courseId) {
       throw new Error('Course is required to create a quiz');
     }
@@ -675,6 +718,10 @@ export const quizService = {
       }
       if (organizationError) throw new Error(organizationError.message);
       if (organization?.subscription_status !== 'active' && Number(organization?.free_assessment_trials_used || 0) >= 5) {
+        // A simultaneous first request may have just committed the last free
+        // exam after our initial lookup. Its retry must still return that exam.
+        const completed = await findCreatedQuiz(teacherId, creationId);
+        if (completed) return createdQuizResponse(completed);
         const err: any = new Error('Your institution has used its five free assessment trials. Activate the Institution plan to create more quizzes.');
         err.statusCode = 403;
         throw err;
@@ -685,6 +732,7 @@ export const quizService = {
     const accessCode = await this.generateUniqueCode();
 
     const baseInsert: any = {
+      ...(creationId ? { id: creationId } : {}),
       teacher_id: teacherId,
       title: data.title,
       description: data.description || '',
@@ -705,6 +753,14 @@ export const quizService = {
       .select()
       .single();
 
+    if (insertResult.error && creationId) {
+      // Plain INSERT intentionally rolls back BEFORE-trigger trial counters
+      // on a duplicate primary key. An upsert/DO NOTHING could charge twice.
+      // Also recover when the competing insert consumed the final free trial
+      // or the response was lost after the database committed successfully.
+      const completed = await findCreatedQuiz(teacherId, creationId);
+      if (completed) return createdQuizResponse(completed);
+    }
     requireExamSettingsSchema(insertResult.error);
 
     if (insertResult.error && String(insertResult.error.message || '').includes('FREE_ASSESSMENT_TRIAL_LIMIT_REACHED')) {
@@ -717,28 +773,12 @@ export const quizService = {
     if (error) throw new Error(error.message);
 
     // Send notification only to enrolled students in selected course
-    await this.notifyCourseStudents(data.title, quiz.id, accessCode, teacherId, data.courseId, data.scheduledStart);
-
-    const { data: course } = await supabase
-      .from('courses')
-      .select('title')
-      .eq('id', data.courseId)
-      .single();
-
-    return {
-      _id: quiz.id,
-      title: quiz.title,
-      description: quiz.description,
-      courseId: quiz.course_id,
-      courseTitle: course?.title || 'Unknown Course',
-      timeLimit: quiz.time_limit,
-      questions: quiz.questions,
-      accessCode: quiz.access_code,
-      scheduledStart: quiz.scheduled_start,
-      cameraMonitoring: quiz.camera_monitoring !== false,
-      violationLimit: quiz.violation_limit ?? 3,
-      createdAt: quiz.created_at,
-    };
+    try {
+      await this.notifyCourseStudents(data.title, quiz.id, accessCode, teacherId, data.courseId, data.scheduledStart);
+    } catch {
+      console.warn('Exam saved, but student notifications could not be delivered.');
+    }
+    return createdQuizResponse(quiz);
   },
 
   async getTeacherQuizzes(teacherId: string) {

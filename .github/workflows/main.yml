@@ -66,6 +66,9 @@ jobs:
     - name: Verify monitoring report retries
       run: npm run test:integrity
 
+    - name: Verify exam save retries
+      run: npm run test:exam-save
+
     - name: Build
       run: npx vite build
       env:

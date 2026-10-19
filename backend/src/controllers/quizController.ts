@@ -17,7 +17,7 @@ export const createQuiz = asyncHandler(async (req: Request, res: Response) => {
     bankQuestionIds,
     cameraMonitoring,
     violationLimit,
-  });
+  }, req.get('Idempotency-Key'));
 
   res.status(201).json({
     success: true,
