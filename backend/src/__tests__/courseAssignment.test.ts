@@ -19,6 +19,36 @@ beforeEach(() => { mockFrom.mockReset(); mockRpc.mockReset(); });
 afterEach(() => jest.restoreAllMocks());
 
 describe('admin course assignment', () => {
+  function mockCourseListing(course: Record<string, unknown>) {
+    const query: any = {
+      select: () => query, order: () => query, range: () => query,
+      then: (resolve: any, reject: any) => Promise.resolve({ data: [course], count: 1, error: null }).then(resolve, reject),
+    };
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'courses') return query;
+      if (table === 'enrollments') return { select: () => ({ eq: async () => ({ count: 0, error: null }) }) };
+      if (table === 'topics') return { select: () => ({ eq: async () => ({ data: [], error: null }) }) };
+      throw new Error(`Unexpected table ${table}`);
+    });
+  }
+
+  it('reproduces the screenshot when courses.organization_id is absent', async () => {
+    mockCourseListing({ id: 'course-1', title: 'Existing course', max_students: 30 });
+    await expect(courseAssignmentService.listCourses()).rejects.toMatchObject({
+      statusCode: 503, message: expect.stringContaining('024_assign_courses_to_teachers.sql'),
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('lists an existing unassigned course once migration 024 supplies a nullable organization_id', async () => {
+    mockCourseListing({ id: 'course-1', title: 'Existing course', organization_id: null, max_students: 30 });
+    await expect(courseAssignmentService.listCourses()).resolves.toMatchObject({
+      data: [{ _id: 'course-1', title: 'Existing course', organizationId: null, assignedTeacherName: 'Unassigned', enrollmentCount: 0 }],
+      pagination: { total: 1 },
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
   it('requires an admin at the route boundary', () => {
     const status = jest.fn().mockReturnValue({ json: jest.fn() });
     const next = jest.fn();

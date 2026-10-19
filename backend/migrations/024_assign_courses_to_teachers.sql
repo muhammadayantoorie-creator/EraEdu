@@ -1,5 +1,13 @@
 -- Course created_by and teacher_quizzes.teacher_id are the CURRENT manager.
 -- original_teacher_id records the assessment author; quiz/attempt IDs never change.
+-- Run the entire file in the Supabase SQL Editor for the API's database.
+-- Prerequisites: base tables, 006 (capacity), 012 (institutions),
+-- 015 (course codes), 016 (exam course scope), and 008/029 (account status).
+-- A failed statement must roll back the entire repair, including new columns.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
 ALTER TABLE public.courses
   ADD COLUMN IF NOT EXISTS organization_id uuid REFERENCES public.organizations(id) ON DELETE RESTRICT;
 ALTER TABLE public.teacher_quizzes
@@ -149,3 +157,4 @@ REVOKE ALL ON FUNCTION public.admin_reassign_course(uuid, uuid, uuid, uuid) FROM
 GRANT EXECUTE ON FUNCTION public.admin_create_assigned_course(uuid, uuid, uuid, text, text, text, text, text, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_reassign_course(uuid, uuid, uuid, uuid) TO service_role;
 NOTIFY pgrst, 'reload schema';
+COMMIT;
