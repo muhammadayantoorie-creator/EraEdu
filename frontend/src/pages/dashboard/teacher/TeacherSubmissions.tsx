@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '../../../services/api';
+import { hasTeacherGrade, submissionErrorMessage } from '../../../services/submissionView';
 import toast from 'react-hot-toast';
 import {
   MagnifyingGlassIcon,
@@ -54,7 +55,7 @@ interface Submission {
   status: string;
   startedAt: string;
   completedAt: string;
-  teacherGrade?: number;
+  teacherGrade?: number | null;
   teacherFeedback?: string;
   answers: any[];
   violations?: Violation[];
@@ -76,6 +77,8 @@ const TeacherSubmissions = () => {
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [quizDetails, setQuizDetails] = useState<QuizDetails | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const reviewRequest = useRef(0);
   const [gradeInput, setGradeInput] = useState('');
   const [feedbackInput, setFeedbackInput] = useState('');
   const [saving, setSaving] = useState(false);
@@ -97,16 +100,18 @@ const TeacherSubmissions = () => {
     } catch (error) {
       console.error('Error fetching submissions:', error);
       setSubmissions([]);
-      setLoadError('Student submissions could not be loaded. No submission data has been inferred.');
+      setLoadError(submissionErrorMessage(error, 'Student submissions could not be loaded. Please retry.'));
     } finally {
       setLoading(false);
     }
   };
 
   const openReviewModal = async (submission: Submission) => {
+    const requestId = ++reviewRequest.current;
     setSelectedSubmission(submission);
     setQuizDetails(null);
     setReviewError(null);
+    setReviewLoading(true);
     setGradeInput(submission.teacherGrade?.toString() || submission.percentage.toString());
     setFeedbackInput(submission.teacherFeedback || '');
     
@@ -116,8 +121,9 @@ const TeacherSubmissions = () => {
         api.get(`/quizzes/teacher/quiz/${submission.quizId}`),
         api.get(`/quizzes/attempts/${submission.id}/violations`)
       ]);
+      if (requestId !== reviewRequest.current) return;
       
-      if (!quizResponse.data?.data || !Array.isArray(violationsResponse.data?.data)) {
+      if (!Array.isArray(quizResponse.data?.data?.questions) || !Array.isArray(violationsResponse.data?.data)) {
         throw new Error('Invalid review response');
       }
       setQuizDetails(quizResponse.data.data);
@@ -126,21 +132,26 @@ const TeacherSubmissions = () => {
         violations: violationsResponse.data.data 
       } : null);
     } catch (error) {
+      if (requestId !== reviewRequest.current) return;
       console.error('Error fetching details:', error);
-      setReviewError('The exam or its monitoring events could not be loaded. No missing event has been treated as a clean attempt.');
+      setReviewError(submissionErrorMessage(error, 'The exam or its monitoring records could not be loaded. Please retry.'));
+    } finally {
+      if (requestId === reviewRequest.current) setReviewLoading(false);
     }
   };
 
   const closeModal = () => {
+    reviewRequest.current++;
     setSelectedSubmission(null);
     setQuizDetails(null);
     setReviewError(null);
+    setReviewLoading(false);
     setGradeInput('');
     setFeedbackInput('');
   };
 
   const handleSaveGrade = async () => {
-    if (!selectedSubmission) return;
+    if (!selectedSubmission || reviewLoading || reviewError || !quizDetails) return;
     
     setSaving(true);
     try {
@@ -171,12 +182,12 @@ const TeacherSubmissions = () => {
       (sub.studentName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (sub.quizTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
     
-    if (filter === 'pending') return matchesSearch && sub.teacherGrade === undefined;
-    if (filter === 'graded') return matchesSearch && sub.teacherGrade !== undefined;
+    if (filter === 'pending') return matchesSearch && !hasTeacherGrade(sub.teacherGrade);
+    if (filter === 'graded') return matchesSearch && hasTeacherGrade(sub.teacherGrade);
     return matchesSearch;
   });
 
-  const pendingCount = submissions.filter(s => s.teacherGrade === undefined).length;
+  const pendingCount = submissions.filter(s => !hasTeacherGrade(s.teacherGrade)).length;
 
   return (
     <div className="space-y-6">
@@ -287,7 +298,7 @@ const TeacherSubmissions = () => {
                     
                     <div className="text-center">
                       <p className="text-sm text-gray-500">Grade</p>
-                      {submission.teacherGrade !== undefined ? (
+                      {hasTeacherGrade(submission.teacherGrade) ? (
                         <p className="font-medium text-green-600">{submission.teacherGrade}%</p>
                       ) : (
                         <p className="font-medium text-orange-600">Pending</p>
@@ -427,15 +438,16 @@ const TeacherSubmissions = () => {
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-medium text-gray-900">Security & Rule Violations</h4>
                   <div className={`px-3 py-1 rounded-full text-sm font-bold ${
+                    reviewError || reviewLoading ? 'bg-amber-100 text-amber-900' :
                     (selectedSubmission.violations?.length || 0) >= 100 ? 'bg-red-100 text-red-700' :
                     (selectedSubmission.violations?.length || 0) > 10 ? 'bg-orange-100 text-orange-700' :
                     'bg-green-100 text-green-700'
                   }`}>
-                    {selectedSubmission.violations?.length || 0} Total Violations
+                    {reviewLoading ? 'Loading monitoring records…' : reviewError ? 'Monitoring unavailable' : `${selectedSubmission.violations?.length || 0} Total Violations`}
                   </div>
                 </div>
 
-                {reviewError ? (
+                {reviewLoading ? <p role="status" className="text-sm text-gray-600">Loading review details…</p> : reviewError ? (
                   <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                     <p>{reviewError}</p>
                     <button
@@ -546,7 +558,7 @@ const TeacherSubmissions = () => {
               </button>
               <button
                 onClick={handleSaveGrade}
-                disabled={saving}
+                disabled={saving || reviewLoading || !!reviewError || !quizDetails}
                 className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {saving ? (

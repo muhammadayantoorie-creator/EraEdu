@@ -96,15 +96,16 @@ async function persistedViolationsForAttempts(attemptIds: string[]): Promise<Map
   const result = new Map<string, PersistedViolation[]>();
   if (!attemptIds.length) return result;
   const { data, error } = await supabase.from('cheating_violations')
-    .select('quiz_attempt_id, violation_type, timestamp, details, event_id, severity, detection_method')
+    // Match the single-attempt review reader: historical rows can predate
+    // event_id, which is required for retrying new WRITES, not reading events.
+    // Select all available fields so current schemas retain their event IDs.
+    .select('*')
     .in('quiz_attempt_id', attemptIds).order('timestamp', { ascending: true });
-  if (error) {
-    if (isMissingColumnError(error, 'event_id')) {
-      throw Object.assign(new Error('Monitoring schema migration required: apply backend/migrations/019_make_cheating_events_authoritative.sql'), { statusCode: 503 });
-    }
-    throw new Error(error.message);
+  if (error || !Array.isArray(data)) {
+    // Never replace unavailable monitoring records with a factual zero count.
+    throw Object.assign(new Error('Submission monitoring records could not be loaded. Please retry or contact an administrator.'), { statusCode: 503 });
   }
-  for (const event of data || []) {
+  for (const event of data) {
     const events = result.get(event.quiz_attempt_id) || [];
     events.push({ type: event.violation_type || 'unknown', timestamp: event.timestamp, details: event.details, eventId: event.event_id || undefined, severity: event.severity || 'low', detectionMethod: event.detection_method || 'unknown' });
     result.set(event.quiz_attempt_id, events);
@@ -1124,11 +1125,11 @@ export const quizService = {
     if (attempts.length === 0) return [];
 
     // Get student info for each attempt
-    const userIds = [...new Set(attempts.map(a => a.user_id))];
-    const { data: users, error: usersError } = await supabase
+    const userIds = [...new Set(attempts.map(a => a.user_id).filter(id => typeof id === 'string' && id.trim()))];
+    const { data: users, error: usersError } = userIds.length ? await supabase
       .from('users')
       .select('id, name, email')
-      .in('id', userIds);
+      .in('id', userIds) : { data: [], error: null };
 
     if (usersError || !Array.isArray(users)) throw Object.assign(new Error('Student submissions could not be loaded. Please retry.'), { statusCode: 503 });
 
