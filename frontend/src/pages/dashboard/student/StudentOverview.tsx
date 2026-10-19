@@ -24,8 +24,9 @@ interface Notification {
 
 interface StudentAnalytics {
   totalQuizzes: number;
-  avgScore: number;
-  passRate: number;
+  avgScore: number | null;
+  passRate: number | null;
+  pendingReviews: number;
   streakDays: number;
   performanceData: { week: string; score: number }[];
 }
@@ -50,6 +51,7 @@ const StudentOverview = () => {
   const { user } = useAuthStore();
   const [analytics, setAnalytics] = useState<StudentAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsError, setAnalyticsError] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
 
@@ -67,9 +69,11 @@ const StudentOverview = () => {
     try {
       const response = await api.get('/quizzes/student/analytics');
       setAnalytics(response.data.data);
+      setAnalyticsError(false);
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
-      setAnalytics({ totalQuizzes: 0, avgScore: 0, passRate: 0, streakDays: 0, performanceData: [] });
+      setAnalytics(null);
+      setAnalyticsError(true);
     } finally {
       setAnalyticsLoading(false);
     }
@@ -98,8 +102,14 @@ const StudentOverview = () => {
     );
   }
 
+  if (analyticsError) return <div role="alert" className="p-6 text-red-800">
+    <p>Unable to load your exam summary.</p>
+    <button type="button" className="mt-3 underline focus-visible:ring-2" onClick={() => void fetchAnalytics()}>Retry</button>
+  </div>;
+
   return (
     <div className="student-teal mx-auto max-w-7xl space-y-8">
+      {!!analytics?.pendingReviews && <p role="status" className="rounded bg-amber-50 p-3 text-amber-900">{analytics.pendingReviews} exam result(s) pending teacher review. Scores and charts include released results only.</p>}
       {/* HERO */}
       <section className="relative overflow-hidden rounded-[2rem] bg-primary-100/70 p-1.5 ring-1 ring-primary-200/70">
         <div
@@ -183,7 +193,7 @@ const StudentOverview = () => {
         <StatCard
           icon={<Stroke d="M3 21h18 M6 17V9 M11 17V5 M16 17v-7 M21 17v-3" />}
           label="Average Score"
-          value={analytics?.avgScore ? `${analytics.avgScore}%` : 'N/A'}
+          value={analytics?.avgScore != null ? `${analytics.avgScore}%` : 'Not released'}
           color="blue"
           trend={analytics?.avgScore && analytics.avgScore >= 60 ? 'up' : 'down'}
         />

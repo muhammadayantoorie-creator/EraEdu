@@ -15,7 +15,11 @@ const SAFE_400_MESSAGES = new Set<string>([
 ]);
 
 const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
+  'Student submissions could not be loaded. Please retry.',
+  'Analytics could not be loaded. Please retry.',
+  'Unable to load enrollment statistics',
   ACCOUNT_SCHEMA_REQUIRED,
+  'Exam settings storage is unavailable. Apply backend/migrations/016_complete_teacher_quiz_schema.sql before saving this exam.',
   'Account status is temporarily unavailable. Please retry.',
   'Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.',
   'Monitoring schema migration required: apply backend/migrations/019_make_cheating_events_authoritative.sql',
@@ -46,8 +50,19 @@ export const errorHandler = (err: any, req: Request, res: Response, _next: NextF
   console.error(`[Error] ${req.method} ${safeRouteLabel(req)}:`, isProd ? (err?.name || 'Error') : (err?.message || err));
   if (err?.stack && !isProd) console.error(err.stack);
 
-  let statusCode: number = err.statusCode || 0;
+  // express.json/urlencoded attach `status`, rather than `statusCode`, to
+  // malformed/oversized bodies. These are client errors, not server crashes.
+  let statusCode: number = err.statusCode || err.status || 0;
+  if (err.type === 'entity.parse.failed') statusCode = 400;
+  if (err.type === 'entity.too.large') statusCode = 413;
   let message: string = err.message || 'Server error';
+  if (err.type === 'entity.parse.failed') message = 'Request body must contain valid JSON.';
+  if (err.type === 'entity.too.large') message = 'Request body is too large.';
+  if (message === 'Not allowed by CORS') {
+    statusCode = 403;
+    message = 'Request origin is not allowed.';
+  }
+  if (statusCode && (!Number.isInteger(statusCode) || statusCode < 400 || statusCode > 599)) statusCode = 500;
 
   // Map common auth/registration messages to canonical HTTP codes
   if (!statusCode) {
@@ -66,7 +81,7 @@ export const errorHandler = (err: any, req: Request, res: Response, _next: NextF
     }
   }
 
-  // In production, never echo raw 500 messages ? they often contain DB
+  // In production, never echo raw 500 messages — they often contain DB
   // internals (constraint names, query fragments).
   if (statusCode >= 500 && isProd && !SAFE_OPERATIONAL_MESSAGES.has(message)) {
     message = 'Server error';

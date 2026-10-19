@@ -78,7 +78,7 @@ const DashboardPage: React.FC = () => {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Average Score</dt>
-                  <dd className="text-lg font-medium text-gray-900">{stats?.averageScore ? `${stats.averageScore.toFixed(1)}%` : 'N/A'}</dd>
+                  <dd className="text-lg font-medium text-gray-900">{stats?.averageScore != null ? `${stats.averageScore.toFixed(1)}%` : 'No released results'}</dd>
                 </dl>
               </div>
             </div>

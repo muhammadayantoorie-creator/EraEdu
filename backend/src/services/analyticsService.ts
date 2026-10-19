@@ -1,4 +1,11 @@
 import { supabase } from '../config/supabase';
+import { canReleaseStudentResult } from './resultReleasePolicy';
+
+function assertAnalyticsRows(data: unknown, error?: unknown): asserts data is any[] {
+  if (error || !Array.isArray(data)) {
+    throw Object.assign(new Error('Analytics could not be loaded. Please retry.'), { statusCode: 503 });
+  }
+}
 
 // Page through PostgREST results so a teacher with more than the default row
 // limit still gets an exact, course-scoped unique learner count.
@@ -17,50 +24,16 @@ async function readAllRows(table: string, columns: string, filter: (query: any) 
 
 export const analyticsService = {
   async getDashboardStats(userId: string) {
-    let coursesEnrolled = 0;
-    let quizzesCompleted = 0;
-    let averageScore = 0;
-    const streakDays = 0;
-
-    try {
-      const { count } = await supabase
-        .from('enrollments')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-      coursesEnrolled = count || 0;
-    } catch (e) {
-      console.error('Error fetching enrollments:', e);
-    }
-
-    try {
-      const { count } = await supabase
-        .from('quiz_attempts')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .eq('status', 'completed');
-      quizzesCompleted = count || 0;
-    } catch (e) {
-      console.error('Error fetching quiz attempts:', e);
-    }
-
-    try {
-      const { data: attempts } = await supabase
-        .from('quiz_attempts')
-        .select('score, max_score')
-        .eq('user_id', userId)
-        .eq('status', 'completed');
-
-      if (attempts && attempts.length > 0) {
-        const total = attempts.reduce((sum: number, a: any) => {
-          return sum + (a.max_score > 0 ? (a.score / a.max_score) * 100 : 0);
-        }, 0);
-        averageScore = Math.round(total / attempts.length);
-      }
-    } catch (e) {
-      console.error('Error calculating average score:', e);
-    }
-
-    return { coursesEnrolled, quizzesCompleted, averageScore, streakDays };
+    const { count, error } = await supabase.from('enrollments')
+      .select('*', { count: 'exact', head: true }).eq('user_id', userId);
+    if (error || typeof count !== 'number') throw Object.assign(new Error('Unable to load enrollment statistics'), { statusCode: 503 });
+    const attempts = await readAllRows('quiz_attempts', 'id, status, topic_id, teacher_grade, score, max_score',
+      query => query.eq('user_id', userId).eq('status', 'completed'));
+    const released = attempts.filter(canReleaseStudentResult);
+    const averageScore = released.length ? Math.round(released.reduce((sum, attempt) =>
+      sum + (attempt.max_score > 0 ? attempt.score / attempt.max_score * 100 : 0), 0) / released.length) : null;
+    return { coursesEnrolled: count, quizzesCompleted: attempts.length, averageScore,
+      pendingReviews: attempts.length - released.length, streakDays: 0 };
   },
 
   // ============ Teacher Analytics ============
@@ -222,20 +195,22 @@ export const analyticsService = {
       }
 
       // Get teacher's quizzes (teacher_quizzes table — the active one)
-      const { data: quizzes } = await supabase
+      const { data: quizzes, error: quizzesError } = await supabase
         .from('teacher_quizzes')
         .select('id')
         .eq('teacher_id', teacherId);
 
-      const quizIds = (quizzes || []).map((q: any) => q.id);
+      assertAnalyticsRows(quizzes, quizzesError);
+      const quizIds = quizzes.map((q: any) => q.id);
 
       // Get teacher's courses for enrollment data
-      const { data: courses } = await supabase
+      const { data: courses, error: coursesError } = await supabase
         .from('courses')
         .select('id')
         .eq('created_by', teacherId);
 
-      const courseIds = (courses || []).map((c: any) => c.id);
+      assertAnalyticsRows(courses, coursesError);
+      const courseIds = courses.map((c: any) => c.id);
 
       // Fetch all attempts and enrollments in one round-trip each
       const [attemptResult, enrollResult] = await Promise.all([
@@ -247,8 +222,10 @@ export const analyticsService = {
           : Promise.resolve({ data: [] }),
       ]);
 
-      const attempts = attemptResult.data || [];
-      const enrollments = enrollResult.data || [];
+      assertAnalyticsRows(attemptResult.data, 'error' in attemptResult && attemptResult.error);
+      assertAnalyticsRows(enrollResult.data, 'error' in enrollResult && enrollResult.error);
+      const attempts = attemptResult.data;
+      const enrollments = enrollResult.data;
 
       // Build weekly buckets in memory
       const weeks = Math.min(12, Math.ceil((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)));
@@ -278,7 +255,7 @@ export const analyticsService = {
       return timeSeriesData;
     } catch (e) {
       console.error('Error fetching time series:', e);
-      return [];
+      throw e;
     }
   },
 
@@ -290,16 +267,18 @@ export const analyticsService = {
         .eq('created_by', teacherId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      if (!courses || courses.length === 0) return [];
+      assertAnalyticsRows(courses, error);
+      if (courses.length === 0) return [];
 
       const courseIds = courses.map((c: any) => c.id);
 
       // Single query for all enrollment counts
-      const { data: enrollments } = await supabase
+      const { data: enrollments, error: enrollmentsError } = await supabase
         .from('enrollments')
         .select('course_id')
         .in('course_id', courseIds);
+
+      assertAnalyticsRows(enrollments, enrollmentsError);
 
       const countByCourse: Record<string, number> = {};
       for (const e of (enrollments || [])) {
@@ -321,18 +300,19 @@ export const analyticsService = {
       }));
     } catch (e) {
       console.error('Error fetching teacher courses:', e);
-      return [];
+      throw e;
     }
   },
 
   async getTeacherTopics(teacherId: string) {
     try {
-      const { data: courses } = await supabase
+      const { data: courses, error: coursesError } = await supabase
         .from('courses')
         .select('id, title')
         .eq('created_by', teacherId);
 
-      const courseIds = (courses || []).map((c: any) => c.id);
+      assertAnalyticsRows(courses, coursesError);
+      const courseIds = courses.map((c: any) => c.id);
       const courseMap = new Map((courses || []).map((c: any) => [c.id, c.title]));
       if (courseIds.length === 0) return [];
 
@@ -342,16 +322,18 @@ export const analyticsService = {
         .in('course_id', courseIds)
         .order('order', { ascending: true });
 
-      if (error) throw error;
-      if (!topics || topics.length === 0) return [];
+      assertAnalyticsRows(topics, error);
+      if (topics.length === 0) return [];
 
       const topicIds = topics.map((t: any) => t.id);
 
       // Single batch query for all question counts
-      const { data: questions } = await supabase
+      const { data: questions, error: questionsError } = await supabase
         .from('questions')
         .select('topic_id')
         .in('topic_id', topicIds);
+
+      assertAnalyticsRows(questions, questionsError);
 
       const questionCountByTopic: Record<string, number> = {};
       for (const q of (questions || [])) {
@@ -369,7 +351,7 @@ export const analyticsService = {
       }));
     } catch (e) {
       console.error('Error fetching teacher topics:', e);
-      return [];
+      throw e;
     }
   },
 
@@ -386,7 +368,7 @@ export const analyticsService = {
         .in('topic_id', topicIds)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      assertAnalyticsRows(questions, error);
 
       return (questions || []).map((q: any) => ({
         _id: q.id,
@@ -401,7 +383,7 @@ export const analyticsService = {
       }));
     } catch (e) {
       console.error('Error fetching teacher questions:', e);
-      return [];
+      throw e;
     }
   },
 };

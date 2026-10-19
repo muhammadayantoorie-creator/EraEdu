@@ -2,6 +2,7 @@ import { useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
 import { SESSION_EXPIRED_EVENT } from './services/api';
+import IntegrityReportSync from './components/shared/IntegrityReportSync';
 
 // Layouts
 import MainLayout from './components/layout/MainLayout';
@@ -122,7 +123,7 @@ function App() {
   }, [checkAuth, expireSession]);
 
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-screen">Loading page...</div>}>
+    <><IntegrityReportSync /><Suspense fallback={<div className="flex items-center justify-center h-screen">Loading page...</div>}>
     <Routes>
       {/* Public Routes */}
       <Route path="/" element={<LandingPage />} />
@@ -238,7 +239,7 @@ function App() {
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
-    </Suspense>
+    </Suspense></>
   );
 }
 

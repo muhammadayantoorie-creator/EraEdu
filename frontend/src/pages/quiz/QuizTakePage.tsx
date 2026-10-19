@@ -1,6 +1,8 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
+import { INTEGRITY_SAVED, queueIntegrityEvent } from '../../services/integrityOutbox';
 import toast from 'react-hot-toast';
 import { ClockIcon, CheckCircleIcon, ExclamationTriangleIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 
@@ -97,6 +99,7 @@ interface ViolationPayload {
 const QuizTakePage = () => {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
+  const userId = useAuthStore(state => state.user?._id);
 
   const [quizData,             setQuizData]             = useState<QuizData | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -120,7 +123,7 @@ const QuizTakePage = () => {
   );
 
   // Anti-cheating state
-  const violations             = useRef<ViolationPayload[]>([]);
+  const unqueuedReports = useRef(new Map<string, ViolationPayload>());
   const tabHiddenStartRef      = useRef<number | null>(null);
   // Prevents blur + visibilitychange from double-counting the same event
   const violationCooldownRef   = useRef(false);
@@ -203,19 +206,8 @@ const QuizTakePage = () => {
   // -----------------------------------------------------------------------
   // Report a violation to backend
   // -----------------------------------------------------------------------
-  const reportViolation = useCallback(async (payload: ViolationPayload) => {
-    if (!quizData || submittingRef.current) return;
-    const now = Date.now();
-    const lastReportedAt = lastViolationAtRef.current[payload.violation_type] || 0;
-    if (now - lastReportedAt < 1_200) return;
-    lastViolationAtRef.current[payload.violation_type] = now;
-
-    violations.current = [...violations.current, payload];
-    setWarningMessage(payload.alert_message);
-    setShowWarning(true);
-    setTimeout(() => setShowWarning(false), 2000);
-
-    // Map frontend enum to backend violation_type string
+  const saveViolation = useCallback((payload: ViolationPayload) => {
+    if (!userId || !attemptId) return;
     const backendViolationType =
       payload.violation_type === 'TAB_SWITCH'       ? 'tab_change'        :
       payload.violation_type === 'SYSTEM_FOCUS_LOST' ? 'focus_loss'        :
@@ -228,55 +220,53 @@ const QuizTakePage = () => {
       payload.violation_type === 'AUTOMATION_DETECTED' ? 'automation_detected' :
       'keyboard_shortcut';
 
+
     try {
-      const requestBody = {
-        event_id: payload.event_id,
-        violation_type: backendViolationType,
-        violationType:  backendViolationType,
-        alert_message:   payload.alert_message,
-        event_timestamp: payload.event_timestamp,
-        duration_seconds: payload.duration_seconds,
-        meta_data: payload.meta_data,
-        detectionMethod:
-          payload.violation_type === 'FACE_AWAY' || payload.violation_type === 'NO_FACE'
-            ? 'camera_face_detection'
-            : 'browser_event',
-        quizId: quizData?.quiz._id,
-      };
-      let response: any;
-      let lastError: unknown;
-      for (let retry = 0; retry < 3; retry += 1) {
-        try {
-          response = await api.post(`/quizzes/attempts/${attemptId}/report-violation`, requestBody);
-          break;
-        } catch (error) {
-          lastError = error;
-          if (retry < 2) await new Promise(resolve => setTimeout(resolve, 250 * (retry + 1)));
-        }
-      }
-      if (!response) throw lastError;
+      queueIntegrityEvent(userId, {
+        attemptId,
+        body: {
+          ...payload,
+          violation_type: backendViolationType,
+          detectionMethod: payload.violation_type === 'FACE_AWAY' || payload.violation_type === 'NO_FACE'
+            ? 'camera_face_detection' : 'browser_event',
+        },
+      });
+      unqueuedReports.current.delete(payload.event_id);
+      setViolationWriteError(unqueuedReports.current.size ? 'Some reports are not saved locally. Keep this tab open and retry.' : null);
+    } catch {
+      unqueuedReports.current.set(payload.event_id, payload);
+      setViolationWriteError('This monitoring report could not be saved locally. Keep this tab open, allow browser storage, and retry.');
+    }
+  }, [userId, attemptId]);
 
-      setViolationWriteError(null);
+  const reportViolation = useCallback(async (payload: ViolationPayload) => {
+    if (!quizData || submittingRef.current) return;
+    const now = Date.now();
+    const lastReportedAt = lastViolationAtRef.current[payload.violation_type] || 0;
+    if (now - lastReportedAt < 1_200) return;
+    lastViolationAtRef.current[payload.violation_type] = now;
+    setWarningMessage(payload.alert_message);
+    setShowWarning(true);
+    setTimeout(() => setShowWarning(false), 2000);
+    // Persist before any network call; the app-level sender survives routing.
+    saveViolation(payload);
+  }, [quizData, saveViolation]);
 
-      if (response.data?.data?.autoSubmitted) {
-        if (submittingRef.current) return;
+  useEffect(() => {
+    const confirmed = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.attemptId !== attemptId || submittingRef.current) return;
+      if (detail.result?.autoSubmitted || detail.result?.alreadySubmitted) {
         submittingRef.current = true;
         setSubmitting(true);
-        const limit = response.data.data.violationLimit;
-        // The server reports and finalizes under one attempt lock. Do not send
-        // a shorter browser-memory answer list afterward: it could overwrite
-        // saved answers from this or another tab.
         sessionStorage.removeItem('currentQuiz');
-        toast.error(`Exam automatically submitted after reaching the ${limit}-violation limit.`, { duration: 5000 });
+        if (detail.result.autoSubmitted) toast.error('Exam automatically submitted at the configured monitoring threshold.');
         navigate(`/quiz/teacher-results/${attemptId}`);
-      } else if (response.data?.data?.remainingViolations !== undefined) {
-        const remaining = response.data.data.remainingViolations;
-        toast.error(`${remaining} violation${remaining === 1 ? '' : 's'} remaining before automatic submission.`, { duration: 3000 });
       }
-    } catch {
-      setViolationWriteError('Monitoring event could not be saved. It will not be counted until the connection is restored.');
-    }
-  }, [attemptId, navigate, quizData]);
+    };
+    window.addEventListener(INTEGRITY_SAVED, confirmed);
+    return () => window.removeEventListener(INTEGRITY_SAVED, confirmed);
+  }, [attemptId, navigate]);
 
   const enterSecureMode = useCallback(async () => {
     if (typeof document.documentElement.requestFullscreen !== 'function') {
@@ -874,6 +864,7 @@ const QuizTakePage = () => {
       {violationWriteError && (
         <div className="fixed top-14 left-0 right-0 bg-amber-600 text-white py-2 px-4 z-50 text-center text-sm">
           {violationWriteError}
+          <button type="button" className="ml-3 underline focus-visible:ring-2" onClick={() => unqueuedReports.current.forEach(saveViolation)}>Retry saving reports</button>
         </div>
       )}
 

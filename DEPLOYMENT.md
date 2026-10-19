@@ -35,6 +35,12 @@ Set these environment variables in the backend host:
 - `NODE_ENV=production`
 - `ALLOWED_ORIGINS` (optional comma-separated exact origins; never use `*`)
 
+Enter `production` without surrounding whitespace. The API now normalizes
+this value before configuring cookies and production validation; unknown
+values fail startup. `FRONTEND_URL` must use HTTPS in production (an app path
+such as `/EraEdu` is allowed), while `ALLOWED_ORIGINS` must contain only exact
+HTTPS origins, without paths, query strings, or credentials.
+
 In production, the backend refuses to start if `FRONTEND_URL` is missing, points
 to localhost, or `SUPABASE_SERVICE_KEY` is missing. This prevents an accidental
 development configuration from being exposed publicly.

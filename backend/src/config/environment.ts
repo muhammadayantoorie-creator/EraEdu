@@ -26,7 +26,7 @@ function rejectProductionPlaceholder(name: string, value: string): string {
   // Example values are useful in committed templates but must never let a
   // production container start. Failing here provides an actionable error
   // instead of a permanently unhealthy database readiness probe.
-  if (process.env.NODE_ENV === 'production' && /replace-with|your-project|example\.com/i.test(value)) {
+  if (isProduction && /replace-with|your-project|example\.com/i.test(value)) {
     throw new Error(`FATAL: Environment variable "${name}" still contains an example placeholder.`);
   }
   return value;
@@ -35,14 +35,30 @@ function rejectProductionPlaceholder(name: string, value: string): string {
 // Vercel does not guarantee NODE_ENV is explicitly present in every project.
 // Treat a Vercel runtime as production so cookies, CORS, and error handling
 // cannot accidentally fall back to development behaviour after deployment.
-const nodeEnv = process.env.NODE_ENV || (process.env.VERCEL === '1' ? 'production' : 'development');
+const nodeEnv = process.env.NODE_ENV?.trim().toLowerCase() || (process.env.VERCEL === '1' ? 'production' : 'development');
+if (!['production', 'development', 'test'].includes(nodeEnv)) {
+  throw new Error('FATAL: NODE_ENV must be production, development, or test.');
+}
+// Downstream libraries and session cookies also inspect NODE_ENV directly.
+process.env.NODE_ENV = nodeEnv;
 const isProduction = nodeEnv === 'production';
 const frontendRaw = process.env.FRONTEND_URL || (isProduction ? '' : 'http://localhost:3000');
 const frontendAppUrl = isProduction ? requireEnv('FRONTEND_URL', 8).replace(/\/$/, '') : frontendRaw.replace(/\/$/, '');
 
-if (isProduction && /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(frontendAppUrl.replace(/\/$/, ''))) {
-  throw new Error('FATAL: FRONTEND_URL must be a public HTTPS origin in production.');
+function validateBrowserUrl(name: string, value: string, allowPath = false): string {
+  let url: URL;
+  try { url = new URL(value); }
+  catch { throw new Error(`FATAL: ${name} must be a valid absolute URL.`); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash
+    || (!allowPath && url.pathname !== '/')) {
+    throw new Error(`FATAL: ${name} must be an HTTP(S) ${allowPath ? 'app URL' : 'origin'} without credentials, query, or fragment.`);
+  }
+  if (isProduction && (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) {
+    throw new Error(`FATAL: ${name} must use a public HTTPS URL in production.`);
+  }
+  return allowPath ? url.href.replace(/\/$/, '') : url.origin;
 }
+const validatedFrontendUrl = validateBrowserUrl('FRONTEND_URL', frontendAppUrl, true);
 
 const serviceKey = (process.env.SUPABASE_SERVICE_KEY || '').trim();
 if (isProduction && serviceKey.length < 20) {
@@ -52,15 +68,8 @@ if (isProduction && serviceKey.length < 20) {
 export const config = {
   nodeEnv,
   port: process.env.PORT || 5000,
-  frontendAppUrl,
-  frontendUrl: (() => {
-    const raw = frontendAppUrl;
-    try {
-      return new URL(raw).origin;
-    } catch {
-      return raw;
-    }
-  })(),
+  frontendAppUrl: validatedFrontendUrl,
+  frontendUrl: new URL(validatedFrontendUrl).origin,
   supabaseUrl: rejectProductionPlaceholder('SUPABASE_URL', requireEnv('SUPABASE_URL')),
   supabaseKey: rejectProductionPlaceholder('SUPABASE_KEY', requireEnv('SUPABASE_KEY')),
   // Never fall back to the public key for privileged server operations in
@@ -72,7 +81,8 @@ export const config = {
   additionalAllowedOrigins: (process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim().replace(/\/$/, ''))
-    .filter(Boolean),
+    .filter(Boolean)
+    .map(origin => validateBrowserUrl('ALLOWED_ORIGINS', origin)),
   jwtSecret: (() => {
     const secret = process.env.JWT_SECRET;
     if (!secret || secret.length < 32) {

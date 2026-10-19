@@ -4,6 +4,7 @@ import { explainProtectedDelete, requireAssessmentHistoryProtection } from './as
 import { assertStudentEmailPolicy } from './authService';
 import { aiService } from './aiService';
 import { analyticsService } from './analyticsService';
+import { canReleaseStudentResult } from './resultReleasePolicy';
 
 interface QuizQuestion {
   text: string;
@@ -29,20 +30,25 @@ interface QuizData {
 }
 
 // PostgREST returns 42703 / "column ... does not exist" when a referenced
-// column is missing. We use this to fall back gracefully when an optional
-// migration hasn't been applied yet.
+// column is missing. Match the named column, never every 42703 error.
 function isMissingColumnError(err: any, column: string): boolean {
   if (!err) return false;
   const msg: string = err.message || '';
   const details: string = err.details || '';
   const haystack = `${msg} ${details}`.toLowerCase();
   return (
-    err.code === '42703' ||
+    ((err.code === '42703' || err.code === 'PGRST204') && new RegExp(`\\b${column}\\b`).test(haystack)) ||
     haystack.includes(`column "${column}"`) ||
     haystack.includes(`'${column}' column`) ||
     haystack.includes(`column ${column} does not exist`) ||
     haystack.includes(`could not find the '${column}'`)
   );
+}
+
+function requireExamSettingsSchema(error: any): void {
+  if (['camera_monitoring', 'course_id', 'violation_limit'].some(column => isMissingColumnError(error, column))) {
+    throw Object.assign(new Error('Exam settings storage is unavailable. Apply backend/migrations/016_complete_teacher_quiz_schema.sql before saving this exam.'), { statusCode: 503 });
+  }
 }
 
 type PersistedViolation = { type: string; timestamp: string; details?: unknown; eventId?: string; severity?: string; detectionMethod?: string };
@@ -693,38 +699,13 @@ export const quizService = {
     };
 
     // camera_monitoring column was added in migration 005.
-    let insertResult = await supabase
+    const insertResult = await supabase
       .from('teacher_quizzes')
       .insert([{ ...baseInsert, camera_monitoring: data.cameraMonitoring !== false }])
       .select()
       .single();
 
-    if (insertResult.error && isMissingColumnError(insertResult.error, 'camera_monitoring')) {
-      // If teacher explicitly opted OUT of camera, we must refuse — silently
-      // falling back would persist the wrong setting and surprise the student.
-      if (data.cameraMonitoring === false) {
-        const err: any = new Error(
-          'Database is missing the camera_monitoring column. Please run migration 005_add_camera_monitoring.sql in Supabase before disabling camera for a quiz.'
-        );
-        err.statusCode = 500;
-        throw err;
-      }
-      console.warn('teacher_quizzes.camera_monitoring missing — run migration 005. Falling back to default (camera on).');
-      insertResult = await supabase
-        .from('teacher_quizzes')
-        .insert([baseInsert])
-        .select()
-        .single();
-    }
-
-    // Course scoping and the violation limit are required to preserve the
-    // student-access and integrity rules, so tell the owner exactly which
-    // safe migration is needed instead of returning an opaque server error.
-    if (insertResult.error && (isMissingColumnError(insertResult.error, 'course_id') || isMissingColumnError(insertResult.error, 'violation_limit'))) {
-      const err: any = new Error('Exam setup is incomplete. Run migration 016_complete_teacher_quiz_schema.sql in Supabase, then try again.');
-      err.statusCode = 400;
-      throw err;
-    }
+    requireExamSettingsSchema(insertResult.error);
 
     if (insertResult.error && String(insertResult.error.message || '').includes('FREE_ASSESSMENT_TRIAL_LIMIT_REACHED')) {
       const err: any = new Error('Your institution has used its five free assessment trials. Activate the Institution plan to create more quizzes.');
@@ -816,7 +797,7 @@ export const quizService = {
       ? { ...withCamera, violation_limit: data.violationLimit }
       : withCamera;
 
-    let updateResult = await supabase
+    const updateResult = await supabase
       .from('teacher_quizzes')
       .update(withSecuritySettings)
       .eq('id', quizId)
@@ -824,19 +805,7 @@ export const quizService = {
       .select()
       .single();
 
-    if (updateResult.error && isMissingColumnError(updateResult.error, 'camera_monitoring')) {
-      console.warn('teacher_quizzes.camera_monitoring missing — run migration 005. Falling back without it.');
-      const fallbackUpdate = typeof data.violationLimit === 'number'
-        ? { ...baseUpdate, violation_limit: data.violationLimit }
-        : baseUpdate;
-      updateResult = await supabase
-        .from('teacher_quizzes')
-        .update(fallbackUpdate)
-        .eq('id', quizId)
-        .eq('teacher_id', teacherId)
-        .select()
-        .single();
-    }
+    requireExamSettingsSchema(updateResult.error);
 
     const { data: quiz, error } = updateResult;
     if (error) throw new Error(error.message);
@@ -1029,7 +998,6 @@ export const quizService = {
       throw Object.assign(new Error('Exam attempt is not ready for review'), { statusCode: 403 });
     }
 
-    const isReviewed = attempt.teacher_grade !== null && attempt.teacher_grade !== undefined;
     const persistedViolations = !isStudentOwner
       ? (await persistedViolationsForAttempts([attempt.id])).get(attempt.id) || []
       : [];
@@ -1040,7 +1008,7 @@ export const quizService = {
     // Students never see violation details — only teachers/admins.
     const showViolations = !isStudentOwner;
 
-    if (isStudentOwner && (attempt.status !== 'completed' || !isReviewed)) {
+    if (isStudentOwner && !canReleaseStudentResult(attempt)) {
       return {
         id: attempt.id,
         status: attempt.status,
@@ -1093,32 +1061,36 @@ export const quizService = {
   // Get all submissions for teacher
   async getTeacherSubmissions(teacherId: string) {
     // Get all quizzes by this teacher
-    const { data: quizzes } = await supabase
+    const { data: quizzes, error: quizzesError } = await supabase
       .from('teacher_quizzes')
       .select('id, title, questions')
       .eq('teacher_id', teacherId);
 
-    if (!quizzes || quizzes.length === 0) return [];
+    if (quizzesError || !Array.isArray(quizzes)) throw Object.assign(new Error('Student submissions could not be loaded. Please retry.'), { statusCode: 503 });
+    if (quizzes.length === 0) return [];
 
     const quizIds = quizzes.map(q => q.id);
     const quizMap = new Map(quizzes.map(q => [q.id, q]));
 
     // Get all attempts for these quizzes
-    const { data: attempts } = await supabase
+    const { data: attempts, error: attemptsError } = await supabase
       .from('quiz_attempts')
       .select('*')
       .in('quiz_id', quizIds)
       .eq('status', 'completed')
       .order('completed_at', { ascending: false });
 
-    if (!attempts) return [];
+    if (attemptsError || !Array.isArray(attempts)) throw Object.assign(new Error('Student submissions could not be loaded. Please retry.'), { statusCode: 503 });
+    if (attempts.length === 0) return [];
 
     // Get student info for each attempt
     const userIds = [...new Set(attempts.map(a => a.user_id))];
-    const { data: users } = await supabase
+    const { data: users, error: usersError } = await supabase
       .from('users')
       .select('id, name, email')
       .in('id', userIds);
+
+    if (usersError || !Array.isArray(users)) throw Object.assign(new Error('Student submissions could not be loaded. Please retry.'), { statusCode: 503 });
 
     const userMap = new Map(users?.map(u => [u.id, u]) || []);
 
@@ -1306,10 +1278,10 @@ export const quizService = {
       const maxScore = Number(result.max_score ?? questions.length);
       const score = Number(result.score || 0);
       return {
-        score,
-        maxScore,
-        percentage: maxScore > 0 ? Math.round((score / maxScore) * 100) : 0,
-        violationsCount: (await persistedViolationsForAttempts([attemptId])).get(attemptId)?.length || 0,
+        ...(canReleaseStudentResult(result) ? {
+          score, maxScore, percentage: maxScore > 0 ? Math.round((score / maxScore) * 100) : 0,
+        } : {}),
+        reviewPending: !canReleaseStudentResult(result),
         status: result.status,
         autoSubmitted: result.auto_submitted === true,
       };
@@ -1616,18 +1588,23 @@ export const quizService = {
 
   // Get student analytics
   async getStudentAnalytics(userId: string) {
-    const { data: attempts } = await supabase
+    const { data: allAttempts, error } = await supabase
       .from('quiz_attempts')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'completed')
       .order('completed_at', { ascending: true });
 
+    if (error) throw new Error(error.message);
+    const attempts = (allAttempts || []).filter(canReleaseStudentResult);
+    const pendingReviews = (allAttempts || []).length - attempts.length;
+
     if (!attempts || attempts.length === 0) {
       return {
-        totalQuizzes: 0,
-        avgScore: 0,
-        passRate: 0,
+        totalQuizzes: (allAttempts || []).length,
+        pendingReviews,
+        avgScore: null,
+        passRate: null,
         streakDays: 0,
         performanceData: [],
       };
@@ -1665,7 +1642,8 @@ export const quizService = {
     }
 
     return {
-      totalQuizzes: attempts.length,
+      totalQuizzes: (allAttempts || []).length,
+      pendingReviews,
       avgScore: Math.round(avgScore * 10) / 10,
       passRate: Math.round(passRate * 10) / 10,
       streakDays,
@@ -1708,8 +1686,7 @@ export const quizService = {
       const quizMap = new Map([...(teacherQuizzes || []), ...(topicQuizzes || [])].map(q => [q.id, q.title]));
 
       return attempts.map(attempt => {
-        const reviewed = (!!attempt.topic_id && attempt.status === 'completed')
-          || (!attempt.topic_id && attempt.teacher_grade !== null && attempt.teacher_grade !== undefined);
+        const reviewed = canReleaseStudentResult(attempt);
         return {
         _id: attempt.id,
         quizId: attempt.quiz_id,

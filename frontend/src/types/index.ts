@@ -95,7 +95,8 @@ export interface QuizAttempt {
 export interface Analytics {
   coursesEnrolled: number; // Changed from enrolledCoursesCount
   quizzesCompleted: number; // Added
-  averageScore: number;
+  averageScore: number | null;
+  pendingReviews?: number;
   streakDays: number; // Changed from streak
   
   // Keep old ones optional if needed

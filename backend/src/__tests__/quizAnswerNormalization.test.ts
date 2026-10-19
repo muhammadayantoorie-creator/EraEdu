@@ -126,11 +126,11 @@ describe('snapshot-backed submission and resubmission guard', () => {
     mockAssertStudentEmailPolicy.mockClear();
   });
 
-  it('sends canonical answers to the server-owned snapshot and returns 1/3 (33%)', async () => {
+  it('sends canonical answers to the server-owned snapshot but keeps the submission response pending review', async () => {
     const { notify } = setupSnapshotSubmission();
 
     await expect(quizService.submitAllAnswers('attempt-1', 'student-1', answersWithOnlyQ3Correct('attempt-1')))
-      .resolves.toMatchObject({ score: 1, maxScore: 3, percentage: 33 });
+      .resolves.toMatchObject({ reviewPending: true, status: 'completed' });
     expect(mockRpc).toHaveBeenNthCalledWith(1, 'teacher_attempt_action', expect.objectContaining({
       p_action: 'answer',
       p_answers: expect.arrayContaining([
@@ -147,7 +147,7 @@ describe('snapshot-backed submission and resubmission guard', () => {
     setupSnapshotSubmission({ status: 'completed', score: 1 });
     await expect(quizService.submitAllAnswers('attempt-1', 'student-1', [
       { questionId: `${quizId}-q0`, selectedAnswer: true as any },
-    ])).resolves.toMatchObject({ score: 1, maxScore: 3, percentage: 33, status: 'completed' });
+    ])).resolves.toMatchObject({ reviewPending: true, status: 'completed' });
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
