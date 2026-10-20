@@ -3,6 +3,11 @@ import { emailService } from './emailService';
 import { canonicalCourseCategory, normalizeCourseCategory } from './courseCategory';
 import { explainProtectedDelete, requireAssessmentHistoryProtection } from './assessmentHistoryPolicy';
 
+// This endpoint is public. Join codes and ownership/institution identifiers
+// belong to the authenticated management responses only.
+const publicCourseFields = ['id', 'title', 'description', 'category', 'difficulty',
+  'thumbnail', 'is_published', 'max_students', 'created_at', 'updated_at'] as const;
+
 function isMissingColumnError(err: any, column: string): boolean {
   if (!err) return false;
   const haystack = `${err.message || ''} ${err.details || ''}`.toLowerCase();
@@ -62,7 +67,7 @@ async function enrollCourseAtomically(courseId: string, userId: string): Promise
 
 export const courseService = {
   async getAllCourses(filters: any = {}) {
-    let query = supabase.from('courses').select('*');
+    let query = supabase.from('courses').select(publicCourseFields.join(',')).eq('is_published', true);
 
     if (filters.category !== undefined) {
       const category = normalizeCourseCategory(filters.category).replace(/[\\%_]/g, '\\$&');
@@ -83,16 +88,17 @@ export const courseService = {
 
     return Promise.all(
       (courses || []).map(async (course: any) => {
-        const { count } = await supabase
+        const { count, error: enrollmentError } = await supabase
           .from('enrollments')
           .select('*', { count: 'exact', head: true })
           .eq('course_id', course.id);
+        if (enrollmentError || count === null) throw courseError('Unable to load enrollment statistics', 503);
         requireCapacityColumn(course);
         return {
-          ...course,
+          ...Object.fromEntries(publicCourseFields.map(field => [field, course[field]])),
           _id: course.id,
           maxStudents: course.max_students ?? null,
-          enrollmentCount: count || 0,
+          enrollmentCount: count,
         };
       })
     );

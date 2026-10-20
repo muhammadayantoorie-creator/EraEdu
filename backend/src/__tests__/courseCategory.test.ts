@@ -79,7 +79,7 @@ describe('course category contract', () => {
 
   it('filters saved categories case-insensitively', async () => {
     const ilike = jest.fn().mockResolvedValue({ data: [], error: null });
-    mockFrom.mockReturnValue({ select: () => ({ ilike }) });
+    mockFrom.mockReturnValue({ select: () => ({ eq: () => ({ ilike }) }) });
     await expect(courseService.getAllCourses({ category: ' civil  engineering ' })).resolves.toEqual([]);
     expect(ilike).toHaveBeenCalledWith('category', 'civil engineering');
   });

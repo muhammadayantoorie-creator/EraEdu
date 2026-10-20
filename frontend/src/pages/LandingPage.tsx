@@ -167,7 +167,7 @@ const NavIsland = () => {
         id="mobile-navigation"
         aria-label="Mobile navigation"
         className={`
-          fixed inset-0 z-30 md:hidden
+          fixed inset-0 z-30 lg:hidden
           transition-all duration-700 ease-spring
           ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
           backdrop-blur-3xl bg-white/80

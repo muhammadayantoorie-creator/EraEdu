@@ -28,7 +28,15 @@ const LoginPage = () => {
     {sessionNotice && <p role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">{sessionNotice}</p>}
     <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
       <div><label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label><input id="email" type="email" autoComplete="email" className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500" {...register('email', { required: 'Email is required' })} />{errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message as string}</p>}</div>
-      <div><label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label><input id="password" type="password" autoComplete="current-password" className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500" {...register('password', { required: 'Password is required' })} /><div className="mt-2 text-right"><Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">Forgot password?</Link></div></div>
+      <div>
+        <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+        <input id="password" type="password" autoComplete="current-password"
+          aria-invalid={Boolean(errors.password)} aria-describedby={errors.password ? 'password-error' : undefined}
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-primary-500"
+          {...register('password', { required: 'Password is required' })} />
+        {errors.password && <p id="password-error" role="alert" className="mt-1 text-sm text-red-600">{errors.password.message as string}</p>}
+        <div className="mt-2 text-right"><Link to="/forgot-password" className="text-sm font-medium text-primary-600 hover:text-primary-500">Forgot password?</Link></div>
+      </div>
       <button type="submit" disabled={isLoading} className="flex w-full justify-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 disabled:opacity-50">{isLoading ? 'Signing in…' : 'Sign in'}</button>
     </form>
   </div>;
