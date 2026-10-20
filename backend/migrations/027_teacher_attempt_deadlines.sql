@@ -1,25 +1,43 @@
 -- BUG-039: teacher-code exams retain a server-owned, immutable snapshot and
 -- per-question activation deadline. Apply during an exam-free maintenance
--- window. Existing in-progress teacher exams cannot safely receive a newly
+-- window. Existing resumable teacher exams cannot safely receive a newly
 -- invented deadline, so finish or review those attempts before applying.
+-- Legacy attempts with no exam row AND no original snapshot remain unchanged
+-- for review; they cannot resume and must not block unrelated new exams.
 -- Run preflight-teacher-deadlines.sql first and verify-teacher-deadlines.sql
 -- afterward (both under backend/scripts), in the backend's Supabase project.
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
 
--- Prevent an old API from starting an attempt between the guard and ALTER.
+-- Keep exam existence stable while classifying legacy rows, and prevent an
+-- old API from starting an attempt between the guard and ALTER. Lock exams
+-- before attempts, matching the start path's lock order.
+LOCK TABLE public.quizzes IN SHARE MODE;
+LOCK TABLE public.teacher_quizzes IN SHARE MODE;
 LOCK TABLE public.quiz_attempts IN SHARE ROW EXCLUSIVE MODE;
 
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1
-    FROM public.quiz_attempts
-    WHERE topic_id IS NULL AND status = 'in-progress'
+    FROM public.quiz_attempts a
+    LEFT JOIN public.teacher_quizzes q ON q.id = a.quiz_id
+    LEFT JOIN public.quizzes topic_quiz ON topic_quiz.id = a.quiz_id
+    WHERE a.topic_id IS NULL AND a.status = 'in-progress'
+      AND (q.id IS NOT NULL OR topic_quiz.id IS NOT NULL OR
+        COALESCE(to_jsonb(a) -> 'teacher_quiz_snapshot', 'null'::jsonb) <> 'null'::jsonb OR
+        COALESCE(to_jsonb(a) -> 'topic_question_snapshot', 'null'::jsonb) <> 'null'::jsonb)
   ) THEN
     RAISE EXCEPTION
       'Migration 027 cannot infer deadlines for active teacher exams. Finish or review them before applying it.';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.quiz_attempts
+    WHERE topic_id IS NULL AND status = 'in-progress'
+    GROUP BY user_id, quiz_id HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'Duplicate active teacher attempts require administrator review before migration 027. No attempts have been removed.';
   END IF;
   IF EXISTS (
     SELECT 1 FROM (VALUES
@@ -161,7 +179,7 @@ BEGIN
   -- declaration-time timestamp would otherwise give lock waiters extra time.
   v_now := clock_timestamp();
   IF v_attempt.teacher_quiz_snapshot IS NULL THEN
-    RAISE EXCEPTION 'Teacher exam timing migration is required for this attempt';
+    RAISE EXCEPTION 'Legacy teacher exam attempt requires administrator review';
   END IF;
   IF jsonb_typeof(v_attempt.teacher_quiz_snapshot -> 'questions') IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'Teacher exam snapshot is invalid';
@@ -363,7 +381,7 @@ BEGIN
   -- must not calculate expiry from the time it started waiting.
   v_now := clock_timestamp();
   IF v_attempt.teacher_quiz_snapshot IS NULL THEN
-    RAISE EXCEPTION 'Teacher exam timing migration is required for this attempt';
+    RAISE EXCEPTION 'Legacy teacher exam attempt requires administrator review';
   END IF;
   IF jsonb_typeof(v_attempt.teacher_quiz_snapshot -> 'questions') IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'Teacher exam snapshot is invalid';
@@ -580,7 +598,7 @@ BEGIN
     RAISE EXCEPTION 'Exam attempt not found';
   END IF;
   IF v_attempt.teacher_quiz_snapshot IS NULL THEN
-    RAISE EXCEPTION 'Teacher exam timing migration is required for this attempt';
+    RAISE EXCEPTION 'Legacy teacher exam attempt requires administrator review';
   END IF;
   IF v_attempt.status NOT IN ('in-progress', 'completed') THEN
     RAISE EXCEPTION 'Exam is no longer active';

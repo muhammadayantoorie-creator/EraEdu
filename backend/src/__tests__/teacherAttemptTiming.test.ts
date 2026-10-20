@@ -138,6 +138,26 @@ describe('teacher attempt timing service boundary', () => {
   });
 
   it.each([
+    'Legacy teacher exam attempt requires administrator review',
+    'Teacher exam timing migration is required for this attempt',
+  ])('requires review of a legacy attempt instead of asking for schema reinstallation: %s', async message => {
+    mockRpc.mockResolvedValue({ data: null, error: { code: 'P0001', message } });
+    await expect(quizService.getActiveTeacherAttempt(attemptId, studentId)).rejects.toMatchObject({
+      statusCode: 409, code: 'LEGACY_TEACHER_ATTEMPT_REVIEW_REQUIRED',
+      message: expect.stringContaining('cannot be resumed'),
+    });
+  });
+
+  it('never fabricates a timer from a returned legacy row without a snapshot', async () => {
+    mockRpc.mockResolvedValue({ data: snapshotAttempt({ teacher_quiz_snapshot: null }), error: null });
+    await expect(quizService.getActiveTeacherAttempt(attemptId, studentId)).rejects.toMatchObject({
+      statusCode: 409, code: 'LEGACY_TEACHER_ATTEMPT_REVIEW_REQUIRED',
+    });
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(mockRpc).toHaveBeenCalledWith('teacher_attempt_action', expect.objectContaining({ p_action: 'read' }));
+  });
+
+  it.each([
     { code: '42501', message: 'permission denied for function teacher_attempt_action' },
     { code: '08006', message: 'connection failed during teacher_attempt_action' },
     { code: '42703', message: 'column unrelated_field does not exist' },

@@ -46,6 +46,7 @@ async function legacyDatabase() {
     CREATE TABLE users (id uuid PRIMARY KEY, role text, is_suspended boolean DEFAULT false);
     CREATE TABLE courses (id uuid PRIMARY KEY, is_published boolean);
     CREATE TABLE enrollments (user_id uuid, course_id uuid);
+    CREATE TABLE quizzes (id uuid PRIMARY KEY);
     CREATE TABLE teacher_quizzes (id uuid PRIMARY KEY, teacher_id text, title text,
       is_active boolean, scheduled_start timestamptz, questions jsonb, course_id uuid,
       time_limit integer, violation_limit integer);
@@ -233,6 +234,8 @@ test('preflight detects active legacy attempts and migration refuses atomically 
   const database = await legacyDatabase();
   try {
     assert.equal(rows(await database.exec(preflight))[0].status, 'PASS');
+    // A NULL title still belongs to an existing exam and must remain blocked.
+    await database.query('INSERT INTO teacher_quizzes(id,title) VALUES ($1,NULL)', [quiz]);
     await database.exec(`INSERT INTO quiz_attempts (user_id,quiz_id,status,answers,started_at)
       VALUES ('${student}','${quiz}','in-progress','[{"historic":true}]','2026-01-01T00:00:00Z')`);
     const before = (await database.query('SELECT * FROM quiz_attempts')).rows;
@@ -257,10 +260,111 @@ test('blocking review works before timing columns exist and exposes only metadat
     assert.equal(review.length, 1);
     assert.equal(review[0].total_blocking_attempts, 1);
     assert.equal(review[0].saved_answer_count, 1);
-    assert.match(review[0].timing_review, /^LEGACY OR INVALID/);
+    assert.equal(review[0].exam_reference, 'MISSING EXAM');
+    assert.match(review[0].timing_review, /^PRESERVE LEGACY ORPHAN/);
     assert.equal(JSON.stringify(review).includes('privateAnswer'), false);
     assert.equal(JSON.stringify(review).includes(student), false);
     assert.deepEqual((await database.query('SELECT * FROM quiz_attempts ORDER BY id')).rows, before);
+  } finally { await database.close(); }
+});
+
+test('a legacy orphan is preserved under history FKs while unrelated new teacher exams can start and use immutable deadlines', async () => {
+  const database = await legacyDatabase();
+  const deletedQuiz = '90000000-0000-4000-8000-000000000001';
+  try {
+    await database.query(`INSERT INTO quiz_attempts(user_id,quiz_id,status,answers,score,max_score,started_at)
+      VALUES ($1,$2,'in-progress','[{"historic":true}]',2,5,'2026-08-26T15:35:20.243Z')`, [student, deletedQuiz]);
+    // Real migration 025 permits existing orphans while protecting new writes.
+    await database.exec(`ALTER TABLE quiz_attempts ADD COLUMN teacher_quiz_ref uuid GENERATED ALWAYS AS
+      (CASE WHEN topic_id IS NULL THEN quiz_id ELSE NULL END) STORED;
+      ALTER TABLE quiz_attempts ADD CONSTRAINT history_guard FOREIGN KEY (teacher_quiz_ref)
+      REFERENCES teacher_quizzes(id) ON DELETE RESTRICT NOT VALID`);
+    const before = (await database.query('SELECT * FROM quiz_attempts')).rows[0];
+    const check = rows(await database.exec(preflight))[0];
+    assert.equal(check.status, 'PASS');
+    assert.equal(check.active_teacher_attempts, 1);
+    assert.equal(check.blocking_active_teacher_attempts, 0);
+    assert.equal(check.preserved_legacy_orphan_attempts, 1);
+    await migrate(database);
+    await migrate(database);
+    const after = (await database.query('SELECT * FROM quiz_attempts WHERE id=$1', [before.id])).rows[0];
+    for (const key of Object.keys(before)) assert.deepEqual(after[key], before[key], key);
+    assert.equal(after.teacher_quiz_snapshot, null);
+    assert.equal(after.teacher_answers_finalized_at, null);
+    assert.deepEqual(after.teacher_question_state, {});
+    assert.ok(rows(await database.exec(verification)).every(check => check.status === 'PASS'));
+    await database.query("INSERT INTO users(id,role) VALUES ($1,'student')", [student]);
+    await database.query(`INSERT INTO teacher_quizzes(id,teacher_id,title,is_active,questions,time_limit)
+      VALUES ($1,$2,'New exam',true,$3,10)`, [quiz, teacher, JSON.stringify([{ text: 'Q', options: ['A','B'], correctAnswer: 0, timeLimit: 60 }])]);
+    const fresh = (await database.query('SELECT start_teacher_attempt($1,$2) AS result', [student, quiz])).rows[0].result;
+    assert.notEqual(fresh.id, before.id);
+    assert.ok(fresh.teacher_quiz_snapshot);
+    const activate = (await database.query("SELECT teacher_attempt_action($1,$2,'activate',$3) AS result", [student, fresh.id, qid(0)])).rows[0].result;
+    assert.ok(activate.teacher_question_state[qid(0)].deadlineAt);
+    await assert.rejects(database.query("SELECT teacher_attempt_action($1,$2,'read')", [student, before.id]), /Legacy teacher exam attempt requires administrator review/);
+    await assert.rejects(database.query("SELECT finish_teacher_attempt($1,'student')", [before.id]), /Legacy teacher exam attempt requires administrator review/);
+    await assert.rejects(database.query('SELECT report_teacher_violation($1,$2,$3)', [student, before.id,
+      JSON.stringify({ eventId:'legacy-event', violationType:'tab_change' })]), /Legacy teacher exam attempt requires administrator review/);
+    const preserved = (await database.query('SELECT * FROM quiz_attempts WHERE id=$1', [before.id])).rows[0];
+    assert.deepEqual(preserved, after);
+  } finally { await database.close(); }
+});
+
+test('an orphan with an existing snapshot remains protected as an active exam', async () => {
+  const database = await legacyDatabase();
+  try {
+    await database.exec(`ALTER TABLE quiz_attempts ADD COLUMN teacher_quiz_snapshot jsonb;
+      INSERT INTO quiz_attempts(user_id,quiz_id,status,teacher_quiz_snapshot)
+      VALUES ('${student}','${quiz}','in-progress','{"questions":[]}')`);
+    assert.equal(rows(await database.exec(preflight))[0].status.startsWith('STOP'), true);
+    await assert.rejects(migrate(database), /cannot infer deadlines for active teacher exams/);
+    await database.exec('ROLLBACK');
+    assert.deepEqual((await database.query('SELECT teacher_quiz_snapshot FROM quiz_attempts')).rows[0].teacher_quiz_snapshot, {questions:[]});
+  } finally { await database.close(); }
+});
+
+test('a null-quiz legacy orphan remains intact under a NOT VALID history check', async () => {
+  const database = await legacyDatabase();
+  try {
+    await database.exec(`INSERT INTO quiz_attempts(status,answers,started_at) VALUES ('in-progress','[{"historic":true}]','2026-08-26T00:00:00Z');
+      ALTER TABLE quiz_attempts ADD CONSTRAINT quiz_id_required CHECK (quiz_id IS NOT NULL) NOT VALID`);
+    const before = (await database.query('SELECT * FROM quiz_attempts')).rows[0];
+    assert.equal(rows(await database.exec(preflight))[0].status, 'PASS');
+    await migrate(database);
+    const after = (await database.query('SELECT * FROM quiz_attempts')).rows[0];
+    for (const key of Object.keys(before)) assert.deepEqual(after[key], before[key], key);
+    assert.equal((await database.query("SELECT convalidated FROM pg_constraint WHERE conname='quiz_id_required'")).rows[0].convalidated, false);
+    assert.ok(rows(await database.exec(verification)).every(check => check.status === 'PASS'));
+  } finally { await database.close(); }
+});
+
+test('duplicate legacy orphan attempts remain a blocker and are never deduplicated automatically', async () => {
+  const database = await legacyDatabase();
+  try {
+    await database.query(`INSERT INTO quiz_attempts(user_id,quiz_id,status) VALUES ($1,$2,'in-progress'),($1,$2,'in-progress')`, [student, quiz]);
+    const check = rows(await database.exec(preflight))[0];
+    assert.match(check.status, /^STOP/);
+    assert.equal(check.duplicate_active_pairs, 1);
+    await assert.rejects(migrate(database), /Duplicate active teacher attempts require administrator review/);
+    await database.exec('ROLLBACK');
+    assert.equal((await database.query('SELECT count(*)::int AS n FROM quiz_attempts')).rows[0].n, 2);
+  } finally { await database.close(); }
+});
+
+test('a misclassified topic reference or original topic snapshot is never treated as an empty orphan', async () => {
+  const database = await legacyDatabase();
+  try {
+    await database.query('INSERT INTO quizzes(id) VALUES ($1)', [quiz]);
+    await database.query("INSERT INTO quiz_attempts(user_id,quiz_id,status) VALUES ($1,$2,'in-progress')", [student, quiz]);
+    assert.match(rows(await database.exec(preflight))[0].status, /^STOP/);
+    assert.match(rows(await database.exec(blockingReview))[0].exam_reference, /^TOPIC EXAM REFERENCE/);
+    await assert.rejects(migrate(database), /cannot infer deadlines/);
+    await database.exec('ROLLBACK');
+    await database.exec("DELETE FROM quizzes; ALTER TABLE quiz_attempts ADD COLUMN topic_question_snapshot jsonb; UPDATE quiz_attempts SET topic_question_snapshot='[]'");
+    assert.match(rows(await database.exec(preflight))[0].status, /^STOP/);
+    await assert.rejects(migrate(database), /cannot infer deadlines/);
+    await database.exec('ROLLBACK');
+    assert.deepEqual((await database.query('SELECT topic_question_snapshot FROM quiz_attempts')).rows[0].topic_question_snapshot, []);
   } finally { await database.close(); }
 });
 

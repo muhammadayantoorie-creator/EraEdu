@@ -5,7 +5,7 @@ import { assertStudentEmailPolicy } from './authService';
 import { aiService } from './aiService';
 import { analyticsService } from './analyticsService';
 import { canReleaseStudentResult } from './resultReleasePolicy';
-import { teacherTimingSchemaError } from './teacherTimingSchema';
+import { teacherTimingSchemaError, legacyTeacherAttemptError } from './teacherTimingSchema';
 
 interface QuizQuestion {
   text: string;
@@ -307,10 +307,7 @@ function teacherAttemptError(error: any): never {
 function snapshotForAttempt(attempt: any): TeacherQuizSnapshot {
   const snapshot = attempt?.teacher_quiz_snapshot;
   if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.questions)) {
-    throw Object.assign(
-      new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
-      { statusCode: 503 },
-    );
+    throw legacyTeacherAttemptError();
   }
   return snapshot as TeacherQuizSnapshot;
 }
@@ -1310,10 +1307,7 @@ export const quizService = {
       };
     }
     if (!attempt.topic_id && attempt.status === 'in-progress') {
-      throw Object.assign(
-        new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
-        { statusCode: 503 },
-      );
+      throw legacyTeacherAttemptError();
     }
 
     // Topic attempts use their own snapshot/answer lifecycle. In particular,

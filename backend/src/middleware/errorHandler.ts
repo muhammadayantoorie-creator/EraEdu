@@ -97,7 +97,7 @@ export const errorHandler = (err: any, req: Request, res: Response, _next: NextF
   res.status(statusCode).json({
     success: false,
     message,
-    error: { message, ...(['AUTH_SCHEMA_REQUIRED', 'AUTH_STATE_UNAVAILABLE', 'ACCOUNT_SUSPENDED', 'TEACHER_TIMING_SCHEMA_REQUIRED'].includes(err.code) ? { code: err.code } : {}) },
+    error: { message, ...(['AUTH_SCHEMA_REQUIRED', 'AUTH_STATE_UNAVAILABLE', 'ACCOUNT_SUSPENDED', 'TEACHER_TIMING_SCHEMA_REQUIRED', 'LEGACY_TEACHER_ATTEMPT_REVIEW_REQUIRED'].includes(err.code) ? { code: err.code } : {}) },
     ...(isProd ? {} : { stack: err.stack }),
   });
 };

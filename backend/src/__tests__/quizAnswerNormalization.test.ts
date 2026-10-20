@@ -151,7 +151,7 @@ describe('snapshot-backed submission and resubmission guard', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('requires migration 027 before accepting a legacy in-progress teacher exam', async () => {
+  it('requires administrator review instead of regrading a legacy in-progress teacher exam', async () => {
     const attempt = { id: 'attempt-1', user_id: 'student-1', quiz_id: quizId, status: 'in-progress' };
     mockFrom.mockImplementation((table: string) => {
       if (table === 'quiz_attempts') {
@@ -161,7 +161,7 @@ describe('snapshot-backed submission and resubmission guard', () => {
     });
 
     await expect(quizService.submitAllAnswers('attempt-1', 'student-1', []))
-      .rejects.toMatchObject({ statusCode: 503 });
+      .rejects.toMatchObject({ statusCode: 409, code: 'LEGACY_TEACHER_ATTEMPT_REVIEW_REQUIRED' });
   });
 });
 
