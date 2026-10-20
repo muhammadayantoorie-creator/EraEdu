@@ -82,6 +82,14 @@ account-change sign-in notices, account headers and single-write behavior. Every
 API call is intercepted; no real signed-in account or database write is tested.
 Evidence is stored under ignored `backend/coverage/teacher-session-browser`.
 
+The edit-exam case changes the course, title and scheduled start, saves once,
+then reopens the form to check those values. Its exam contains both multiple
+choice and short-answer questions; both types and their existing answer data
+must survive the update. The fixture server reflects the submitted data; real
+controller/service persistence and course ownership are separately covered by
+`teacherWriteSession.test.ts`, `quizUpdate.test.ts` and the disposable migration
+024 checks. These checks do not certify a live teacher session.
+
 The Vercel and Pages frontends share the API's browser session cookie. Signing
 in as another user in the same browser profile can leave an older tab displaying
 the previous account. Protected requests now include `X-EraEdu-Account`; the API

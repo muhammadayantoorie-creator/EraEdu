@@ -800,9 +800,27 @@ export const quizService = {
 
   async updateQuiz(quizId: string, teacherId: string, data: QuizData) {
     validateQuizPayload(data);
+    // Older clients may omit the course; keep it unchanged in that case.
+    // An explicit selection must belong to the authenticated teacher, just
+    // as on create. Migration 024 also checks ownership inside the write,
+    // protecting against a concurrent course reassignment after this read.
+    if (data.courseId !== undefined) {
+      if (typeof data.courseId !== 'string' || !data.courseId.trim()) {
+        throw Object.assign(new Error('Please select a course'), { statusCode: 400 });
+      }
+      const { data: course, error: courseError } = await supabase.from('courses')
+        .select('id, created_by').eq('id', data.courseId).single();
+      if (courseError && courseError.code !== 'PGRST116') {
+        throw Object.assign(new Error('Unable to verify the selected course. Please retry.'), { statusCode: 503 });
+      }
+      if (!course || course.created_by !== teacherId) {
+        throw Object.assign(new Error('You can only save exams for your assigned courses'), { statusCode: 403 });
+      }
+    }
     const baseUpdate: any = {
       title: data.title,
       description: data.description || '',
+      ...(data.courseId !== undefined ? { course_id: data.courseId } : {}),
       time_limit: data.timeLimit,
       // Preserve a newly selected date/time and allow a teacher to clear an
       // existing schedule by submitting null from the edit form.
@@ -828,18 +846,14 @@ export const quizService = {
     requireExamSettingsSchema(updateResult.error);
 
     const { data: quiz, error } = updateResult;
+    if (error?.code === 'PGRST116' || (!error && !quiz)) {
+      throw Object.assign(new Error('Exam not found or no longer assigned to you. Refresh your exams and try again.'), { statusCode: 404 });
+    }
+    if (error?.code === 'P0001' && error.message === 'Only the assigned course teacher can manage this exam') {
+      throw Object.assign(new Error('The course assignment changed. Refresh your courses before saving this exam.'), { statusCode: 403 });
+    }
     if (error) throw new Error(error.message);
-    return {
-      _id: quiz.id,
-      title: quiz.title,
-      description: quiz.description,
-      timeLimit: quiz.time_limit,
-      questions: quiz.questions,
-      scheduledStart: quiz.scheduled_start,
-      cameraMonitoring: quiz.camera_monitoring !== false,
-      violationLimit: quiz.violation_limit ?? 3,
-      createdAt: quiz.created_at,
-    };
+    return createdQuizResponse(quiz);
   },
 
   async deleteQuiz(quizId: string, teacherId: string) {

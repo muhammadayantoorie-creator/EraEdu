@@ -85,3 +85,13 @@ it('a forged account header never grants access to a teacher action', async () =
   expect(response.body.error.code).toBe('ROLE_FORBIDDEN');
   expect(mockCreateCourse).not.toHaveBeenCalled();
 });
+
+it('passes the edited course and settings from the update endpoint to the save service', async () => {
+  const changes = { title: 'Edited exam', courseId: 'course-two', scheduledStart: '2026-10-25T16:14:00.000Z',
+    questions: [{ text: 'Question', options: ['A', 'B'], correctAnswer: 1 }], cameraMonitoring: false, violationLimit: 4 };
+  const response = await request(app).put('/api/quizzes/exam-one')
+    .set('Cookie', `eraedu_session=${tokenFor('teacher-one', 'teacher')}`)
+    .set('X-EraEdu-Account', 'teacher-one').send(changes);
+  expect(response.status).toBe(200);
+  expect(mockUpdateQuiz).toHaveBeenCalledWith('exam-one', 'teacher-one', expect.objectContaining(changes));
+});

@@ -17,6 +17,7 @@ const SAFE_400_MESSAGES = new Set<string>([
 const SAFE_OPERATIONAL_MESSAGES = new Set<string>([
   'Submission monitoring records could not be loaded. Please retry or contact an administrator.',
   'Unable to confirm the exam save. Retry the same request.',
+  'Unable to verify the selected course. Please retry.',
   'Student submissions could not be loaded. Please retry.',
   'Analytics could not be loaded. Please retry.',
   'Unable to load enrollment statistics',

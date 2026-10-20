@@ -34,6 +34,22 @@ async function fixture() {
 const reassign = (db, teacher = 3, org = 10) => db.query(
   'SELECT admin_reassign_course($1,$2,$3,$4) AS changed', [id(1), id(20), id(teacher), id(org)]);
 
+test('editing an exam can select another assigned course, while the database rejects another teacher\'s course', async () => {
+  const db = await fixture();
+  try {
+    await db.exec(migration);
+    await db.query('INSERT INTO courses (id,title,created_by) VALUES ($1,$2,$3),($4,$5,$6)',
+      [id(21), 'Another assigned course', id(2), id(22), 'Other teacher course', id(3)]);
+    const originalAttempts = (await db.query('SELECT * FROM quiz_attempts')).rows;
+    await db.query('UPDATE teacher_quizzes SET course_id = $1 WHERE id = $2 AND teacher_id = $3', [id(21), id(30), id(2)]);
+    await assert.rejects(db.query('UPDATE teacher_quizzes SET course_id = $1 WHERE id = $2', [id(22), id(30)]),
+      /Only the assigned course teacher can manage this exam/);
+    assert.deepEqual((await db.query('SELECT course_id,teacher_id,original_teacher_id FROM teacher_quizzes')).rows,
+      [{ course_id: id(21), teacher_id: id(2), original_teacher_id: id(2) }]);
+    assert.deepEqual((await db.query('SELECT * FROM quiz_attempts')).rows, originalAttempts);
+  } finally { await db.close(); }
+});
+
 test('reproduces the missing field, repairs it repeatably, and passes the read-only checks', async () => {
   const db = await fixture();
   try {
