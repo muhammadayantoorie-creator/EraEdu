@@ -1,5 +1,8 @@
 # Product verification
 
+For a database inventory and selective cleanup review, follow
+[`DATABASE_CLEANUP.md`](DATABASE_CLEANUP.md). Its queries make no data changes.
+
 For the error naming migration 027, follow
 [`FIX_TEACHER_TIMING.md`](FIX_TEACHER_TIMING.md). It includes the read-only
 preflight, the actual migration and the 27-check SQL verifier.

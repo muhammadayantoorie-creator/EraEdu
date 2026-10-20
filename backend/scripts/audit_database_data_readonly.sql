@@ -14,6 +14,16 @@ WITH checks(check_name,affected,detail) AS (
  SELECT 'duplicate normalized account emails',count(*),'Review privately; do not delete or merge accounts automatically'
  FROM (SELECT lower(trim(email)) FROM public.users GROUP BY lower(trim(email)) HAVING count(*)>1) d
  UNION ALL
+ SELECT 'password-reset challenge fields expired over 24 hours',count(*),
+   'Temporary-field cleanup candidate only; preserve accounts, passwords and current reset links. No cleanup is performed.'
+ FROM public.users WHERE reset_password_token IS NOT NULL
+   AND reset_password_expires_at < statement_timestamp() - interval '24 hours'
+ UNION ALL
+ SELECT 'student OTP challenge fields expired over 24 hours',count(*),
+   'Temporary-field cleanup candidate only; preserve accounts and active verification challenges. No cleanup is performed.'
+ FROM public.users WHERE student_otp_hash IS NOT NULL
+   AND student_otp_expires_at < statement_timestamp() - interval '24 hours'
+ UNION ALL
  SELECT 'invalid course capacity',count(*),'NULL is unlimited; supplied limits must be positive'
  FROM public.courses WHERE max_students IS NOT NULL AND max_students<=0
  UNION ALL

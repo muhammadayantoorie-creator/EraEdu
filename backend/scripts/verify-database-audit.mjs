@@ -7,6 +7,7 @@ const { PGlite } = await import(process.env.PGLITE_MODULE_PATH
   ? pathToFileURL(process.env.PGLITE_MODULE_PATH).href : '@electric-sql/pglite');
 const audit = await readFile(new URL('./audit_database_readonly.sql', import.meta.url), 'utf8');
 const dataAudit = await readFile(new URL('./audit_database_data_readonly.sql', import.meta.url), 'utf8');
+const inventory = await readFile(new URL('./inventory_database_readonly.sql', import.meta.url), 'utf8');
 const run = async db => (await db.exec(audit)).find(result => result.rows?.[0]?.check_name)?.rows;
 const row = (rows, section, check) => {
   const found = rows.find(r => r.section===section && r.check_name===check);
@@ -84,14 +85,71 @@ test('aggregate data report flags planted inconsistencies and does not change da
     `);
     await db.exec(await readFile(new URL('../migrations/012_add_organizations.sql',import.meta.url),'utf8'));
     await db.exec(await readFile(new URL('../migrations/013_add_safepay_payments.sql',import.meta.url),'utf8'));
+    await db.exec(await readFile(new URL('../migrations/014_add_student_email_otp.sql',import.meta.url),'utf8'));
     await db.exec('ALTER TABLE safepay_payments ADD COLUMN organization_id uuid;');
+    for (const [label, expiry] of [['Expired', "statement_timestamp() - interval '2 days'"],
+      ['Active', "statement_timestamp() + interval '1 hour'"],
+      ['RecentlyExpired', "statement_timestamp() - interval '1 hour'"], ['UnknownExpiry', 'NULL']]) {
+      await db.exec(`INSERT INTO users(name,email,password,role,reset_password_token,reset_password_expires_at,
+        student_otp_hash,student_otp_expires_at,student_otp_attempts)
+        VALUES ('${label}','${label}@example.invalid','fixture-password','student','fixture-reset-${label}',${expiry},
+        'fixture-otp-${label}',${expiry},3)`);
+    }
+    const usersBefore = (await db.query('SELECT * FROM users ORDER BY id')).rows;
     const results = await db.exec(dataAudit);
     const rows = results.find(r=>r.rows?.[0]?.check_name).rows;
     assert.equal(rows.find(r=>r.check_name==='unsupported account role').affected,1);
     assert.equal(rows.find(r=>r.check_name==='invalid course capacity').affected,1);
     assert.equal(rows.find(r=>r.check_name==='duplicate enrollments').status,'PASS');
+    assert.equal(rows.find(r=>r.check_name==='password-reset challenge fields expired over 24 hours').affected,1);
+    assert.equal(rows.find(r=>r.check_name==='student OTP challenge fields expired over 24 hours').affected,1);
     assert.ok(!JSON.stringify(rows).includes('private@example.test'));
     assert.ok(!JSON.stringify(rows).includes('not-a-real-password'));
+    assert.ok(!JSON.stringify(rows).includes('fixture-reset-'));
+    assert.ok(!JSON.stringify(rows).includes('fixture-otp-'));
+    assert.deepEqual((await db.query('SELECT * FROM users ORDER BY id')).rows, usersBefore);
     assert.equal((await db.query('SELECT max_students FROM courses')).rows[0].max_students,-1);
+  } finally { await db.close(); }
+});
+
+test('inventory retains empty application/platform/extension tables and makes no deletion claim for unknown objects', async () => {
+  const db = await PGlite.create();
+  try {
+    await db.exec(`CREATE SCHEMA auth; CREATE SCHEMA storage; CREATE SCHEMA custom_owner;
+      CREATE TABLE public.users(id uuid PRIMARY KEY, email text, password text);
+      CREATE TABLE public.quiz_attempts(id uuid);
+      CREATE TABLE auth.users(id uuid, private_value text);
+      CREATE TABLE storage.objects(id uuid, private_path text);
+      CREATE TABLE public.unrecognized_empty(id uuid);
+      CREATE TABLE custom_owner.custom_data(id uuid);
+      CREATE TABLE public.extension_state(id uuid);
+      ALTER EXTENSION plpgsql ADD TABLE public.extension_state;
+      INSERT INTO public.users VALUES (gen_random_uuid(),'private-marker@example.invalid','private-password-marker');
+      INSERT INTO auth.users VALUES (gen_random_uuid(),'private-auth-marker');
+      INSERT INTO storage.objects VALUES (gen_random_uuid(),'private-storage-marker');`);
+    const usersBefore = (await db.query('SELECT * FROM public.users')).rows;
+    const objects = (await db.exec(inventory)).flatMap(result => result.rows || []);
+    const find = (schema, name) => objects.find(row => row.schema_name === schema && row.object_name === name);
+    assert.match(find('public','quiz_attempts').disposition, /^KEEP:/);
+    assert.match(find('auth','users').disposition, /^KEEP: platform/);
+    assert.match(find('storage','objects').disposition, /^KEEP: platform/);
+    assert.match(find('public','extension_state').disposition, /^KEEP: extension/);
+    assert.match(find('public','unrecognized_empty').disposition, /^REVIEW ONLY:/);
+    assert.match(find('custom_owner','custom_data').disposition, /^REVIEW OWNER:/);
+    assert.ok(Array.isArray(find('public','users').columns));
+    assert.equal(JSON.stringify(objects).includes('private-marker@'), false);
+    assert.equal(JSON.stringify(objects).includes('private-password-marker'), false);
+    assert.equal(JSON.stringify(objects).includes('private-auth-marker'), false);
+    assert.equal(JSON.stringify(objects).includes('private-storage-marker'), false);
+    assert.deepEqual((await db.query('SELECT * FROM public.users')).rows, usersBefore);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM public.unrecognized_empty')).rows[0].n,0);
+  } finally { await db.close(); }
+});
+
+test('catalog inventory executes without assuming any EraEdu tables are installed', async () => {
+  const db = await PGlite.create();
+  try {
+    assert.ok(Array.isArray((await db.exec(inventory)).flatMap(result => result.rows || [])));
+    assert.equal((await db.query("SELECT to_regclass('public.users') AS users")).rows[0].users,null);
   } finally { await db.close(); }
 });
