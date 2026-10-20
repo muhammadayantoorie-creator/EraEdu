@@ -13,6 +13,7 @@ const { PGlite } = await import(process.env.PGLITE_MODULE_PATH
 const migration = await readFile(new URL('../migrations/027_teacher_attempt_deadlines.sql', import.meta.url), 'utf8');
 const verification = await readFile(new URL('./verify-teacher-deadlines.sql', import.meta.url), 'utf8');
 const preflight = await readFile(new URL('./preflight-teacher-deadlines.sql', import.meta.url), 'utf8');
+const blockingReview = await readFile(new URL('./review-blocking-teacher-attempts.sql', import.meta.url), 'utf8');
 const migrate = database => database.exec(migration.replaceAll('clock_timestamp()', 'public.test_now()'));
 let db;
 const student = '10000000-0000-4000-8000-000000000001';
@@ -241,6 +242,25 @@ test('preflight detects active legacy attempts and migration refuses atomically 
     assert.deepEqual((await database.query('SELECT * FROM quiz_attempts')).rows, before);
     assert.equal((await database.query("SELECT to_regprocedure('public.start_teacher_attempt(uuid,uuid)') AS fn")).rows[0].fn, null);
     assert.equal((await database.query("SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name='quiz_attempts' AND column_name='teacher_quiz_snapshot'")).rows[0].n, 0);
+  } finally { await database.close(); }
+});
+
+test('blocking review works before timing columns exist and exposes only metadata without changing work', async () => {
+  const database = await legacyDatabase();
+  try {
+    await database.exec(`INSERT INTO quiz_attempts(user_id,quiz_id,status,topic_id,answers,started_at) VALUES
+      ('${student}','${quiz}','in-progress',NULL,'[{"privateAnswer":"do not return me"}]','2026-01-01T00:00:00Z'),
+      ('${student}','${quiz}','completed',NULL,'[]','2026-01-01T00:00:00Z'),
+      ('${student}','${quiz}','in-progress','${course}','[]','2026-01-01T00:00:00Z')`);
+    const before = (await database.query('SELECT * FROM quiz_attempts ORDER BY id')).rows;
+    const review = rows(await database.exec(blockingReview));
+    assert.equal(review.length, 1);
+    assert.equal(review[0].total_blocking_attempts, 1);
+    assert.equal(review[0].saved_answer_count, 1);
+    assert.match(review[0].timing_review, /^LEGACY OR INVALID/);
+    assert.equal(JSON.stringify(review).includes('privateAnswer'), false);
+    assert.equal(JSON.stringify(review).includes(student), false);
+    assert.deepEqual((await database.query('SELECT * FROM quiz_attempts ORDER BY id')).rows, before);
   } finally { await database.close(); }
 });
 

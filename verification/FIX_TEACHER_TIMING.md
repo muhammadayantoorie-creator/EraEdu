@@ -39,6 +39,26 @@ applying 027. Do not delete attempts, change their status to fabricate a
 completion, copy today's question bank into an old attempt, or invent new
 deadlines. The migration refuses active attempts and preserves their work.
 
+For the specific `P0001: Migration 027 cannot infer deadlines for active teacher
+exams` error, the guard stopped the transaction before adding timing columns or
+replacing functions. If SQL Editor leaves the session in an aborted transaction,
+run `ROLLBACK;` before the next diagnostic query. Repeating migration 027 will
+continue to fail while these records remain active.
+
+Run [`review-blocking-teacher-attempts.sql`](../backend/scripts/review-blocking-teacher-attempts.sql)
+to identify up to 100 blocking attempts. It works even when migration 027 has
+never run. It returns attempt/exam IDs, exam title, original start, saved-answer
+count, snapshot presence and the total number of blocking records. It returns
+no student identities or answer contents and changes nothing.
+
+An `in-progress` database status does not prove a student is currently taking
+the exam, and an old start date does not prove the work may be discarded. Confirm
+with the exam administrator which attempts are ongoing versus abandoned tests.
+An explicitly approved cancellation/retake decision needs the reviewed attempt
+IDs and preservation of existing work; do not use a blanket `UPDATE ... SET
+status='completed'` or remove the guard. Legacy attempts without a snapshot
+cannot be finished by the new timing RPCs just by reapplying migration 027.
+
 If verification reports `MISSING` or `DENIED`, inspect the named item in this
 same project. An index dependency failure points to migration 019. `UNSAFE`
 means browser-role access or a function security contract needs administrator
