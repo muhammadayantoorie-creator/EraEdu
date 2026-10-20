@@ -59,9 +59,16 @@ export function normalizeViolationType(value: string): ViolationType {
   return canonicalViolationTypes[value] || (value.toLowerCase() as ViolationType);
 }
 
-function monitoringMigrationRequired(error: any): Error | null {
-  const message = String(error?.message || '').toLowerCase();
-  if (error?.code === '42703' || ['event_id', 'violation_count', 'violations'].some(column => message.includes(column))) {
+function missingColumn(error: any, columns: string[]): boolean {
+  if (!['42703', 'PGRST204'].includes(error?.code)) return false;
+  const description = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return columns.some(column => new RegExp(`\\b${column}\\b`).test(description));
+}
+
+function monitoringMigrationRequired(error: any, atomicWriter = false): Error | null {
+  const missingEventIndex = atomicWriter && error?.code === '42P10' &&
+    /on conflict/i.test(String(error?.message || ''));
+  if (missingColumn(error, ['event_id', 'violation_count', 'violations']) || missingEventIndex) {
     return Object.assign(new Error('Monitoring schema migration required: apply backend/migrations/019_make_cheating_events_authoritative.sql'), { statusCode: 503 });
   }
   return null;
@@ -69,12 +76,11 @@ function monitoringMigrationRequired(error: any): Error | null {
 
 function teacherAttemptMigrationRequired(error: any): Error | null {
   const message = String(error?.message || '').toLowerCase();
+  const missingWriter = ['42883', 'PGRST202'].includes(error?.code) &&
+    /\breport_teacher_violation\b/.test(message);
   if (
-    error?.code === '42883' || error?.code === '42703' ||
-    message.includes('teacher_quiz_snapshot') ||
-    message.includes('report_teacher_violation') ||
-    message.includes('teacher exam timing migration') ||
-    message.includes('schema cache')
+    missingColumn(error, ['teacher_quiz_snapshot', 'teacher_question_state', 'teacher_answers_finalized_at']) ||
+    missingWriter || message.includes('teacher exam timing migration')
   ) {
     return Object.assign(
       new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
@@ -117,7 +123,8 @@ export const cheatingViolationService = {
           details: input.details || {},
         },
       });
-      if (error || !data) throw teacherAttemptMigrationRequired(error) || new Error(error?.message || 'Could not save integrity event');
+      if (error || !data) throw monitoringMigrationRequired(error, true) ||
+        teacherAttemptMigrationRequired(error) || new Error(error?.message || 'Could not save integrity event');
       return data;
     }
 

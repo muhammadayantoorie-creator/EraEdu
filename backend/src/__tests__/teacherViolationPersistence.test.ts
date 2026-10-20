@@ -83,7 +83,9 @@ describe('teacher integrity event persistence', () => {
 
   it.each(['42883', '42703', 'PGRST202'])('missing timing schema is actionable (%s)', async code => {
     lookup();
-    mockRpc.mockResolvedValue({ data: null, error: { code, message: 'report_teacher_violation is not in schema cache' } });
+    mockRpc.mockResolvedValue({ data: null, error: { code, message: code === '42703'
+      ? 'column teacher_quiz_snapshot does not exist'
+      : 'report_teacher_violation is not in schema cache' } });
     await expect(cheatingViolationService.reportViolation(input)).rejects.toMatchObject({
       statusCode: 503, message: expect.stringContaining('027_teacher_attempt_deadlines.sql'),
     });
