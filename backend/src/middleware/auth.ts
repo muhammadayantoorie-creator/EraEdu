@@ -17,8 +17,9 @@ declare global {
 }
 
 const accountRoles = new Set(['student', 'teacher', 'admin']);
-const deny = (res: Response, status: number, code: string, message: string) =>
-  res.status(status).json({ success: false, message, error: { code, message } });
+const deny = (res: Response, status: number, code: string, message: string,
+  details?: { currentRole: string; requiredRoles: string[] }) =>
+  res.status(status).json({ success: false, message, error: { code, message, ...details } });
 
 export const protect = async (req: Request, res: Response, next: NextFunction) => {
   // An explicit Bearer token takes precedence if a client also has a browser cookie.
@@ -61,13 +62,24 @@ export const protect = async (req: Request, res: Response, next: NextFunction) =
   // revokes older tokens immediately after an administrator changes the role.
   if (decoded.role !== liveUser.role) return deny(res, 401, 'ROLE_CHANGED', 'Your account role changed. Please sign in again.');
 
+  // A shared browser cookie can be replaced by signing in from another tab or
+  // frontend. This hint can only reject a different identity; it never grants
+  // access or replaces the identity verified above.
+  const expectedAccount = req.get('X-EraEdu-Account');
+  if (expectedAccount !== undefined && expectedAccount !== liveUser.id) {
+    return deny(res, 401, 'SESSION_ACCOUNT_CHANGED', 'Your browser session changed to another account. Please sign in again before continuing.');
+  }
+
   req.user = { _id: liveUser.id, role: liveUser.role };
   next();
 };
 
 export const authorize = (...roles: string[]) => (req: Request, res: Response, next: NextFunction) => {
-  if (!req.user || !roles.includes(req.user.role)) {
-    return deny(res, 403, 'ROLE_FORBIDDEN', 'Your account is not authorized to access this action.');
+  if (!req.user) return deny(res, 401, 'AUTH_REQUIRED', 'Not authorized. Sign in to continue.');
+  if (!roles.includes(req.user.role)) {
+    return deny(res, 403, 'ROLE_FORBIDDEN',
+      `You are signed in as a ${req.user.role}. This action requires a ${roles.join(' or ')} account.`,
+      { currentRole: req.user.role, requiredRoles: roles });
   }
   next();
 };

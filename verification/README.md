@@ -51,3 +51,40 @@ student submission, grading, monitoring, roles and payment sandbox behavior, use
 isolated staging accounts and follow `STAGING_E2E_RUNBOOK.md`. This public smoke
 suite does not replace those acceptance tests. The backend Jest and disposable
 PostgreSQL suites are separate evidence, not live user-workflow results.
+
+## Teacher create/edit session regression
+
+From `frontend`, run `npm run test:session` to exercise the actual API client and
+auth store with an in-memory adapter. Backend `teacherWriteSession.test.ts` uses
+the real course/exam routers and signed fixture sessions with mocked data services.
+It verifies teacher/admin access, student denial, and rejection before any write
+when the displayed account differs from the authenticated account.
+
+For the actual UI, build the frontend and serve it on `127.0.0.1:4173` using
+`npm run preview -- --host 127.0.0.1 --port 4173 --strictPort`. From the repository
+root, with the same separate Playwright setup described above:
+
+```powershell
+node verification/teacher-session-browser.mjs
+# After deployment, exercise both hosted bundles with intercepted API responses:
+node verification/teacher-session-browser.mjs --live
+```
+
+These fixture tests cover course/exam creation and editing, successful saves,
+account-change sign-in notices, account headers and single-write behavior. Every
+API call is intercepted; no real signed-in account or database write is tested.
+Evidence is stored under ignored `backend/coverage/teacher-session-browser`.
+
+The Vercel and Pages frontends share the API's browser session cookie. Signing
+in as another user in the same browser profile can leave an older tab displaying
+the previous account. Protected requests now include `X-EraEdu-Account`; the API
+compares it with the verified session identity and rejects mismatches with
+`SESSION_ACCOUNT_CHANGED`. This header cannot grant access. The frontend clears
+its stale account, asks for a fresh sign-in and does not retry the mutation.
+
+A genuine role denial returns `ROLE_FORBIDDEN` with the current role and required
+roles. Teacher/admin course and exam create/edit permissions remain unchanged.
+No database migration or role promotion is required for this repair. Use separate
+browser profiles when testing teacher and student accounts simultaneously.
+This reproduced session issue is not proof of the cause in any particular user's
+uninspected live session.

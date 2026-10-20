@@ -75,6 +75,9 @@ jobs:
     - name: Verify hosting routes
       run: npm run test:hosting
 
+    - name: Verify account session binding
+      run: npm run test:session
+
     - name: Build
       run: npx vite build
       env:

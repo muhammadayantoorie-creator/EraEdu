@@ -25,7 +25,7 @@ describe('course creation authorization', () => {
 
     expect(status).toHaveBeenCalledWith(403);
     expect(json).toHaveBeenCalledWith(expect.objectContaining({
-      message: expect.stringContaining('not authorized'),
+      error: expect.objectContaining({ code: 'ROLE_FORBIDDEN', currentRole: 'student', requiredRoles: ['teacher', 'admin'] }),
     }));
     expect(next).not.toHaveBeenCalled();
   });

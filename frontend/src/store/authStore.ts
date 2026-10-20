@@ -1,10 +1,11 @@
 import { create } from 'zustand';
-import api from '../services/api';
+import api, { setSessionAccountReader } from '../services/api';
 import { User } from '../types';
 
 const sessionNoticeFor = (code?: string): string => {
   if (code === 'ACCOUNT_SUSPENDED') return 'Your account has been suspended. Please contact support.';
   if (code === 'ROLE_CHANGED') return 'Your account role changed. Please sign in again.';
+  if (code === 'SESSION_ACCOUNT_CHANGED') return 'Another tab changed your signed-in account. Please sign in again before continuing.';
   if (code === 'ACCOUNT_UNAVAILABLE') return 'This account is no longer available. Please contact support.';
   if (code === 'ACCOUNT_ROLE_INVALID') return 'This account has no supported access role. Please contact support.';
   return 'Your session has expired. Please sign in again.';
@@ -169,3 +170,5 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
 }));
+
+setSessionAccountReader(() => useAuthStore.getState().user?._id);
