@@ -126,6 +126,30 @@ describe('teacher attempt timing service boundary', () => {
     });
   });
 
+  it.each([
+    { code: 'PGRST202', message: 'Could not find the function public.teacher_attempt_action in the schema cache' },
+    { code: '42703', message: 'column teacher_question_state does not exist' },
+    { code: 'PGRST204', message: "Could not find the 'teacher_quiz_snapshot' column in the schema cache" },
+  ])('identifies an actual missing timing object: %j', async error => {
+    mockRpc.mockResolvedValue({ data: null, error });
+    await expect(quizService.getActiveTeacherAttempt(attemptId, studentId)).rejects.toMatchObject({
+      statusCode: 503, code: 'TEACHER_TIMING_SCHEMA_REQUIRED',
+    });
+  });
+
+  it.each([
+    { code: '42501', message: 'permission denied for function teacher_attempt_action' },
+    { code: '08006', message: 'connection failed during teacher_attempt_action' },
+    { code: '42703', message: 'column unrelated_field does not exist' },
+    { code: '42883', message: 'function unrelated_function does not exist' },
+    { code: 'PGRST002', message: 'Could not query the database for the schema cache' },
+  ])('does not misdiagnose an unrelated error as migration 027: %j', async error => {
+    mockRpc.mockResolvedValue({ data: null, error });
+    await expect(quizService.getActiveTeacherAttempt(attemptId, studentId)).rejects.toMatchObject({
+      message: error.message,
+    });
+  });
+
   it('does not accept a changed answer after the authoritative deadline', async () => {
     const attempt = snapshotAttempt({ teacher_question_state: { [`${quizId}-q0`]: { activatedAt: isoActivated, deadlineAt: isoDeadline } } });
     setupAttemptLookup(attempt);

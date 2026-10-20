@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { teacherTimingSchemaError as teacherAttemptMigrationRequired } from './teacherTimingSchema';
 
 export type ViolationType =
   | 'tab_change'
@@ -70,22 +71,6 @@ function monitoringMigrationRequired(error: any, atomicWriter = false): Error | 
     /on conflict/i.test(String(error?.message || ''));
   if (missingColumn(error, ['event_id', 'violation_count', 'violations']) || missingEventIndex) {
     return Object.assign(new Error('Monitoring schema migration required: apply backend/migrations/019_make_cheating_events_authoritative.sql'), { statusCode: 503 });
-  }
-  return null;
-}
-
-function teacherAttemptMigrationRequired(error: any): Error | null {
-  const message = String(error?.message || '').toLowerCase();
-  const missingWriter = ['42883', 'PGRST202'].includes(error?.code) &&
-    /\breport_teacher_violation\b/.test(message);
-  if (
-    missingColumn(error, ['teacher_quiz_snapshot', 'teacher_question_state', 'teacher_answers_finalized_at']) ||
-    missingWriter || message.includes('teacher exam timing migration')
-  ) {
-    return Object.assign(
-      new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
-      { statusCode: 503 },
-    );
   }
   return null;
 }

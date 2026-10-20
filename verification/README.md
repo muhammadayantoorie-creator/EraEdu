@@ -1,5 +1,9 @@
 # Product verification
 
+For the error naming migration 027, follow
+[`FIX_TEACHER_TIMING.md`](FIX_TEACHER_TIMING.md). It includes the read-only
+preflight, the actual migration and the 27-check SQL verifier.
+
 These are bounded smoke checks, not a complete authenticated release sign-off.
 Run from the repository root. The live targets are EraEdu's existing Vercel API,
 Vercel frontend and GitHub Pages frontend. Raw reports and public screenshots go

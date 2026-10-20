@@ -2,11 +2,14 @@ process.env.NODE_ENV = 'production';
 import express from 'express';
 import request from 'supertest';
 import { errorHandler } from '../middleware/errorHandler';
+import { teacherTimingSchemaError } from '../services/teacherTimingSchema';
 
 const app = express();
 app.use(express.json({ limit: '100b' }));
 app.post('/body', (_req, res) => res.json({ success: true }));
 app.get('/cors', (_req, _res, next) => next(new Error('Not allowed by CORS')));
+app.get('/timing', (_req, _res, next) => next(teacherTimingSchemaError({ code: 'PGRST202',
+  message: 'Could not find the function public.start_teacher_attempt in the schema cache' })));
 app.use(errorHandler);
 beforeAll(() => { jest.spyOn(console, 'error').mockImplementation(() => {}); });
 afterAll(() => jest.restoreAllMocks());
@@ -25,4 +28,12 @@ it('a rejected browser origin returns 403', async () => {
   const response = await request(app).get('/cors');
   expect(response.status).toBe(403);
   expect(response.body.error.message).toBe('Request origin is not allowed.');
+});
+it('missing timing setup returns a stable 503 code without exposing the raw database error', async () => {
+  const response = await request(app).get('/timing');
+  expect(response.status).toBe(503);
+  expect(response.body.error.code).toBe('TEACHER_TIMING_SCHEMA_REQUIRED');
+  expect(response.body.message).toContain('027_teacher_attempt_deadlines.sql');
+  expect(JSON.stringify(response.body)).not.toContain('PGRST202');
+  expect(response.body).not.toHaveProperty('stack');
 });

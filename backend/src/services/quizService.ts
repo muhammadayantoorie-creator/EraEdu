@@ -5,6 +5,7 @@ import { assertStudentEmailPolicy } from './authService';
 import { aiService } from './aiService';
 import { analyticsService } from './analyticsService';
 import { canReleaseStudentResult } from './resultReleasePolicy';
+import { teacherTimingSchemaError } from './teacherTimingSchema';
 
 interface QuizQuestion {
   text: string;
@@ -291,27 +292,8 @@ type TeacherQuizSnapshot = {
   questions?: QuizQuestion[];
 };
 
-function teacherAttemptMigrationError(error: any): Error | null {
-  const message = String(error?.message || error || '').toLowerCase();
-  if (
-    error?.code === '42883' || error?.code === '42703' ||
-    message.includes('teacher exam timing migration') ||
-    message.includes('teacher_quiz_snapshot') ||
-    message.includes('teacher_question_state') ||
-    message.includes('start_teacher_attempt') ||
-    message.includes('teacher_attempt_action') ||
-    message.includes('schema cache')
-  ) {
-    return Object.assign(
-      new Error('Teacher exam timing is unavailable. An administrator must apply backend/migrations/027_teacher_attempt_deadlines.sql.'),
-      { statusCode: 503 },
-    );
-  }
-  return null;
-}
-
 function teacherAttemptError(error: any): never {
-  const migrationError = teacherAttemptMigrationError(error);
+  const migrationError = teacherTimingSchemaError(error);
   if (migrationError) throw migrationError;
   const message = String(error?.message || 'Teacher exam request failed');
   const statusCode = /already submitted|deadline|expired/i.test(message) ? 409

@@ -2,7 +2,14 @@
 -- per-question activation deadline. Apply during an exam-free maintenance
 -- window. Existing in-progress teacher exams cannot safely receive a newly
 -- invented deadline, so finish or review those attempts before applying.
+-- Run preflight-teacher-deadlines.sql first and verify-teacher-deadlines.sql
+-- afterward (both under backend/scripts), in the backend's Supabase project.
 BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
+-- Prevent an old API from starting an attempt between the guard and ALTER.
+LOCK TABLE public.quiz_attempts IN SHARE ROW EXCLUSIVE MODE;
 
 DO $$
 BEGIN
@@ -14,12 +21,58 @@ BEGIN
     RAISE EXCEPTION
       'Migration 027 cannot infer deadlines for active teacher exams. Finish or review them before applying it.';
   END IF;
+  IF EXISTS (
+    SELECT 1 FROM (VALUES
+      ('quiz_attempts', 'violation_count', 'integer'::regtype),
+      ('cheating_violations', 'event_id', 'text'::regtype)
+    ) AS required(table_name, column_name, expected_type)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM pg_attribute a
+      WHERE a.attrelid = to_regclass('public.' || required.table_name)
+        AND a.attname = required.column_name AND NOT a.attisdropped AND a.atttypid = required.expected_type
+    )
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_index i
+    JOIN pg_attribute attempt ON attempt.attrelid = i.indrelid AND attempt.attname = 'quiz_attempt_id' AND NOT attempt.attisdropped
+    JOIN pg_attribute event ON event.attrelid = i.indrelid AND event.attname = 'event_id' AND NOT event.attisdropped
+    WHERE i.indrelid = to_regclass('public.cheating_violations')
+      AND i.indisunique AND i.indisvalid AND i.indisready AND i.indnkeyatts = 2
+      AND i.indkey[0] = attempt.attnum AND i.indkey[1] = event.attnum
+      AND regexp_replace(pg_get_expr(i.indpred, i.indrelid), '[[:space:]()]', '', 'g') = 'event_idISNOTNULL'
+  ) THEN
+    RAISE EXCEPTION 'Apply or reconcile migration 019_make_cheating_events_authoritative.sql before migration 027; monitoring columns or retry uniqueness are missing or incompatible.';
+  END IF;
 END $$;
 
 ALTER TABLE public.quiz_attempts
   ADD COLUMN IF NOT EXISTS teacher_quiz_snapshot jsonb,
   ADD COLUMN IF NOT EXISTS teacher_question_state jsonb NOT NULL DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS teacher_answers_finalized_at timestamptz;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM (VALUES
+      ('teacher_quiz_snapshot', 'jsonb'::regtype),
+      ('teacher_question_state', 'jsonb'::regtype),
+      ('teacher_answers_finalized_at', 'timestamptz'::regtype)
+    ) AS required(column_name, expected_type)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM pg_attribute a
+      WHERE a.attrelid = 'public.quiz_attempts'::regclass
+        AND a.attname = required.column_name AND NOT a.attisdropped
+        AND a.atttypid = required.expected_type
+    )
+  ) THEN
+    RAISE EXCEPTION 'Timing columns have incompatible types. Review the schema before retrying migration 027; no records have been converted.';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.quiz_attempts WHERE teacher_question_state IS NULL) THEN
+    RAISE EXCEPTION 'Existing NULL teacher question states require review before migration 027. No timers have been reset.';
+  END IF;
+END $$;
+ALTER TABLE public.quiz_attempts
+  ALTER COLUMN teacher_question_state SET DEFAULT '{}'::jsonb,
+  ALTER COLUMN teacher_question_state SET NOT NULL;
 
 -- Browser roles never read snapshots or saved canonical answers directly.
 -- Migration 022 already protects quiz_attempts; do not broaden permissions on
@@ -35,6 +88,27 @@ REVOKE ALL ON public.quiz_attempts FROM anon, authenticated;
 CREATE UNIQUE INDEX IF NOT EXISTS quiz_attempts_one_active_teacher_exam
   ON public.quiz_attempts (user_id, quiz_id)
   WHERE topic_id IS NULL AND status = 'in-progress';
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_index i
+    JOIN pg_attribute student ON student.attrelid = i.indrelid
+      AND student.attname = 'user_id' AND NOT student.attisdropped
+    JOIN pg_attribute exam ON exam.attrelid = i.indrelid
+      AND exam.attname = 'quiz_id' AND NOT exam.attisdropped
+    WHERE i.indexrelid = to_regclass('public.quiz_attempts_one_active_teacher_exam')
+      AND i.indrelid = 'public.quiz_attempts'::regclass
+      AND i.indisunique AND i.indisvalid AND i.indisready AND i.indnkeyatts = 2
+      AND i.indkey[0] = student.attnum AND i.indkey[1] = exam.attnum
+      AND regexp_replace(pg_get_expr(i.indpred, i.indrelid), '[[:space:]()]', '', 'g') IN (
+        'topic_idISNULLANDstatus=''in-progress''::text',
+        'topic_idISNULLANDstatus::text=''in-progress''::text'
+      )
+  ) THEN
+    RAISE EXCEPTION 'The active teacher exam index has an incompatible definition. Review quiz_attempts_one_active_teacher_exam before retrying migration 027.';
+  END IF;
+END $$;
 
 -- Finalize exactly once. This function reconstructs a complete answer list
 -- from canonical answers accepted before each question deadline; unanswered
@@ -593,6 +667,7 @@ GRANT EXECUTE ON FUNCTION public.start_teacher_attempt(uuid, uuid),
   public.report_teacher_violation(uuid, uuid, jsonb)
   TO service_role;
 
+NOTIFY pgrst, 'reload schema';
 COMMIT;
 
 -- Rollback: stop new starts and roll back the API/UI together. Retain the

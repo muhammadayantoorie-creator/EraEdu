@@ -10,6 +10,10 @@ import { pathToFileURL } from 'node:url';
 
 const { PGlite } = await import(process.env.PGLITE_MODULE_PATH
   ? pathToFileURL(process.env.PGLITE_MODULE_PATH).href : '@electric-sql/pglite');
+const migration = await readFile(new URL('../migrations/027_teacher_attempt_deadlines.sql', import.meta.url), 'utf8');
+const verification = await readFile(new URL('./verify-teacher-deadlines.sql', import.meta.url), 'utf8');
+const preflight = await readFile(new URL('./preflight-teacher-deadlines.sql', import.meta.url), 'utf8');
+const migrate = database => database.exec(migration.replaceAll('clock_timestamp()', 'public.test_now()'));
 let db;
 const student = '10000000-0000-4000-8000-000000000001';
 const other = '10000000-0000-4000-8000-000000000002';
@@ -34,8 +38,8 @@ const report = (id, eventId, owner = student) => result(
   [owner, id, JSON.stringify({ eventId, violationType: 'tab_change', detectionMethod: 'browser_event', severity: 'low', details: {} })],
 );
 
-before(async () => {
-  db = await PGlite.create(); // in-memory, no data directory and no remote URL
+async function legacyDatabase() {
+  const db = await PGlite.create(); // in-memory, no data directory and no remote URL
   await db.exec(`
     CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
     CREATE TABLE users (id uuid PRIMARY KEY, role text, is_suspended boolean DEFAULT false);
@@ -46,7 +50,7 @@ before(async () => {
       time_limit integer, violation_limit integer);
     CREATE TABLE quiz_attempts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), user_id uuid,
       quiz_id uuid, topic_id uuid, started_at timestamptz, completed_at timestamptz,
-      status text, answers jsonb, score integer, max_score integer,
+      status varchar(20), answers jsonb, score integer, max_score integer,
       auto_submitted boolean DEFAULT false, submission_reason text, violation_count integer DEFAULT 0);
     CREATE TABLE cheating_violations (id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       quiz_attempt_id uuid, student_id uuid, quiz_id uuid, teacher_id uuid,
@@ -57,10 +61,13 @@ before(async () => {
     INSERT INTO test_clock VALUES ('2030-01-01T00:00:00Z');
     CREATE FUNCTION test_now() RETURNS timestamptz LANGUAGE sql AS 'SELECT value FROM test_clock';
   `);
-  const sql = await readFile(new URL('../migrations/027_teacher_attempt_deadlines.sql', import.meta.url), 'utf8');
+  return db;
+}
+before(async () => {
+  db = await legacyDatabase();
   // Inject only the clock for deterministic elapsed-time assertions; execute
   // the shipped SQL body, indexes, transactions and grants without mocks.
-  await db.exec(sql.replaceAll('clock_timestamp()', 'public.test_now()'));
+  await migrate(db);
 });
 after(async () => { if (db) await db.close(); });
 beforeEach(async () => {
@@ -218,4 +225,102 @@ test('browser roles have neither RPC execution nor direct attempt/snapshot acces
       has_table_privilege($1, 'public.quiz_attempts', 'SELECT') AS read`, [role])).rows[0];
     assert.deepEqual(privileges, { start: false, action: false, report: false, read: false });
   }
+});
+
+const rows = results => results.flatMap(result => result.rows || []);
+test('preflight detects active legacy attempts and migration refuses atomically without resetting their work', async () => {
+  const database = await legacyDatabase();
+  try {
+    assert.equal(rows(await database.exec(preflight))[0].status, 'PASS');
+    await database.exec(`INSERT INTO quiz_attempts (user_id,quiz_id,status,answers,started_at)
+      VALUES ('${student}','${quiz}','in-progress','[{"historic":true}]','2026-01-01T00:00:00Z')`);
+    const before = (await database.query('SELECT * FROM quiz_attempts')).rows;
+    assert.match(rows(await database.exec(preflight))[0].status, /^STOP/);
+    await assert.rejects(migrate(database), /cannot infer deadlines for active teacher exams/);
+    await database.exec('ROLLBACK');
+    assert.deepEqual((await database.query('SELECT * FROM quiz_attempts')).rows, before);
+    assert.equal((await database.query("SELECT to_regprocedure('public.start_teacher_attempt(uuid,uuid)') AS fn")).rows[0].fn, null);
+    assert.equal((await database.query("SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name='quiz_attempts' AND column_name='teacher_quiz_snapshot'")).rows[0].n, 0);
+  } finally { await database.close(); }
+});
+
+test('all 27 structural checks pass after repeat application and both text/varchar status types are supported', async () => {
+  const database = await legacyDatabase();
+  try {
+    const missing = rows(await database.exec(verification));
+    assert.equal(missing.length, 27);
+    assert.ok(missing.some(check => check.status === 'MISSING'));
+    await migrate(database);
+    await database.exec(`INSERT INTO quiz_attempts(status,score,answers) VALUES ('completed',7,'[{"historic":true}]')`);
+    const before = (await database.query('SELECT * FROM quiz_attempts')).rows;
+    await migrate(database);
+    assert.deepEqual((await database.query('SELECT * FROM quiz_attempts')).rows, before);
+    const passed = rows(await database.exec(verification));
+    assert.equal(passed.length, 27);
+    assert.ok(passed.every(check => check.status === 'PASS'), JSON.stringify(passed));
+    await database.exec('DROP INDEX quiz_attempts_one_active_teacher_exam; ALTER TABLE quiz_attempts ALTER COLUMN status TYPE text');
+    await migrate(database);
+    assert.ok(rows(await database.exec(verification)).every(check => check.status === 'PASS'));
+  } finally { await database.close(); }
+});
+
+for (const [name, definition] of [
+  ['nonunique', '(user_id,quiz_id) WHERE topic_id IS NULL AND status=\'in-progress\''],
+  ['wrong keys', '(id,quiz_id) WHERE topic_id IS NULL AND status=\'in-progress\''],
+  ['wrong predicate', '(user_id,quiz_id) WHERE topic_id IS NOT NULL AND status=\'in-progress\''],
+]) {
+  test(`an existing ${name} active-attempt index is refused and preserved`, async () => {
+    const database = await legacyDatabase();
+    try {
+      await database.exec(`CREATE ${name === 'nonunique' ? '' : 'UNIQUE'} INDEX quiz_attempts_one_active_teacher_exam ON quiz_attempts ${definition}`);
+      const before = (await database.query("SELECT pg_get_indexdef('quiz_attempts_one_active_teacher_exam'::regclass) AS definition")).rows;
+      await assert.rejects(migrate(database), /active teacher exam index has an incompatible definition/);
+      await database.exec('ROLLBACK');
+      assert.deepEqual((await database.query("SELECT pg_get_indexdef('quiz_attempts_one_active_teacher_exam'::regclass) AS definition")).rows, before);
+      assert.notEqual(rows(await database.exec(verification)).find(check => check.check_name === 'quiz_attempts_one_active_teacher_exam').status, 'PASS');
+    } finally { await database.close(); }
+  });
+}
+
+test('incompatible existing timing columns fail without converting or deleting records', async () => {
+  const database = await legacyDatabase();
+  try {
+    await database.exec('ALTER TABLE quiz_attempts ADD COLUMN teacher_question_state text; INSERT INTO quiz_attempts(status,teacher_question_state) VALUES (\'completed\',\'historic state\')');
+    await assert.rejects(migrate(database), /Timing columns have incompatible types/);
+    await database.exec('ROLLBACK');
+    assert.equal((await database.query('SELECT teacher_question_state FROM quiz_attempts')).rows[0].teacher_question_state, 'historic state');
+  } finally { await database.close(); }
+});
+
+test('missing monitoring prerequisites refuse installation instead of leaving a broken timing writer', async () => {
+  const database = await legacyDatabase();
+  try {
+    await database.exec('DROP INDEX event_retry_identity; ALTER TABLE cheating_violations DROP COLUMN event_id');
+    await assert.rejects(migrate(database), /019_make_cheating_events_authoritative.sql before migration 027/);
+    await database.exec('ROLLBACK');
+    assert.equal((await database.query("SELECT to_regprocedure('public.start_teacher_attempt(uuid,uuid)') AS fn")).rows[0].fn, null);
+  } finally { await database.close(); }
+});
+
+test('an existing NULL question state is preserved for review rather than reset', async () => {
+  const database = await legacyDatabase();
+  try {
+    await database.exec("ALTER TABLE quiz_attempts ADD COLUMN teacher_question_state jsonb; INSERT INTO quiz_attempts(status,answers) VALUES ('completed','[{\"historic\":true}]')");
+    const before = (await database.query('SELECT * FROM quiz_attempts')).rows;
+    await assert.rejects(migrate(database), /NULL teacher question states require review/);
+    await database.exec('ROLLBACK');
+    assert.deepEqual((await database.query('SELECT * FROM quiz_attempts')).rows, before);
+  } finally { await database.close(); }
+});
+
+test('the verifier detects lost service permission and browser access instead of reporting ready', async () => {
+  const database = await legacyDatabase();
+  try {
+    await migrate(database);
+    await database.exec('REVOKE EXECUTE ON FUNCTION start_teacher_attempt(uuid,uuid) FROM service_role; GRANT EXECUTE ON FUNCTION teacher_attempt_action(uuid,uuid,text,text,jsonb) TO authenticated; GRANT SELECT (teacher_quiz_snapshot) ON quiz_attempts TO anon');
+    const checks = rows(await database.exec(verification));
+    assert.equal(checks.find(check => check.check_name === 'public.start_teacher_attempt(uuid,uuid) / service_role').status, 'DENIED');
+    assert.equal(checks.find(check => check.check_name === 'public.teacher_attempt_action(uuid,uuid,text,text,jsonb) / browser roles denied').status, 'UNSAFE');
+    assert.equal(checks.find(check => check.check_name === 'quiz_attempts / browser table and column access denied').status, 'UNSAFE');
+  } finally { await database.close(); }
 });
