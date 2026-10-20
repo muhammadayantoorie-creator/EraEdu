@@ -12,6 +12,7 @@
     "test:integrity": "node --experimental-strip-types --test verification/integrityOutbox.test.mjs",
     "test:exam-save": "node --experimental-strip-types --test verification/examSaveSession.test.mjs",
     "test:submissions": "node --experimental-strip-types --test verification/submissionView.test.mjs",
+    "test:hosting": "node --test verification/hostingRoutes.test.mjs",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

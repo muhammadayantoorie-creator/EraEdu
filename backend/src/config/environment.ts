@@ -78,11 +78,15 @@ export const config = {
     'SUPABASE_SERVICE_KEY',
     serviceKey || process.env.SUPABASE_KEY || '',
   ),
-  additionalAllowedOrigins: (process.env.ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((origin) => origin.trim().replace(/\/$/, ''))
-    .filter(Boolean)
-    .map(origin => validateBrowserUrl('ALLOWED_ORIGINS', origin)),
+  additionalAllowedOrigins: [...new Set([
+    ...(process.env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map((origin) => origin.trim().replace(/\/$/, ''))
+      .filter(Boolean)
+      .map(origin => validateBrowserUrl('ALLOWED_ORIGINS', origin)),
+    ...((process.env.GITHUB_PAGES_ORIGIN || '').trim()
+      ? [validateBrowserUrl('GITHUB_PAGES_ORIGIN', process.env.GITHUB_PAGES_ORIGIN!.trim())] : []),
+  ])],
   jwtSecret: (() => {
     const secret = process.env.JWT_SECRET;
     if (!secret || secret.length < 32) {

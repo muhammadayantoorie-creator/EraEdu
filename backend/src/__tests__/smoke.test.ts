@@ -8,6 +8,7 @@ process.env.JWT_SECRET     = 'test-secret-key-minimum-32-characters-ok';
 process.env.SUPABASE_URL   = 'https://placeholder.supabase.co';
 process.env.SUPABASE_KEY   = 'placeholder-anon-key';
 process.env.NODE_ENV       = 'test';
+process.env.GITHUB_PAGES_ORIGIN = require('../../vercel.json').env.GITHUB_PAGES_ORIGIN;
 process.env.SAFEPAY_WEBHOOK_SECRET = '';
 
 import request from 'supertest';
@@ -39,6 +40,28 @@ beforeAll(async () => {
 
 afterAll(() => {
   jest.restoreAllMocks();
+});
+
+describe('GitHub Pages browser access', () => {
+  const pagesOrigin = process.env.GITHUB_PAGES_ORIGIN!;
+  it('allows credentialed preflights and login validation from the exact deployed Pages origin', async () => {
+    const preflight = await request(app).options('/api/auth/me').set('Origin', pagesOrigin)
+      .set('Access-Control-Request-Method', 'GET').set('Access-Control-Request-Headers', 'content-type');
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers['access-control-allow-origin']).toBe(pagesOrigin);
+    expect(preflight.headers['access-control-allow-credentials']).toBe('true');
+    const login = await request(app).post('/api/auth/login').set('Origin', pagesOrigin).send({});
+    expect(login.status).toBe(400);
+    expect(login.body.error.fields).toBeDefined();
+  });
+  it('rejects other Pages tenants, deceptive suffixes and Origin values containing a path', async () => {
+    for (const origin of ['https://another-owner.github.io', `${pagesOrigin}.evil.test`, `${pagesOrigin}/EraEdu`]) {
+      const response = await request(app).options('/api/auth/me').set('Origin', origin)
+        .set('Access-Control-Request-Method', 'GET');
+      expect(response.status).toBe(403);
+      expect(response.headers['access-control-allow-origin']).toBeUndefined();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

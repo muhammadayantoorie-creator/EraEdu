@@ -1,7 +1,7 @@
 const originalEnv = { ...process.env };
 function load(overrides: Record<string, string | undefined> = {}) {
   process.env = { ...originalEnv, NODE_ENV: 'production', VERCEL: '1',
-    FRONTEND_URL: 'https://school.test/EraEdu', ALLOWED_ORIGINS: '',
+    FRONTEND_URL: 'https://school.test/EraEdu', ALLOWED_ORIGINS: '', GITHUB_PAGES_ORIGIN: '',
     SUPABASE_URL: 'https://school.supabase.co', SUPABASE_KEY: 'public-test-key',
     SUPABASE_SERVICE_KEY: 'server-test-key-at-least-twenty', JWT_SECRET: 'isolated-test-secret-at-least-32-characters', ...overrides };
   let config: any;
@@ -34,3 +34,16 @@ it('accepts multiple exact HTTPS origins and rejects missing privileged credenti
   expect(load({ ALLOWED_ORIGINS: ' https://other.test/, https://preview.test ' }).additionalAllowedOrigins).toEqual(['https://other.test', 'https://preview.test']);
   expect(() => load({ SUPABASE_SERVICE_KEY: '' })).toThrow('SUPABASE_SERVICE_KEY');
 });
+it('adds the Pages origin while preserving the canonical frontend and other configured origins', () => {
+  const pages = 'https://muhammadayantoorie-creator.github.io';
+  expect(load({ ALLOWED_ORIGINS: 'https://preview.test', GITHUB_PAGES_ORIGIN: pages })).toMatchObject({
+    frontendAppUrl: 'https://school.test/EraEdu', frontendUrl: 'https://school.test',
+    additionalAllowedOrigins: ['https://preview.test', pages],
+  });
+  expect(load({ ALLOWED_ORIGINS: pages, GITHUB_PAGES_ORIGIN: pages }).additionalAllowedOrigins).toEqual([pages]);
+});
+it.each(['*', 'https://school.test/EraEdu/', 'http://school.test', 'https://user:password@school.test', 'https://school.test?x=1'])(
+  'rejects an unsafe Pages origin %s', value => {
+    expect(() => load({ GITHUB_PAGES_ORIGIN: value })).toThrow('FATAL: GITHUB_PAGES_ORIGIN');
+  },
+);

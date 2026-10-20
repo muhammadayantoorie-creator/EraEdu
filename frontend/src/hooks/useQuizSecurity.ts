@@ -61,7 +61,7 @@ export const useQuizSecurity = (options: UseQuizSecurityOptions) => {
           duration: 5000,
           position: 'top-center',
         });
-        window.location.href = `/quiz/results/${quizAttemptId}`;
+        window.location.href = `${import.meta.env.BASE_URL}quiz/results/${quizAttemptId}`;
       }
 
       onViolation?.(type, count);

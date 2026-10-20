@@ -72,6 +72,9 @@ jobs:
     - name: Verify submission states
       run: npm run test:submissions
 
+    - name: Verify hosting routes
+      run: npm run test:hosting
+
     - name: Build
       run: npx vite build
       env:

@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "env": {
+    "GITHUB_PAGES_ORIGIN": "https://muhammadayantoorie-creator.github.io"
+  },
   "builds": [
     {
       "src": "api/index.ts",
