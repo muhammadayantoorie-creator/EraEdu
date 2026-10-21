@@ -1,5 +1,13 @@
 # Product verification
 
+The [database compatibility review](DATABASE_REVIEW.md) records the full migration
+replay, backend-query/schema checks, confirmed repairs, and the live reconciliation
+order for migrations 030/031. From backend, `npm run test:database` runs the
+isolated database suites; CI now runs the same command on every main-branch push.
+The standalone question form is checked with
+`node verification/question-storage-browser.mjs` (or add `--live`), using the
+separate Playwright setup and local preview described below.
+
 For a database inventory and selective cleanup review, follow
 [`DATABASE_CLEANUP.md`](DATABASE_CLEANUP.md). Its queries make no data changes.
 

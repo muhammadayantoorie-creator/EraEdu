@@ -5,26 +5,43 @@ export interface CreateQuestionInput {
   questionText: string;
   questionType: 'multipleChoice' | 'shortAnswer';
   options?: string[];
-  correctAnswer?: string;
+  correctAnswer?: number | string;
   correctAnswers?: string[];
   explanation?: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
   createdBy: string;
 }
 
+function answerIndex(value: unknown, options: string[]): number {
+  if (!Array.isArray(options) || options.length < 2 || options.some(option => typeof option !== 'string' || !option.trim())) {
+    throw Object.assign(new Error('Multiple-choice questions require at least two non-empty options'), { statusCode: 400 });
+  }
+  // Current forms submit the canonical option index. Preserve compatibility
+  // with the older form, which submitted the selected option's text.
+  let index = typeof value === 'number' ? value : typeof value === 'string' ? options.indexOf(value) : -1;
+  if (index === -1 && typeof value === 'string' && /^[0-9]+$/.test(value)) index = Number(value);
+  if (!Number.isInteger(index) || index < 0 || index >= options.length) {
+    throw Object.assign(new Error('Select a valid correct answer option'), { statusCode: 400 });
+  }
+  return index;
+}
+
 export const questionService = {
   async createQuestion(input: CreateQuestionInput) {
     await this.assertTopicAccess(input.topicId, input.createdBy, 'teacher');
+    const isShort = input.questionType === 'shortAnswer';
+    const options = isShort ? [] : input.options || [];
+    const correctAnswer = isShort ? null : answerIndex(input.correctAnswer, options);
     const { data, error } = await supabase
       .from('questions')
       .insert([{
         topic_id: input.topicId,
         content: input.questionText,
         question_type: input.questionType,
-        options: input.options || [],
-        correct_answer: input.correctAnswer || null,
+        options,
+        correct_answer: correctAnswer,
         correct_answers: input.correctAnswers || [],
-        hint: input.explanation || '',
+        explanation: input.explanation || '',
         difficulty: input.difficulty,
         created_by: input.createdBy
       }])
@@ -85,7 +102,7 @@ export const questionService = {
     // First check if user owns this question
     const { data: existing } = await supabase
       .from('questions')
-      .select('created_by')
+      .select('created_by, question_type, options, correct_answer')
       .eq('id', questionId)
       .single();
 
@@ -99,10 +116,16 @@ export const questionService = {
     const updateData: any = {};
     if (updates.questionText) updateData.content = updates.questionText;
     if (updates.questionType) updateData.question_type = updates.questionType;
-    if (updates.options) updateData.options = updates.options;
-    if (updates.correctAnswer) updateData.correct_answer = updates.correctAnswer;
+    if (updates.options !== undefined) updateData.options = updates.options;
+    const isShort = (updates.questionType || existing.question_type) === 'shortAnswer';
+    if (isShort && updates.questionType !== undefined) {
+      updateData.correct_answer = null;
+      updateData.options = [];
+    } else if (!isShort && (updates.correctAnswer !== undefined || updates.options !== undefined || updates.questionType !== undefined)) {
+      updateData.correct_answer = answerIndex(updates.correctAnswer ?? existing.correct_answer, updates.options || existing.options || []);
+    }
     if (updates.correctAnswers) updateData.correct_answers = updates.correctAnswers;
-    if (updates.explanation) updateData.hint = updates.explanation;
+    if (updates.explanation !== undefined) updateData.explanation = updates.explanation;
     if (updates.difficulty) updateData.difficulty = updates.difficulty;
 
     const { data, error } = await supabase

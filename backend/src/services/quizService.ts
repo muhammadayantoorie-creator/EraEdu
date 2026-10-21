@@ -1686,13 +1686,19 @@ export const quizService = {
   },
 
   async getHint(questionId: string) {
-      const { data: question } = await supabase
+      const { data: question, error } = await supabase
       .from('questions')
-      .select('hint')
+      .select('*')
       .eq('id', questionId)
       .single();
-      
-      return question?.hint || "No hint available.";
+      if (error && error.code !== 'PGRST116') {
+        throw Object.assign(new Error('Question hint could not be loaded. Please retry.'), { statusCode: 503 });
+      }
+      if (!question) throw Object.assign(new Error('Question not found'), { statusCode: 404 });
+      // explanation is the canonical schema field. Old installations may
+      // additionally have hint; read that legacy value without requiring it.
+      const hint = typeof question.explanation === 'string' ? question.explanation : question.hint;
+      return typeof hint === 'string' && hint.trim() ? hint : 'No hint available.';
   },
 
   async getQuizHistory(userId: string) {

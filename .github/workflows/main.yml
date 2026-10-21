@@ -40,6 +40,9 @@ jobs:
       env:
         NODE_ENV: production
 
+    - name: Verify full database contracts and migration regressions
+      run: npm run test:database
+
   frontend-build:
     runs-on: ubuntu-latest
     defaults:

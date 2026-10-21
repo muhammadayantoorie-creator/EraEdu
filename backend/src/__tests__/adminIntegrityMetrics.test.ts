@@ -11,21 +11,31 @@ import { authorize } from '../middleware/auth';
 
 beforeEach(() => mockFrom.mockReset());
 
-const setup = (rows: any[], total: number | null, error: any = null) => {
+const setup = (rows: any[], total: number | null, error: any = null, lookupFailure = '') => {
   const range = jest.fn().mockResolvedValue({ data: rows, count: total, error });
+  const records: Record<string, any[]> = {
+    quiz_attempts: [{ id: 'attempt-2', user_id: 'student', quiz_id: 'exam', is_flagged: true, teacher_grade: null },
+      { id: 'topic-attempt', user_id: 'student', quiz_id: 'topic-exam', topic_id: 'topic', teacher_grade: 0 }],
+    users: [{ id: 'student', name: 'Student' }], teacher_quizzes: [{ id: 'exam', title: 'Exam', course_id: 'course' }],
+    quizzes: [{ id: 'topic-exam', title: 'Topic exam', topic_id: 'topic' }],
+    topics: [{ id: 'topic', course_id: 'course' }], courses: [{ id: 'course', title: 'Course' }],
+  };
   mockFrom.mockImplementation((table: string) => ({
-    select: (_columns: string, options?: { head?: boolean }) => options?.head
+    select: (columns: string, options?: { head?: boolean }) => options?.head
       ? Promise.resolve({ count: table === 'cheating_violations' ? total : 0, error })
-      : table === 'users'
+      : table === 'users' && columns === 'role, is_suspended'
         ? Promise.resolve({ data: [], error: null })
-        : { order: () => ({ range }) },
+        : { order: () => ({ range }), in: async (_key: string, ids: string[]) => ({
+          data: (records[table] || []).filter(row => ids.includes(row.id)),
+          error: table === lookupFailure ? { message: 'Lookup unavailable' } : null,
+        }) },
   }));
   return range;
 };
 
 describe('admin integrity event drill-down', () => {
   it('paginates the same all-time event population as the overview count', async () => {
-    const range = setup([{ id: 'event-51', quiz_attempt_id: 'attempt-2', violation_type: 'tab_change', timestamp: '2026-01-01', quiz_attempts: { is_flagged: true, teacher_grade: null }, users: { name: 'Student' }, teacher_quizzes: { title: 'Exam', courses: { title: 'Course' } } }], 51);
+    const range = setup([{ id: 'event-51', quiz_attempt_id: 'attempt-2', student_id: 'student', quiz_id: 'exam', violation_type: 'tab_change', timestamp: '2026-01-01' }], 51);
     const overview = await adminService.getOverview();
     const page = await adminService.getIntegrityEvents(2, 50);
     expect(overview.violations).toBe(51);
@@ -49,5 +59,16 @@ describe('admin integrity event drill-down', () => {
     authorize('admin')({ user: { _id: 'teacher-1', role: 'teacher' } } as any, { status } as any, next);
     expect(status).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it('resolves topic exams and retains a real reviewed zero without assuming a teacher-exam foreign key', async () => {
+    setup([{ id: 'topic-event', quiz_attempt_id: 'topic-attempt', student_id: 'student', quiz_id: 'topic-exam' }], 1);
+    const page = await adminService.getIntegrityEvents();
+    expect(page.data[0]).toMatchObject({ assessment: 'Topic exam', course: 'Course', studentName: 'Student', reviewed: true });
+  });
+
+  it('surfaces failed lookup data instead of fabricating unknown names and flags', async () => {
+    setup([{ id: 'event', quiz_attempt_id: 'attempt-2', student_id: 'student', quiz_id: 'exam' }], 1, null, 'users');
+    await expect(adminService.getIntegrityEvents()).rejects.toThrow('Lookup unavailable');
   });
 });

@@ -64,7 +64,7 @@ const CreateQuestionPage = () => {
 
       if (questionType === 'multipleChoice') {
         payload.options = options;
-        payload.correctAnswer = options[correctAnswerIndex];
+        payload.correctAnswer = correctAnswerIndex;
       } else {
         payload.correctAnswers = acceptableAnswers.split(',').map(a => a.trim()).filter(Boolean);
       }

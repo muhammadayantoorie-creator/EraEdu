@@ -1,4 +1,4 @@
--- EraEdu schema/security inventory through migration 029.
+-- EraEdu schema/security inventory through migration 031.
 -- Run the ENTIRE file in the connected Supabase project's SQL Editor as the
 -- database administrator. It returns ONE result table. It does not read user
 -- records, invoke application RPCs, apply migrations, or modify data/schema.
@@ -19,7 +19,7 @@ requirements(table_name, columns_csv, source) AS (VALUES
  ('courses','course_code','015'),
  ('courses','organization_id','024'),
  ('topics','id,title,description,course_id,order,created_at,updated_at','base schema'),
- ('questions','id,content,options,correct_answer,correct_answers,difficulty,topic_id,explanation,question_type,created_by','base schema / enhanced questions'),
+ ('questions','id,content,question_text,options,correct_answer,correct_answers,difficulty,topic_id,explanation,question_type,created_by,created_at,updated_at','base schema / enhanced questions'),
  ('enrollments','id,user_id,course_id,enrolled_at,progress','base schema / 023'),
  ('quizzes','id,topic_id,created_by,title,time_limit,is_published','base schema / topic exams'),
  ('quiz_questions','id,quiz_id,question_id,order_number','base schema'),
@@ -54,6 +54,7 @@ requirements(table_name, columns_csv, source) AS (VALUES
  LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
 ), contracts(table_name,column_name,type_name,not_null,default_value,source) AS (VALUES
  ('users','is_suspended','boolean',true,'false','029'),
+ ('questions','correct_answer','integer',false,NULL,'canonical multiple-choice option index'),
  ('courses','max_students','integer',false,NULL,'006 / 023; NULL means unlimited'),
  ('teacher_quizzes','camera_monitoring','boolean',true,'true','005 / 016'),
  ('teacher_quizzes','violation_limit','integer',true,'3','007 / 016'),
@@ -124,6 +125,20 @@ requirements(table_name, columns_csv, source) AS (VALUES
    '025; verify the teacher/topic CASE split, not just column existence: '||coalesce(default_expr,'MISSING')
  FROM columns WHERE column_name IN ('teacher_quiz_ref','topic_quiz_ref')
  UNION ALL
+ SELECT 'relationship','quiz_codes.quiz_id -> teacher_quizzes.id',
+   CASE WHEN EXISTS (
+     SELECT 1 FROM pg_constraint fk
+     JOIN pg_attribute source_column ON source_column.attrelid=fk.conrelid AND source_column.attname='quiz_id' AND NOT source_column.attisdropped
+     JOIN pg_attribute target_column ON target_column.attrelid=fk.confrelid AND target_column.attname='id' AND NOT target_column.attisdropped
+     WHERE fk.conrelid=to_regclass('public.quiz_codes') AND fk.confrelid=to_regclass('public.teacher_quizzes')
+       AND fk.contype='f' AND fk.conkey=ARRAY[source_column.attnum]::smallint[] AND fk.confkey=ARRAY[target_column.attnum]::smallint[]
+   ) AND NOT EXISTS (
+     SELECT 1 FROM pg_constraint fk JOIN pg_attribute column_state ON column_state.attrelid=fk.conrelid AND column_state.attname='quiz_id'
+     WHERE fk.conrelid=to_regclass('public.quiz_codes') AND fk.contype='f' AND column_state.attnum=ANY(fk.conkey)
+       AND fk.confrelid IS DISTINCT FROM to_regclass('public.teacher_quizzes')
+   ) THEN 'PASS' ELSE 'BLOCKED' END,
+   '030; the old bootstrap can leave a topic-quiz FK under the same constraint name. Review legacy rows before repair.'
+ UNION ALL
  SELECT 'role',name,CASE WHEN oid IS NULL THEN 'BLOCKED' ELSE 'PASS' END,'Expected Supabase role' FROM role_state
  UNION ALL
  SELECT 'function',signature,
@@ -172,9 +187,9 @@ requirements(table_name, columns_csv, source) AS (VALUES
    CASE WHEN t.oid IS NULL OR r.oid IS NULL THEN 'BLOCKED'
      WHEN has_table_privilege(r.oid,t.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
        OR has_any_column_privilege(r.oid,t.oid,'SELECT,INSERT,UPDATE,REFERENCES')
-       THEN CASE WHEN t.table_name IN ('quiz_attempts','student_feedback','admin_governance_audit','course_assignment_audit') OR NOT c.relrowsecurity THEN 'BLOCKED' ELSE 'REVIEW' END
+       THEN 'BLOCKED'
      ELSE 'PASS' END,
-   'Check effective table AND column grants. Any access with RLS requires policy review; never expose passwords/answer keys/payment tokens'
+   '031; application data goes through Express. Browser roles must have no direct table or column access; provider schemas are separate.'
  FROM tables t LEFT JOIN pg_class c ON c.oid=t.oid CROSS JOIN role_state r WHERE r.name IN ('anon','authenticated')
  UNION ALL
  SELECT 'server_table_access',t.table_name||' / service_role',
@@ -182,6 +197,12 @@ requirements(table_name, columns_csv, source) AS (VALUES
      WHEN NOT coalesce(s.rolbypassrls OR s.rolsuper,false) THEN 'REVIEW' ELSE 'PASS' END,
    'Server requires SELECT; verify operation-specific write grants separately. Non-bypass RLS needs policy review'
  FROM tables t CROSS JOIN role_state r LEFT JOIN pg_roles s ON s.oid=r.oid WHERE r.name='service_role'
+ UNION ALL
+ SELECT 'server_operation_access',t.table_name||' / service_role / '||operation,
+   CASE WHEN t.oid IS NOT NULL AND r.oid IS NOT NULL AND has_table_privilege(r.oid,t.oid,operation) THEN 'PASS' ELSE 'BLOCKED' END,
+   '031; check each operation separately. A combined privilege string means ANY privilege, not all of them.'
+ FROM tables t CROSS JOIN role_state r CROSS JOIN (VALUES ('SELECT'),('INSERT'),('UPDATE'),('DELETE')) operations(operation)
+ WHERE r.name='service_role'
  UNION ALL
  SELECT 'policy',c.relname||'.'||p.polname,'REVIEW',
    'Existing policy; command='||p.polcmd::text||'; permissive='||p.polpermissive::text||'; inspect privately with grants; no row data exposed'
@@ -192,7 +213,7 @@ requirements(table_name, columns_csv, source) AS (VALUES
  WHERE k.contype='f'
  UNION ALL
  SELECT 'release_gate','live API / data / concurrency / restore','NOT_TESTED',
-   'Catalog checks cannot prove API-to-project connection, row integrity, authorization, race safety, payment sandbox, backups/restore, or migration-body equality. Use DATABASE_VERIFICATION.md.'
+   'Catalog checks cannot prove API-to-project connection, row integrity, authorization, race safety, payment sandbox, backups/restore, or migration-body equality. Use verification/DATABASE_REVIEW.md.'
 )
 SELECT section,check_name,status,detail FROM checks
 ORDER BY CASE status WHEN 'BLOCKED' THEN 0 WHEN 'REVIEW' THEN 1 WHEN 'NOT_TESTED' THEN 2 ELSE 3 END,section,check_name;

@@ -96,15 +96,44 @@ export const adminService = {
     const safePage = Number.isSafeInteger(page) && page > 0 ? page : 1;
     const safeLimit = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 100;
     const { data, count: total, error } = await supabase.from('cheating_violations')
-      .select('id, quiz_attempt_id, violation_type, severity, detection_method, timestamp, student_id, quiz_id, quiz_attempts(is_flagged, teacher_grade, status), users:student_id(name, email), teacher_quizzes:quiz_id(title, courses:course_id(title))', { count: 'exact' })
+      .select('id, quiz_attempt_id, violation_type, severity, detection_method, timestamp, student_id, quiz_id', { count: 'exact' })
       .order('timestamp', { ascending: false }).range((safePage - 1) * safeLimit, safePage * safeLimit - 1);
     if (error) throw new Error(error.message);
     if (typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0) throw new Error('Failed to count integrity events: no valid count returned');
-    return { data: (data || []).map((event: any) => ({
+    // quiz_id can refer to either exam model; there is deliberately no single
+    // FK from events to teacher_quizzes. Resolve the bounded page in batches
+    // rather than asking PostgREST to embed a relationship that does not exist.
+    const rows = data || [];
+    const ids = (values: any[]) => [...new Set(values.filter(Boolean))] as string[];
+    const fetchRows = async (table: string, fields: string, values: string[]) => {
+      if (!values.length) return [];
+      const result = await supabase.from(table).select(fields).in('id', values);
+      if (result.error) throw new Error(`Failed to resolve integrity ${table}: ${result.error.message}`);
+      return result.data || [];
+    };
+    const attempts = await fetchRows('quiz_attempts', 'id, user_id, quiz_id, topic_id, is_flagged, teacher_grade, status', ids(rows.map(event => event.quiz_attempt_id)));
+    const attemptMap = new Map(attempts.map((attempt: any) => [attempt.id, attempt]));
+    const topicIds = ids(attempts.map((attempt: any) => attempt.topic_id));
+    const teacherIds = ids(rows.filter(event => !attemptMap.get(event.quiz_attempt_id)?.topic_id).map(event => attemptMap.get(event.quiz_attempt_id)?.quiz_id || event.quiz_id));
+    const [students, teacherExams, topicExams, topics] = await Promise.all([
+      fetchRows('users', 'id, name, email', ids([...rows.map(event => event.student_id), ...attempts.map((attempt: any) => attempt.user_id)])),
+      fetchRows('teacher_quizzes', 'id, title, course_id', teacherIds),
+      fetchRows('quizzes', 'id, title, topic_id', ids(attempts.filter((attempt: any) => attempt.topic_id).map((attempt: any) => attempt.quiz_id))),
+      fetchRows('topics', 'id, title, course_id', topicIds),
+    ]);
+    const courses = await fetchRows('courses', 'id, title', ids([...teacherExams, ...topics].map((row: any) => row.course_id)));
+    const byId = (values: any[]) => new Map(values.map(value => [value.id, value]));
+    const studentMap = byId(students), teacherMap = byId(teacherExams), topicExamMap = byId(topicExams), topicMap = byId(topics), courseMap = byId(courses);
+    return { data: rows.map((event: any) => {
+      const attempt = attemptMap.get(event.quiz_attempt_id);
+      const exam = attempt?.topic_id ? topicExamMap.get(attempt.quiz_id) : teacherMap.get(attempt?.quiz_id || event.quiz_id);
+      const courseId = attempt?.topic_id ? topicMap.get(attempt.topic_id)?.course_id : exam?.course_id;
+      const student = studentMap.get(event.student_id || attempt?.user_id);
+      return {
       id: event.id, attemptId: event.quiz_attempt_id, type: event.violation_type, severity: event.severity || 'low', detectionMethod: event.detection_method || 'unknown', timestamp: event.timestamp,
-      studentName: event.users?.name || 'Unknown student', studentEmail: event.users?.email || '', assessment: event.teacher_quizzes?.title || 'Unknown assessment',
-      course: event.teacher_quizzes?.courses?.title || 'No course', flagged: !!event.quiz_attempts?.is_flagged, reviewed: event.quiz_attempts?.teacher_grade !== null && event.quiz_attempts?.teacher_grade !== undefined,
-    })), pagination: { page: safePage, limit: safeLimit, total } };
+      studentName: student?.name || 'Unknown student', studentEmail: student?.email || '', assessment: exam?.title || 'Unknown assessment',
+      course: courseMap.get(courseId)?.title || 'No course', flagged: !!attempt?.is_flagged, reviewed: attempt?.teacher_grade !== null && attempt?.teacher_grade !== undefined,
+    }; }), pagination: { page: safePage, limit: safeLimit, total } };
   },
 
   async updateUser(userId: string, updates: { role?: string; isSuspended?: boolean }, actorId: string) {
