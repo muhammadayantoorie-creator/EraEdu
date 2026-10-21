@@ -82,6 +82,9 @@ test('aggregate data report flags planted inconsistencies and does not change da
       ALTER TABLE cheating_violations ADD COLUMN event_id text;
       INSERT INTO users (name,email,password,role) VALUES ('Fixture','private@example.test','not-a-real-password','unknown');
       INSERT INTO courses (title,max_students) VALUES ('Fixture',-1);
+      INSERT INTO questions(content,options,correct_answer,question_type) VALUES
+        ('Valid first answer','["Alpha","Beta"]',0,'multipleChoice'),
+        ('Legacy missing index','["Alpha","Beta"]',NULL,'multipleChoice');
     `);
     await db.exec(await readFile(new URL('../migrations/012_add_organizations.sql',import.meta.url),'utf8'));
     await db.exec(await readFile(new URL('../migrations/013_add_safepay_payments.sql',import.meta.url),'utf8'));
@@ -96,10 +99,12 @@ test('aggregate data report flags planted inconsistencies and does not change da
         'fixture-otp-${label}',${expiry},3)`);
     }
     const usersBefore = (await db.query('SELECT * FROM users ORDER BY id')).rows;
+    const questionsBefore = (await db.query('SELECT * FROM questions ORDER BY id')).rows;
     const results = await db.exec(dataAudit);
     const rows = results.find(r=>r.rows?.[0]?.check_name).rows;
     assert.equal(rows.find(r=>r.check_name==='unsupported account role').affected,1);
     assert.equal(rows.find(r=>r.check_name==='invalid course capacity').affected,1);
+    assert.equal(rows.find(r=>r.check_name==='multiple-choice bank questions with invalid options or correct index').affected,1);
     assert.equal(rows.find(r=>r.check_name==='duplicate enrollments').status,'PASS');
     assert.equal(rows.find(r=>r.check_name==='password-reset challenge fields expired over 24 hours').affected,1);
     assert.equal(rows.find(r=>r.check_name==='student OTP challenge fields expired over 24 hours').affected,1);
@@ -108,6 +113,7 @@ test('aggregate data report flags planted inconsistencies and does not change da
     assert.ok(!JSON.stringify(rows).includes('fixture-reset-'));
     assert.ok(!JSON.stringify(rows).includes('fixture-otp-'));
     assert.deepEqual((await db.query('SELECT * FROM users ORDER BY id')).rows, usersBefore);
+    assert.deepEqual((await db.query('SELECT * FROM questions ORDER BY id')).rows, questionsBefore);
     assert.equal((await db.query('SELECT max_students FROM courses')).rows[0].max_students,-1);
   } finally { await db.close(); }
 });

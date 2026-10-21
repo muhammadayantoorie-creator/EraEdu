@@ -77,6 +77,9 @@ signed-in teacher/student workflow still require staging acceptance tests.
    and optionally the object inventory. These return metadata/counts, not private
    record contents. Draft courses, old attempts and missing references are review
    candidates, not automatic deletion or publication targets.
+   The audit also flags MCQs with missing/out-of-range correct answers. The old
+   zero-index bug may have affected historical bank rows; the intended answer
+   must be confirmed by the author, never guessed or used to regrade snapshots.
 6. Verify real sign-in/roles, assigned-course publication, course enrollment,
    exam create/edit/start/save/resume/submit, grading/results and monitoring in
    isolated staging accounts. Confirm API health after permission changes.

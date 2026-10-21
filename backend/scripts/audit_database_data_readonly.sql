@@ -42,6 +42,14 @@ WITH checks(check_name,affected,detail) AS (
  FROM public.teacher_quizzes exam JOIN public.courses course_row ON course_row.id=exam.course_id
  WHERE exam.is_active IS TRUE AND course_row.is_published IS DISTINCT FROM true
  UNION ALL
+ SELECT 'multiple-choice bank questions with invalid options or correct index',count(*),
+   'Old writes may have lost index zero. Ask the author to review; never guess an answer, rewrite historical snapshots or regrade automatically.'
+ FROM public.questions WHERE coalesce(question_type,'multipleChoice')='multipleChoice' AND (
+   CASE WHEN jsonb_typeof(options)='array' THEN
+     jsonb_array_length(options)<2 OR correct_answer IS NULL OR correct_answer<0 OR correct_answer>=jsonb_array_length(options)
+   ELSE true END
+ )
+ UNION ALL
  SELECT 'courses over capacity',count(*),'Investigate history and capacity changes; do not remove students automatically'
  FROM public.courses c WHERE max_students IS NOT NULL
  AND (SELECT count(*) FROM public.enrollments e WHERE e.course_id=c.id)>c.max_students
