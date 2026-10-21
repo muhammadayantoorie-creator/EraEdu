@@ -296,6 +296,9 @@ function teacherAttemptError(error: any): never {
   const migrationError = teacherTimingSchemaError(error);
   if (migrationError) throw migrationError;
   const message = String(error?.message || 'Teacher exam request failed');
+  if (message === 'Course access is unavailable') {
+    throw Object.assign(new Error('Ask your teacher to confirm this exam\'s course is published and that you are enrolled in the selected course. Join it from My Courses using its 6-character course code, then retry the exam.'), { statusCode: 403 });
+  }
   const statusCode = /already submitted|deadline|expired/i.test(message) ? 409
     : /unavailable|not enrolled|has not started|student account/i.test(message) ? 403
     : /not found/i.test(message) ? 404

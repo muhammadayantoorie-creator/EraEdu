@@ -61,6 +61,12 @@ PostgreSQL suites are separate evidence, not live user-workflow results.
 
 ## Teacher create/edit session regression
 
+For course-linked exam start failures, see [FIX_EXAM_COURSE_ACCESS.md](FIX_EXAM_COURSE_ACCESS.md).
+The isolated browser checks use `node verification/student-exam-access-browser.mjs`
+against the same local preview described below, or add `--live` for hosted bundles.
+They exercise publication/enrollment refusals, completed submissions, allowed
+preview and a refused start after access changes, without any live record writes.
+
 From `frontend`, run `npm run test:session` to exercise the actual API client and
 auth store with an in-memory adapter. Backend `teacherWriteSession.test.ts` uses
 the real course/exam routers and signed fixture sessions with mocked data services.

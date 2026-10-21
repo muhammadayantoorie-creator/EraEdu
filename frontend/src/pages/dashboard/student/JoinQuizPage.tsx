@@ -207,6 +207,12 @@ const JoinQuizPage = () => {
       </header>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        {error && (
+          <div role="alert" className="mb-5 rounded-lg bg-red-50 p-4 flex items-start gap-3">
+            <ExclamationCircleIcon className="h-5 w-5 text-red-400 mt-0.5" />
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
         {!quizDetails ? (
           <>
             <div className="flex justify-center mb-6">
@@ -236,13 +242,6 @@ const JoinQuizPage = () => {
                   {code.length}/4 digits
                 </p>
               </div>
-
-              {error && (
-                <div className="rounded-lg bg-red-50 p-4 flex items-start gap-3">
-                  <ExclamationCircleIcon className="h-5 w-5 text-red-400 mt-0.5" />
-                  <p className="text-sm text-red-700">{error}</p>
-                </div>
-              )}
 
               <button
                 type="submit"

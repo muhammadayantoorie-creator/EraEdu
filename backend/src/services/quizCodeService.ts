@@ -77,15 +77,18 @@ export const quizCodeService = {
 
     // If quiz is tied to a course, only enrolled students can access it
     if (quiz.course_id && userId && userRole === 'student') {
-      const { data: enrollment } = await supabase
+      const { data: enrollment, error: enrollmentError } = await supabase
         .from('enrollments')
         .select('id')
         .eq('user_id', userId)
         .eq('course_id', quiz.course_id)
         .maybeSingle();
 
+      if (enrollmentError) {
+        throw Object.assign(new Error('Unable to verify course access. Please retry.'), { statusCode: 503 });
+      }
       if (!enrollment) {
-        throw new Error('You are not enrolled in this course. Please join the course first.');
+        throw Object.assign(new Error('Join this exam\'s course from My Courses using the 6-character course code, then try the 4-digit exam code again.'), { statusCode: 403 });
       }
     }
 
@@ -106,11 +109,22 @@ export const quizCodeService = {
 
     let courseTitle = 'General';
     if (quiz.course_id) {
-      const { data: course } = await supabase
+      const { data: course, error: courseError } = await supabase
         .from('courses')
-        .select('title')
+        .select('title, is_published')
         .eq('id', quiz.course_id)
         .maybeSingle();
+      if (courseError) {
+        throw Object.assign(new Error('Unable to verify course access. Please retry.'), { statusCode: 503 });
+      }
+      if (!course) {
+        throw Object.assign(new Error('Ask your teacher to verify the course linked to this exam. Course access is unavailable.'), { statusCode: 403 });
+      }
+      // Match the atomic start policy before offering Start. Existing
+      // completed submissions remain reviewable after a course is unpublished.
+      if (userRole === 'student' && course.is_published !== true && !completedAttemptId) {
+        throw Object.assign(new Error('Ask your teacher to publish this exam\'s course from Courses > Edit > Published course, then try again.'), { statusCode: 403 });
+      }
       courseTitle = course?.title || courseTitle;
     }
 

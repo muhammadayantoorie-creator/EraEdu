@@ -64,7 +64,7 @@ export const accessQuizByCode = asyncHandler(async (req: Request, res: Response)
       data: result
     });
   } catch (error: any) {
-    res.status(400).json({
+    res.status(error.statusCode || 400).json({
       success: false,
       error: { message: error.message }
     });
