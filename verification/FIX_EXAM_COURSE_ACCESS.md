@@ -40,8 +40,37 @@ code. Publication remains relevant to accessing the course's learning content.
 
 Local validation on 23 October 2026 passed: all 404 backend tests in 42 suites,
 all 74 disposable PostgreSQL checks, the backend TypeScript build, and browser
-fixture script syntax validation. Hosted deployment, migration application and
-a signed-in live student workflow have not been performed for this change.
+fixture script syntax validation. The live rollout below is now complete.
+
+## Live rollout: 23 October 2026 (Pakistan time)
+
+The backend was deployed from [commit c451d7d](https://github.com/muhammadayantoorie-creator/EraEdu/commit/c451d7d0ae60228cec14c96519dd58a5212613b4).
+The [release CI](https://github.com/muhammadayantoorie-creator/EraEdu/actions/runs/39840474800)
+passed all 404 backend tests, all 67 database checks included in that commit,
+and the backend build. The 74-check local total above also includes seven
+pre-existing local migration checks that were kept outside this scoped release.
+The [Vercel backend deployment](https://vercel.com/muhammadayantoorie-2147s-projects/era-edu/7s8yhdZhRvcsxQserqszWP8K8yLw)
+succeeded; `/health` returned HTTP 200 with database readiness `ok`.
+
+Supabase migration `code_exam_course_access` was applied and recorded as version
+`20261022193019` (00:30:19 Pakistan time on 23 October). Before applying it, the
+live start function matched the reviewed original migration 027. A separate
+post-commit query confirmed the new function matches migration 034, requires
+enrollment, and does not require course publication. Its security-definer setting,
+fixed search path and service-only execution permissions remain intact.
+
+Seven live database checks passed using new fixture records inside one transaction
+executed as `service_role`: starting on an unpublished course, resuming the same
+attempt, denying an unenrolled student, leaving the course unpublished, creating
+only one attempt, answering/submitting/grading, and refusing a completed restart.
+The transaction was rolled back. An independent read confirmed zero fixture
+users, courses or exams remained. No existing student accounts, courses, schedules,
+questions, enrollments or submissions were edited for this rollout.
+
+All 70 public API/asset checks also passed after deployment. These cover readiness,
+published-only public catalog visibility, signed-out protections, origins,
+validation and hosted assets. The rollback-only RPC checks are live database
+evidence; a real student's signed-in browser workflow was not exercised.
 
 From `backend`, run:
 
