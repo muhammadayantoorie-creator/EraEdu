@@ -111,7 +111,7 @@ export const quizCodeService = {
     if (quiz.course_id) {
       const { data: course, error: courseError } = await supabase
         .from('courses')
-        .select('title, is_published')
+        .select('title')
         .eq('id', quiz.course_id)
         .maybeSingle();
       if (courseError) {
@@ -120,11 +120,9 @@ export const quizCodeService = {
       if (!course) {
         throw Object.assign(new Error('Ask your teacher to verify the course linked to this exam. Course access is unavailable.'), { statusCode: 403 });
       }
-      // Match the atomic start policy before offering Start. Existing
-      // completed submissions remain reviewable after a course is unpublished.
-      if (userRole === 'student' && course.is_published !== true && !completedAttemptId) {
-        throw Object.assign(new Error('Ask your teacher to publish this exam\'s course from Courses > Edit > Published course, then try again.'), { statusCode: 403 });
-      }
+      // Course publication controls catalog/content visibility. A teacher-code
+      // exam is available to enrolled students independently of that setting.
+      // start_teacher_attempt enforces enrollment again when starting/resuming.
       courseTitle = course?.title || courseTitle;
     }
 

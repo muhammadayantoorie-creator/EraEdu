@@ -83,7 +83,7 @@ test('complete migration chain has no structural/security blockers and all read-
   } finally { await db.close(); }
 });
 
-test('assigned course, enrollment, exam code, immutable attempt and reassignment work together as service_role', async () => {
+test('assigned course, enrollment, unpublished code exam, immutable attempt and reassignment work together as service_role', async () => {
   const db = await fixture();
   try {
     await db.query(`INSERT INTO users(id,name,email,password,role) VALUES
@@ -98,11 +98,15 @@ test('assigned course, enrollment, exam code, immutable attempt and reassignment
     await db.query('SELECT enroll_course_with_capacity($1,$2)', [course.id, id(4)]);
     await db.query('SELECT enroll_course_with_capacity($1,$2)', [course.id, id(4)]);
     assert.equal((await db.query('SELECT count(*)::int AS n FROM enrollments')).rows[0].n, 1);
+    // Course publication controls the catalog, not a private code exam for
+    // students who are already enrolled. Exercise the complete migrated schema.
+    await db.query('UPDATE courses SET is_published=false WHERE id=$1', [course.id]);
     const questions = [{ text: 'Fixture MCQ', options: ['right','wrong'], correctAnswer: 0, timeLimit: 60 }];
     await db.query(`INSERT INTO teacher_quizzes(id,teacher_id,course_id,title,questions,access_code,time_limit)
       VALUES ($1,$2,$3,'Original exam',$4,'1234',3)`, [id(20), id(2), course.id, JSON.stringify(questions)]);
     await db.query("INSERT INTO quiz_codes(quiz_id,course_id,created_by,code) VALUES ($1,$2,$3,'5678')", [id(20), course.id, id(2)]);
     const attempt = (await db.query('SELECT start_teacher_attempt($1,$2) AS result', [id(4), id(20)])).rows[0].result;
+    assert.equal((await db.query('SELECT is_published FROM courses WHERE id=$1', [course.id])).rows[0].is_published, false);
     await db.query("UPDATE teacher_quizzes SET title='Edited exam',questions=$1 WHERE id=$2", [JSON.stringify([{ ...questions[0], correctAnswer: 1 }]), id(20)]);
     const questionId = `${id(20)}-q0`;
     await db.query("SELECT teacher_attempt_action($1,$2,'activate',$3)", [id(4), attempt.id, questionId]);

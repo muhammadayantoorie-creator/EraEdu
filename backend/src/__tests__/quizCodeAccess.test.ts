@@ -40,17 +40,17 @@ function setup({ published = true as boolean | null, enrolled = true, completed 
 }
 beforeEach(() => { mockFrom.mockReset(); mockRpc.mockReset(); });
 
-test.each([false, null])('an enrolled student gets publication instructions before Start is offered (%s)', async published => {
+test.each([true, false, null])('an enrolled student can preview a code exam regardless of course publication (%s)', async published => {
   const { write } = setup({ published });
   const response = await request(app).get('/preview/1234');
-  expect(response.status).toBe(403);
-  expect(response.body.error.message).toMatch(/teacher.*publish/i);
-  expect(response.body).not.toHaveProperty('data');
+  expect(response.status).toBe(200);
+  expect(response.body.data.quiz).toMatchObject({ courseTitle: 'Selected course', alreadySubmitted: false });
+  expect(JSON.stringify(response.body)).not.toMatch(/Hidden question|Hidden answer|correctAnswer|answerText/);
   expect(write).not.toHaveBeenCalled();
 });
 
-test('a student must join the course first and receives distinct course-code and exam-code instructions', async () => {
-  const { write } = setup({ enrolled: false });
+test.each([true, false, null])('a student must join the course first, regardless of publication (%s)', async published => {
+  const { write } = setup({ enrolled: false, published });
   const response = await request(app).get('/preview/1234');
   expect(response.status).toBe(403);
   expect(response.body.error.message).toMatch(/My Courses.*6-character.*4-digit/);
@@ -104,7 +104,7 @@ test('an access change racing preview remains denied by the atomic start and get
   const { write } = setup();
   mockRpc.mockResolvedValue({ data: null, error: { code: 'P0001', message: 'Course access is unavailable' } });
   await expect(quizService.startQuizByCode('1234', 'student')).rejects.toMatchObject({
-    statusCode: 403, message: expect.stringMatching(/published.*enrolled/i),
+    statusCode: 403, message: expect.stringMatching(/course.*enrollment/i),
   });
   expect(mockRpc).toHaveBeenCalledTimes(1);
   expect(write).not.toHaveBeenCalled();

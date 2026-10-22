@@ -12,9 +12,8 @@ const targets = process.argv.includes('--live')
 const output = path.resolve('backend/coverage/student-exam-access-browser');
 await mkdir(output, { recursive: true });
 const student = { _id: 'fixture-student', name: 'Fixture Student', email: 'student@example.invalid', role: 'student', isEmailVerified: true };
-const unpublished = 'Ask your teacher to publish this exam\'s course from Courses > Edit > Published course, then try again.';
 const notEnrolled = 'Join this exam\'s course from My Courses using the 6-character course code, then try the 4-digit exam code again.';
-const startDenied = 'Ask your teacher to confirm this exam\'s course is published and that you are enrolled in the selected course. Join it from My Courses using its 6-character course code, then retry the exam.';
+const startDenied = 'Ask your teacher to confirm the course linked to this exam and your enrollment. Join it from My Courses using its 6-character course code, then retry the 4-digit exam code.';
 const browser = await chromium.launch({ headless: true,
   executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
 const results = [];
@@ -32,8 +31,8 @@ try {
         if (req.method() === 'GET' && endpoint === '/auth/me') return reply(200, { success: true, data: student });
         if (req.method() === 'GET' && endpoint === '/notifications') return reply(200, { success: true, data: [] });
         if (req.method() === 'GET' && endpoint === '/quizzes/access-by-code/1234') {
-          if (scenario === 'unpublished' || scenario === 'not-enrolled') return reply(403, {
-            success: false, error: { message: scenario === 'unpublished' ? unpublished : notEnrolled },
+          if (scenario === 'not-enrolled') return reply(403, {
+            success: false, error: { message: notEnrolled },
           });
           return reply(200, { success: true, data: { code: '1234', quiz: {
             _id: 'fixture-exam', title: 'Fixture exam', courseId: 'fixture-course', courseTitle: 'Fixture course',
@@ -55,9 +54,8 @@ try {
         await page.goto(base + '/dashboard/student/join-quiz', { waitUntil: 'domcontentloaded', timeout: 45000 });
         await page.getByPlaceholder('1234', { exact: true }).fill('1234');
         await page.getByRole('button', { name: 'Access Exam', exact: true }).click();
-        if (scenario === 'unpublished' || scenario === 'not-enrolled') {
-          const message = scenario === 'unpublished' ? unpublished : notEnrolled;
-          await page.getByRole('alert').filter({ hasText: message }).waitFor();
+        if (scenario === 'not-enrolled') {
+          await page.getByRole('alert').filter({ hasText: notEnrolled }).waitFor();
           assert.equal(await page.getByRole('button', { name: 'Start Exam', exact: true }).count(), 0);
         } else if (scenario === 'completed') {
           await page.getByText('Exam already submitted', { exact: true }).waitFor();

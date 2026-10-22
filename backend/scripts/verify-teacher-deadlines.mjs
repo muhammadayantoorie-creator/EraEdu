@@ -1,7 +1,7 @@
 // Isolated SQL regression check, never a Supabase/production connection.
 // Install @electric-sql/pglite@0.5.10 in a disposable tools directory, set
 // PGLITE_MODULE_PATH to its dist/index.js, then run `node --test` on this file.
-// Minimal prerequisite tables test migration 027, NOT the entire schema/RLS.
+// Minimal prerequisite tables test migrations 027/034, NOT the entire schema/RLS.
 // PGlite is single-connection: real lock contention still requires staging.
 import assert from 'node:assert/strict';
 import { before, beforeEach, after, test } from 'node:test';
@@ -11,6 +11,7 @@ import { pathToFileURL } from 'node:url';
 const { PGlite } = await import(process.env.PGLITE_MODULE_PATH
   ? pathToFileURL(process.env.PGLITE_MODULE_PATH).href : '@electric-sql/pglite');
 const migration = await readFile(new URL('../migrations/027_teacher_attempt_deadlines.sql', import.meta.url), 'utf8');
+const codeAccessMigration = await readFile(new URL('../migrations/034_code_exam_course_access.sql', import.meta.url), 'utf8');
 const verification = await readFile(new URL('./verify-teacher-deadlines.sql', import.meta.url), 'utf8');
 const preflight = await readFile(new URL('./preflight-teacher-deadlines.sql', import.meta.url), 'utf8');
 const blockingReview = await readFile(new URL('./review-blocking-teacher-attempts.sql', import.meta.url), 'utf8');
@@ -70,6 +71,7 @@ before(async () => {
   // Inject only the clock for deterministic elapsed-time assertions; execute
   // the shipped SQL body, indexes, transactions and grants without mocks.
   await migrate(db);
+  await db.exec(codeAccessMigration.replaceAll('clock_timestamp()', 'public.test_now()'));
 });
 after(async () => { if (db) await db.close(); });
 beforeEach(async () => {
@@ -185,9 +187,35 @@ test('foreign students cannot read, activate, submit or report against the attem
   await assert.rejects(start(other), /Course access is unavailable/);
 });
 
-test('unpublished/missing courses, inactive exams and suspended students cannot start', async () => {
+for (const published of [true, false, null]) test(`enrolled students can start/resume private code exams with publication=${published}`, async () => {
+  await db.query('UPDATE courses SET is_published=$1 WHERE id=$2', [published, course]);
+  const first = await start();
+  assert.equal(first.status, 'in-progress');
+  assert.equal((await start()).id, first.id);
+  await assert.rejects(start(other), /Course access is unavailable/);
+  assert.equal((await db.query('SELECT is_published FROM courses WHERE id=$1', [course])).rows[0].is_published, published);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM enrollments')).rows[0].n, 1);
+});
+
+test('unpublishing during an attempt preserves resume, saved answers and final submission', async () => {
+  const first = await start();
+  await action(first.id, 'activate', qid(0));
+  await action(first.id, 'answer', null, [canonical(0, 0)]);
   await db.query('UPDATE courses SET is_published=false WHERE id=$1', [course]);
+  assert.equal((await start()).id, first.id);
+  const completed = await action(first.id, 'submit');
+  assert.equal(completed.status, 'completed');
+  assert.equal(completed.score, 1);
+  await assert.rejects(start(), /already submitted/);
+});
+
+test('enrollment removed after preview still prevents starting; no attempt is created', async () => {
+  await db.query('DELETE FROM enrollments WHERE user_id=$1', [student]);
   await assert.rejects(start(), /Course access is unavailable/);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM quiz_attempts')).rows[0].n, 0);
+});
+
+test('missing courses, inactive exams and suspended students cannot start', async () => {
   await db.query('DELETE FROM courses WHERE id=$1', [course]); // isolated fixture only
   await assert.rejects(start(), /Course access is unavailable/);
   await db.query('INSERT INTO courses VALUES ($1,true)', [course]);
@@ -196,6 +224,22 @@ test('unpublished/missing courses, inactive exams and suspended students cannot 
   await db.query('UPDATE teacher_quizzes SET is_active=true WHERE id=$1', [quiz]);
   await db.query('UPDATE users SET is_suspended=true WHERE id=$1', [student]);
   await assert.rejects(start(), /Student account is unavailable/);
+});
+
+test('a future scheduled exam remains unavailable on an unpublished course', async () => {
+  await db.query('UPDATE courses SET is_published=false WHERE id=$1', [course]);
+  await db.query('UPDATE teacher_quizzes SET scheduled_start=$1 WHERE id=$2', [new Date(epoch + 60000).toISOString(), quiz]);
+  await assert.rejects(start(), /Exam has not started/);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM quiz_attempts')).rows[0].n, 0);
+});
+
+test('migration 034 can be reapplied without changing attempts or course publication', async () => {
+  await db.query('UPDATE courses SET is_published=false WHERE id=$1', [course]);
+  const first = await start();
+  await db.exec(codeAccessMigration.replaceAll('clock_timestamp()', 'public.test_now()'));
+  await db.exec(codeAccessMigration.replaceAll('clock_timestamp()', 'public.test_now()'));
+  assert.equal((await start()).id, first.id);
+  assert.equal((await db.query('SELECT is_published FROM courses WHERE id=$1', [course])).rows[0].is_published, false);
 });
 
 test('short-answer clearing persists as a deliberate edit before expiry without inventing a manual grade', async () => {
