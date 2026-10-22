@@ -1,0 +1,473 @@
+{
+  "reviewedAtUtc": "2026-10-21T07:04:49.459757+00:00",
+  "displayTimezone": "Asia/Karachi",
+  "projectName": "EraEduation",
+  "scope": "Known EraEdu application schema, grants, function bodies, metadata inventory, aggregate integrity, and public signed-out API checks",
+  "schema": {
+    "before": {
+      "BLOCKED": 94,
+      "REVIEW": 58,
+      "NOT_TESTED": 1,
+      "PASS": 302
+    },
+    "after": {
+      "REVIEW": 73,
+      "NOT_TESTED": 1,
+      "PASS": 390
+    },
+    "catalogReviewEntriesMatched": 73,
+    "catalogReviewDefinitionDifferences": 0
+  },
+  "dataIntegrity": {
+    "summary": {
+      "REVIEW": 4,
+      "PASS": 31
+    },
+    "checks": [
+      {
+        "check_name": "active teacher exams linked to unpublished courses",
+        "status": "REVIEW",
+        "affected": 16,
+        "detail": "May be intentional drafts. Students cannot start until the selected course is published and they enroll; no automatic publishing"
+      },
+      {
+        "check_name": "cached violation count differs from persisted events",
+        "status": "REVIEW",
+        "affected": 3,
+        "detail": "Investigate; do not overwrite event history with browser counters"
+      },
+      {
+        "check_name": "active teacher attempts without timing snapshot",
+        "status": "REVIEW",
+        "affected": 1,
+        "detail": "027 requires an exam-free migration window; do not fabricate fresh deadlines"
+      },
+      {
+        "check_name": "teacher attempts with missing exam",
+        "status": "REVIEW",
+        "affected": 1,
+        "detail": "Teacher attempts use teacher_quizzes, not quizzes"
+      },
+      {
+        "check_name": "account status unknown",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Never assume NULL means active; review 029 prerequisites"
+      },
+      {
+        "check_name": "active quiz codes with a different course than their teacher exam",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Review intended scope after course changes; do not silently transfer access or enrollment"
+      },
+      {
+        "check_name": "active topic attempts without question snapshot",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "022; investigate without resetting the assessment"
+      },
+      {
+        "check_name": "assigned bank questions with missing topic",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Unassigned questions are permitted; only broken non-null references counted"
+      },
+      {
+        "check_name": "attempts with missing student",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Do not erase assessment history"
+      },
+      {
+        "check_name": "completed attempts with impossible score bounds",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "A bounded score alone does not prove correct grading"
+      },
+      {
+        "check_name": "course exam manager mismatch",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "024 transfers management while preserving original authorship/history"
+      },
+      {
+        "check_name": "courses over capacity",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Investigate history and capacity changes; do not remove students automatically"
+      },
+      {
+        "check_name": "duplicate active attempts per model",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Never delete student work to make a unique index succeed"
+      },
+      {
+        "check_name": "duplicate enrollments",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Review records before applying/repairing 023 uniqueness"
+      },
+      {
+        "check_name": "duplicate integrity event identities",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "019; NULL IDs are legacy events, not invented duplicates"
+      },
+      {
+        "check_name": "duplicate normalized account emails",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Review privately; do not delete or merge accounts automatically"
+      },
+      {
+        "check_name": "duplicate organization memberships",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "One seat per (organization,user)"
+      },
+      {
+        "check_name": "enrollments with missing student or course",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Preserve records for reviewed repair"
+      },
+      {
+        "check_name": "feedback ownership/completion mismatch",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "009; review historical rows, never bypass ownership"
+      },
+      {
+        "check_name": "integrity events with missing attempt or mismatched student",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Persisted events are authoritative; review attribution"
+      },
+      {
+        "check_name": "invalid course capacity",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "NULL is unlimited; supplied limits must be positive"
+      },
+      {
+        "check_name": "invalid exam security settings",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Monitoring must be explicit; threshold must be between 1 and 100"
+      },
+      {
+        "check_name": "memberships with missing organization or user",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Review institution boundaries"
+      },
+      {
+        "check_name": "multiple-choice bank questions with invalid options or correct index",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Old writes may have lost index zero. Ask the author to review; never guess an answer, rewrite historical snapshots or regrade automatically."
+      },
+      {
+        "check_name": "organizations over seat capacity",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Every membership row, including owner/admin, consumes one seat"
+      },
+      {
+        "check_name": "organizations with invalid capacity",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Seat limit must be between 1 and 10000"
+      },
+      {
+        "check_name": "password-reset challenge fields expired over 24 hours",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Temporary-field cleanup candidate only; preserve accounts, passwords and current reset links. No cleanup is performed."
+      },
+      {
+        "check_name": "payment records with invalid state or amount",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "No provider calls or entitlement changes are made by this report"
+      },
+      {
+        "check_name": "payment records with missing owner or institution",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "NULL organization_id is a supported legacy personal payment"
+      },
+      {
+        "check_name": "quiz codes without a teacher-exam reference",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "030 must refuse these rows; review legacy topic codes without deleting or relinking them"
+      },
+      {
+        "check_name": "student OTP challenge fields expired over 24 hours",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Temporary-field cleanup candidate only; preserve accounts and active verification challenges. No cleanup is performed."
+      },
+      {
+        "check_name": "teacher exams with missing owner or assigned course",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Standalone exams can have NULL course_id"
+      },
+      {
+        "check_name": "topic attempts with missing or mismatched exam/topic",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Topic attempts intentionally use quizzes and topics"
+      },
+      {
+        "check_name": "topics with missing course",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Review references; do not delete material"
+      },
+      {
+        "check_name": "unsupported account role",
+        "status": "PASS",
+        "affected": 0,
+        "detail": "Review legacy roles explicitly; do not rewrite roles just to pass"
+      }
+    ]
+  },
+  "preservation": {
+    "originalTableCountsUnchanged": true,
+    "rowCounts": {
+      "users": 30,
+      "topics": 9,
+      "courses": 15,
+      "quizzes": 0,
+      "questions": 2,
+      "quiz_codes": 0,
+      "enrollments": 10,
+      "notifications": 38,
+      "organizations": 1,
+      "quiz_attempts": 10,
+      "quiz_questions": 0,
+      "teacher_quizzes": 21,
+      "safepay_payments": 8,
+      "student_feedback": 0,
+      "cheating_violations": 18,
+      "organization_members": 2,
+      "admin_governance_audit": 0,
+      "course_assignment_audit": 0
+    },
+    "legacyOrphansRetained": 1,
+    "legacySubmissionProvenanceUnknown": 10,
+    "recordsDeletedByRepairs": 0
+  },
+  "expiredChallengeCleanup": {
+    "affected_accounts": 2,
+    "expired_reset_challenges_cleared": 1,
+    "expired_otp_challenges_cleared": 1
+  },
+  "functions": [
+    {
+      "name": "enforce_free_assessment_trial_limit",
+      "signature": "enforce_free_assessment_trial_limit()",
+      "bodyHash": "f6a5e669ad4b8460d5d8978405635956",
+      "liveMatch": true
+    },
+    {
+      "name": "add_organization_teacher_atomic",
+      "signature": "add_organization_teacher_atomic(uuid,uuid)",
+      "bodyHash": "9b3e9cd675db5dd82bb32a56f12c61a6",
+      "liveMatch": true
+    },
+    {
+      "name": "enroll_course_with_capacity",
+      "signature": "enroll_course_with_capacity(uuid,uuid)",
+      "bodyHash": "3dce3c650c38db9063e9247e054d8253",
+      "liveMatch": true
+    },
+    {
+      "name": "keep_quiz_original_teacher",
+      "signature": "keep_quiz_original_teacher()",
+      "bodyHash": "48bdb5fd38a45b656114ef6703f238a6",
+      "liveMatch": true
+    },
+    {
+      "name": "require_current_course_teacher_for_quiz",
+      "signature": "require_current_course_teacher_for_quiz()",
+      "bodyHash": "7bcb488856f34dd1be4fbdd8fa5dc009",
+      "liveMatch": true
+    },
+    {
+      "name": "require_current_teacher_for_quiz_code",
+      "signature": "require_current_teacher_for_quiz_code()",
+      "bodyHash": "ad3161eb2cc6e8962f386988f17adeeb",
+      "liveMatch": true
+    },
+    {
+      "name": "admin_reassign_course",
+      "signature": "admin_reassign_course(uuid,uuid,uuid,uuid)",
+      "bodyHash": "6b0f6835052a9ab9a6ad73763009e4ab",
+      "liveMatch": true
+    },
+    {
+      "name": "admin_create_assigned_course",
+      "signature": "admin_create_assigned_course(uuid,uuid,uuid,text,text,text,text,text,integer)",
+      "bodyHash": "deab0281f98dd8faf46a3a9d71fbb8dc",
+      "liveMatch": true
+    },
+    {
+      "name": "apply_verified_safepay_payment",
+      "signature": "apply_verified_safepay_payment(text,text,uuid)",
+      "bodyHash": "59fd17e8db62427867684825da996f6b",
+      "liveMatch": true
+    },
+    {
+      "name": "assessment_history_protection_ready",
+      "signature": "assessment_history_protection_ready()",
+      "bodyHash": "cfe6cb1b6f43cf9b05dacdda63a3df46",
+      "liveMatch": true
+    },
+    {
+      "name": "admin_update_user_atomic",
+      "signature": "admin_update_user_atomic(uuid,uuid,text,boolean)",
+      "bodyHash": "9b849cbae37495beeb879d5df79ef889",
+      "liveMatch": true
+    },
+    {
+      "name": "teacher_attempt_action",
+      "signature": "teacher_attempt_action(uuid,uuid,text,text,jsonb)",
+      "bodyHash": "25c0e114fb86a0f482c775fcbf52a404",
+      "liveMatch": true
+    },
+    {
+      "name": "finish_teacher_attempt",
+      "signature": "finish_teacher_attempt(uuid,text)",
+      "bodyHash": "dc2eaec396bcd9f0836cd68b40de97f4",
+      "liveMatch": true
+    },
+    {
+      "name": "start_teacher_attempt",
+      "signature": "start_teacher_attempt(uuid,uuid)",
+      "bodyHash": "c920883b69a1ad9fcb55c041b4355f46",
+      "liveMatch": true
+    },
+    {
+      "name": "report_teacher_violation",
+      "signature": "report_teacher_violation(uuid,uuid,jsonb)",
+      "bodyHash": "44dc76350193993cdd0bee40888f62e4",
+      "liveMatch": true
+    }
+  ],
+  "security": {
+    "applicationTablesProtected": 18,
+    "invalidPublicIndexes": 0,
+    "browserRoles": [
+      {
+        "name": "authenticated",
+        "superuser": false,
+        "bypass_rls": false
+      },
+      {
+        "name": "anon",
+        "superuser": false,
+        "bypass_rls": false
+      }
+    ],
+    "legacyStripeTable": {
+      "rows": 0,
+      "rlsEnabled": true,
+      "browserGrantsRetained": true,
+      "policies": [],
+      "decision": "Retained; RLS with no policies and no browser bypass denies row access. Ownership review required before changing this legacy table."
+    }
+  },
+  "catalogInventory": {
+    "objects": 62,
+    "schemas": [
+      "auth",
+      "extensions",
+      "public",
+      "realtime",
+      "storage",
+      "supabase_migrations",
+      "vault"
+    ]
+  },
+  "appliedMigrations": [
+    {
+      "version": "20261021065551",
+      "name": "runtime_reconcile_attempt_submission_fields"
+    },
+    {
+      "version": "20261021065554",
+      "name": "runtime_add_student_feedback"
+    },
+    {
+      "version": "20261021065557",
+      "name": "runtime_add_admin_governance_audit"
+    },
+    {
+      "version": "20261021065601",
+      "name": "runtime_enforce_organization_seats_atomically"
+    },
+    {
+      "version": "20261021065604",
+      "name": "runtime_topic_exam_attempt_snapshots"
+    },
+    {
+      "version": "20261021065607",
+      "name": "runtime_preserve_assessment_history"
+    },
+    {
+      "version": "20261021065610",
+      "name": "runtime_atomic_admin_governance"
+    },
+    {
+      "version": "20261021065614",
+      "name": "runtime_atomic_safepay_entitlement"
+    },
+    {
+      "version": "20261021065618",
+      "name": "runtime_reconcile_quiz_code_reference"
+    },
+    {
+      "version": "20261021065621",
+      "name": "runtime_enforce_api_database_boundary"
+    },
+    {
+      "version": "20261021065935",
+      "name": "protect_organization_seat_rpc"
+    }
+  ],
+  "validation": {
+    "databaseRegression": {
+      "passed": 67,
+      "failed": 0,
+      "command": "npm run test:database"
+    },
+    "publicApi": {
+      "testedAt": "2026-10-21T07:00:29.015Z",
+      "passed": 70,
+      "failed": 0,
+      "scope": "public HTTP contracts and signed-out boundaries; no authenticated business workflows"
+    }
+  },
+  "unverified": [
+    "Real signed-in teacher/student end-to-end acceptance",
+    "Multi-connection lock contention",
+    "Provider/storage and payment sandbox behavior",
+    "Backup availability and restore drill"
+  ],
+  "historicalSnapshot": true,
+  "supersededPublicationPolicy": "Migration 034 removed the code-exam course publication requirement on 23 October 2026; see FIX_EXAM_COURSE_ACCESS.md. Counts and function hashes here describe the 21 October snapshot.",
+  "publicationRepair": {
+    "coursePublished": true,
+    "examsSharingCourse": 2,
+    "activeEnrolledStudents": 1,
+    "scheduledStartUtc": "2026-10-21T17:36:00+00:00",
+    "scheduledStartPakistan": "2026-10-21 22:36 PKT",
+    "timeLimitMinutes": 1,
+    "questionCount": 1
+  }
+}

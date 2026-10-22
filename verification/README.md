@@ -1,5 +1,10 @@
 # Product verification
 
+The [21 October live database review](LIVE_DATABASE_REVIEW_2026-10-21.md)
+records the approved production repairs and targeted course publication,
+zero remaining schema blockers, 67 database regression tests, 70 live public
+checks, and the preserved historical data requiring review.
+
 The [database compatibility review](DATABASE_REVIEW.md) records the full migration
 replay, backend-query/schema checks, confirmed repairs, and the live reconciliation
 order for migrations 030/031. From backend, `npm run test:database` runs the
@@ -72,7 +77,7 @@ PostgreSQL suites are separate evidence, not live user-workflow results.
 For course-linked exam start failures, see [FIX_EXAM_COURSE_ACCESS.md](FIX_EXAM_COURSE_ACCESS.md).
 The isolated browser checks use `node verification/student-exam-access-browser.mjs`
 against the same local preview described below, or add `--live` for hosted bundles.
-They exercise publication/enrollment refusals, completed submissions, allowed
+They exercise enrollment refusals, completed submissions, allowed draft-course
 preview and a refused start after access changes, without any live record writes.
 
 From `frontend`, run `npm run test:session` to exercise the actual API client and

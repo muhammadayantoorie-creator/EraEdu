@@ -1,5 +1,15 @@
 # Database compatibility review — 2026-10-21
 
+**Live follow-up completed later on 21 October:** see
+[the live database review](LIVE_DATABASE_REVIEW_2026-10-21.md) for the actual
+project findings, applied repairs, verification and remaining historical review
+items. The live schema audit now has zero BLOCKED checks. The original
+repository-only review below predates that connection; its statements about
+unverified live data and unapplied migrations describe that earlier stage.
+Do not rerun its historical application checklist as a new migration batch.
+
+## Original repository review before live access
+
 The repository review covers 18 application tables, the migration chain through
 031, and 56 backend runtime files. The new full-schema check compares 750 literal
 column uses and four embedded relationships with a disposable PostgreSQL catalog.

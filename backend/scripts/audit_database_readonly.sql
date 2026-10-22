@@ -1,4 +1,4 @@
--- EraEdu schema/security inventory through migration 031.
+-- EraEdu schema/security inventory through migration 034.
 -- Run the ENTIRE file in the connected Supabase project's SQL Editor as the
 -- database administrator. It returns ONE result table. It does not read user
 -- records, invoke application RPCs, apply migrations, or modify data/schema.
@@ -64,14 +64,14 @@ requirements(table_name, columns_csv, source) AS (VALUES
  ('quiz_attempts','teacher_quiz_ref','uuid',false,NULL,'025'),
  ('quiz_attempts','topic_quiz_ref','uuid',false,NULL,'025')
 ), functions(signature,security_definer,service_execute,source) AS (VALUES
- ('public.add_organization_teacher_atomic(uuid,uuid)',true,true,'021'),
+ ('public.add_organization_teacher_atomic(uuid,uuid)',true,true,'021 / 033'),
  ('public.enroll_course_with_capacity(uuid,uuid)',true,true,'023'),
  ('public.admin_create_assigned_course(uuid,uuid,uuid,text,text,text,text,text,integer)',true,true,'024'),
  ('public.admin_reassign_course(uuid,uuid,uuid,uuid)',true,true,'024'),
  ('public.assessment_history_protection_ready()',false,true,'025'),
  ('public.admin_update_user_atomic(uuid,uuid,text,boolean)',true,true,'026'),
  ('public.finish_teacher_attempt(uuid,text)',true,false,'027 internal helper; no direct client access'),
- ('public.start_teacher_attempt(uuid,uuid)',true,true,'027'),
+ ('public.start_teacher_attempt(uuid,uuid)',true,true,'027 / 034'),
  ('public.teacher_attempt_action(uuid,uuid,text,text,jsonb)',true,true,'027'),
  ('public.report_teacher_violation(uuid,uuid,jsonb)',true,true,'027'),
  ('public.apply_verified_safepay_payment(text,text,uuid)',true,true,'028')
@@ -111,6 +111,13 @@ requirements(table_name, columns_csv, source) AS (VALUES
  SELECT 'column',table_name||'.'||column_name,CASE WHEN attnum IS NULL THEN 'BLOCKED' ELSE 'PASS' END,
    source||'; actual type='||coalesce(format_type(atttypid,NULL),'MISSING')
  FROM columns
+ UNION ALL
+ SELECT 'submission_field_type',table_name||'.'||column_name,
+   CASE WHEN column_name='auto_submitted' AND atttypid='boolean'::regtype THEN 'PASS'
+     WHEN column_name='submission_reason' AND atttypid IN ('text'::regtype,'varchar'::regtype) THEN 'PASS'
+     ELSE 'BLOCKED' END,
+   '032; finalization requires a boolean automatic-submission flag and a text reason'
+ FROM columns WHERE table_name='quiz_attempts' AND column_name IN ('auto_submitted','submission_reason')
  UNION ALL
  SELECT 'contract',k.table_name||'.'||k.column_name,
    CASE WHEN c.attnum IS NULL OR c.atttypid IS DISTINCT FROM to_regtype(k.type_name)

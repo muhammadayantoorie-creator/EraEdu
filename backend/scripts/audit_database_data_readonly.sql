@@ -38,7 +38,7 @@ WITH checks(check_name,affected,detail) AS (
  FROM public.quiz_codes code_row JOIN public.teacher_quizzes exam ON exam.id=code_row.quiz_id
  WHERE code_row.is_active IS TRUE AND code_row.course_id IS DISTINCT FROM exam.course_id
  UNION ALL
- SELECT 'active teacher exams linked to unpublished courses',count(*),'May be intentional drafts. Students cannot start until the selected course is published and they enroll; no automatic publishing'
+ SELECT 'active teacher exams linked to unpublished courses',count(*),'May be intentional drafts. Code exams require enrollment independently of course publication after migration 034; no automatic publishing'
  FROM public.teacher_quizzes exam JOIN public.courses course_row ON course_row.id=exam.course_id
  WHERE exam.is_active IS TRUE AND course_row.is_published IS DISTINCT FROM true
  UNION ALL
